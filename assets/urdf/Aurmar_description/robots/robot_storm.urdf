@@ -1,0 +1,478 @@
+<?xml version="1.0" ?>
+<robot name="ur">
+  <!-- Add URDF transmission elements (for ros_control) -->
+  <!--<xacro:ur_arm_transmission prefix="${prefix}" hw_interface="${transmission_hw_interface}" />-->
+  <!-- Placeholder for ros2_control transmission which don't yet exist -->
+  <!-- links -  main serial chain -->
+  <link name="base_link"/>
+  <joint name="base_link-base_link_inertia" type="fixed">
+    <parent link="base_link"/>
+    <child link="base_link_inertia"/>
+    <!-- 'base_link' is REP-103 aligned (so X+ forward), while the internal
+           frames of the robot/controller have X+ pointing backwards.
+           Use the joint between 'base_link' and 'base_link_inertia' (a dummy
+           link/frame) to introduce the necessary rotation over Z (of pi rad).
+      -->
+    <origin rpy="0 0 3.141592653589793" xyz="0 0 0"/>
+  </joint>
+  <link name="base_link_inertia">
+    <visual>
+      <origin rpy="0 0 3.141592653589793" xyz="0 0 0"/>
+      <geometry>
+        <mesh filename="package://Aurmar_description/meshes/ur10e/visual/base.dae"/>
+      </geometry>
+    </visual>
+    <collision>
+      <origin rpy="0 0 3.141592653589793" xyz="0 0 0"/>
+      <geometry>
+        <mesh filename="package://Aurmar_description/meshes/ur10e/collision/base.stl"/>
+      </geometry>
+    </collision>
+    <inertial>
+      <mass value="4.0"/>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <inertia ixx="0.0061063308908" ixy="0.0" ixz="0.0" iyy="0.0061063308908" iyz="0.0" izz="0.01125"/>
+    </inertial>
+  </link>
+  <joint name="shoulder_pan_joint" type="revolute">
+    <parent link="base_link_inertia"/>
+    <child link="shoulder_link"/>
+    <origin rpy="0 0 0" xyz="0 0 0.1807"/>
+    <axis xyz="0 0 1"/>
+    <limit effort="330.0" lower="-6.283185307179586" upper="6.283185307179586" velocity="2.0943951023931953"/>
+    <dynamics damping="0" friction="0"/>
+  </joint>
+  <link name="shoulder_link">
+    <visual>
+      <origin rpy="0 0 3.141592653589793" xyz="0 0 0"/>
+      <geometry>
+        <mesh filename="meshes/ur10e/visual/shoulder.dae"/>
+      </geometry>
+    </visual>
+    <collision>
+      <origin rpy="0 0 3.141592653589793" xyz="0 0 0"/>
+      <geometry>
+        <mesh filename="meshes/ur10e/collision/shoulder.stl"/>
+      </geometry>
+    </collision>
+    <inertial>
+      <mass value="7.369"/>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <inertia ixx="0.029819260655624295" ixy="0.0" ixz="0.0" iyy="0.029819260655624295" iyz="0.0" izz="0.020725312499999995"/>
+    </inertial>
+  </link>
+  <joint name="shoulder_lift_joint" type="revolute">
+    <parent link="shoulder_link"/>
+    <child link="upper_arm_link"/>
+    <origin rpy="1.570796327 0 0" xyz="0 0 0"/>
+    <axis xyz="0 0 1"/>
+    <limit effort="330.0" lower="-6.283185307179586" upper="6.283185307179586" velocity="2.0943951023931953"/>
+    <dynamics damping="0" friction="0"/>
+  </joint>
+  <link name="upper_arm_link">
+    <visual>
+      <origin rpy="1.5707963267948966 0 -1.5707963267948966" xyz="0 0 0.176"/>
+      <geometry>
+        <mesh filename="meshes/ur16e/visual/upperarm.dae"/>
+      </geometry>
+    </visual>
+    <collision>
+      <origin rpy="1.5707963267948966 0 -1.5707963267948966" xyz="0 0 0.176"/>
+      <geometry>
+        <mesh filename="meshes/ur16e/collision/upperarm.stl"/>
+      </geometry>
+    </collision>
+    <inertial>
+      <mass value="10.45"/>
+      <origin rpy="0 1.5707963267948966 0" xyz="-0.2392 0.0 0.175"/>
+      <inertia ixx="0.21399985623335657" ixy="0.0" ixz="0.0" iyy="0.21399985623335657" iyz="0.0" izz="0.029390624999999997"/>
+    </inertial>
+  </link>
+  <joint name="elbow_joint" type="revolute">
+    <parent link="upper_arm_link"/>
+    <child link="forearm_link"/>
+    <origin rpy="0 0 0" xyz="-0.4784 0 0"/>
+    <axis xyz="0 0 1"/>
+    <limit effort="150.0" lower="-3.141592653589793" upper="3.141592653589793" velocity="3.141592653589793"/>
+    <dynamics damping="0" friction="0"/>
+  </joint>
+  <link name="forearm_link">
+    <visual>
+      <origin rpy="1.5707963267948966 0 -1.5707963267948966" xyz="0 0 0.04"/>
+      <geometry>
+        <mesh filename="meshes/ur16e/visual/forearm.dae"/>
+      </geometry>
+    </visual>
+    <collision>
+      <origin rpy="1.5707963267948966 0 -1.5707963267948966" xyz="0 0 0.04"/>
+      <geometry>
+        <mesh filename="meshes/ur16e/collision/forearm.stl"/>
+      </geometry>
+    </collision>
+    <inertial>
+      <mass value="4.321"/>
+      <origin rpy="0 1.5707963267948966 0" xyz="-0.18 0.0 0.04"/>
+      <inertia ixx="0.052743185152717496" ixy="0.0" ixz="0.0" iyy="0.052743185152717496" iyz="0.0" izz="0.012152812499999997"/>
+    </inertial>
+  </link>
+  <joint name="wrist_1_joint" type="revolute">
+    <parent link="forearm_link"/>
+    <child link="wrist_1_link"/>
+    <origin rpy="0 0 0" xyz="-0.36 0 0.17415"/>
+    <axis xyz="0 0 1"/>
+    <limit effort="56.0" lower="-6.283185307179586" upper="6.283185307179586" velocity="3.141592653589793"/>
+    <dynamics damping="0" friction="0"/>
+  </joint>
+  <link name="wrist_1_link">
+    <visual>
+      <origin rpy="1.5707963267948966 0 0" xyz="0 0 -0.135"/>
+      <geometry>
+        <mesh filename="meshes/ur10e/visual/wrist1.dae"/>
+      </geometry>
+    </visual>
+    <collision>
+      <origin rpy="1.5707963267948966 0 0" xyz="0 0 -0.135"/>
+      <geometry>
+        <mesh filename="meshes/ur10e/collision/wrist1.stl"/>
+      </geometry>
+    </collision>
+    <inertial>
+      <mass value="2.18"/>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <inertia ixx="0.0056816227273499996" ixy="0.0" ixz="0.0" iyy="0.0056816227273499996" iyz="0.0" izz="0.00613125"/>
+    </inertial>
+  </link>
+  <joint name="wrist_2_joint" type="revolute">
+    <parent link="wrist_1_link"/>
+    <child link="wrist_2_link"/>
+    <origin rpy="1.570796327 0 0" xyz="0 -0.11985 -2.458164590756244e-11"/>
+    <axis xyz="0 0 1"/>
+    <limit effort="56.0" lower="-6.283185307179586" upper="6.283185307179586" velocity="3.141592653589793"/>
+    <dynamics damping="0" friction="0"/>
+  </joint>
+  <link name="wrist_2_link">
+    <visual>
+      <origin rpy="0 0 0" xyz="0 0 -0.12"/>
+      <geometry>
+        <mesh filename="meshes/ur10e/visual/wrist2.dae"/>
+      </geometry>
+    </visual>
+    <collision>
+      <origin rpy="0 0 0" xyz="0 0 -0.12"/>
+      <geometry>
+        <mesh filename="meshes/ur10e/collision/wrist2.stl"/>
+      </geometry>
+    </collision>
+    <inertial>
+      <mass value="2.033"/>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <inertia ixx="0.0052985041305975" ixy="0.0" ixz="0.0" iyy="0.0052985041305975" iyz="0.0" izz="0.0057178125"/>
+    </inertial>
+  </link>
+  <joint name="wrist_3_joint" type="revolute">
+    <parent link="wrist_2_link"/>
+    <child link="wrist_3_link"/>
+    <origin rpy="1.570796326589793 3.141592653589793 3.141592653589793" xyz="0 0.11655 -2.390480459346185e-11"/>
+    <axis xyz="0 0 1"/>
+    <limit effort="56.0" lower="-6.283185307179586" upper="6.283185307179586" velocity="3.141592653589793"/>
+    <dynamics damping="0" friction="0"/>
+  </joint>
+  <link name="wrist_3_link">
+    <visual>
+      <origin rpy="1.5707963267948966 0 0" xyz="0 0 -0.1168"/>
+      <geometry>
+        <mesh filename="meshes/ur10e/visual/wrist3.dae"/>
+      </geometry>
+    </visual>
+    <collision>
+      <origin rpy="1.5707963267948966 0 0" xyz="0 0 -0.1168"/>
+      <geometry>
+        <mesh filename="meshes/ur10e/collision/wrist3.stl"/>
+      </geometry>
+    </collision>
+    <inertial>
+      <mass value="0.907"/>
+      <origin rpy="0 0 0" xyz="0.0 0.0 -0.025"/>
+      <inertia ixx="0.0006481268240825001" ixy="0.0" ixz="0.0" iyy="0.0006481268240825001" iyz="0.0" izz="0.0009183374999999999"/>
+    </inertial>
+  </link>
+  <joint name="gripper_joint" type="fixed">
+    <parent link="wrist_3_link"/>
+    <child link="gripper_link"/>
+    <origin rpy="0 0 90" xyz="0 0 0"/>
+    <limit effort="1000" lower="0" upper="0.8" velocity="0.5"/>
+  </joint>
+  <link name="gripper_link">
+    <inertial>
+      <origin rpy="0 0 0" xyz="8.625E-08 -4.6583E-06 0.03145"/>
+      <mass value="0.7"/>
+      <inertia ixx="0.00020005" ixy="-4.2442E-10" ixz="-2.9069E-10" iyy="0.00017832" iyz="-3.4402E-08" izz="0.00013478"/>
+    </inertial>
+    <visual>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <geometry>
+        <mesh filename="package://Aurmar_description/meshes/robotiq_2f_85_gripper_visualization/meshes/visual/base_link.dae"/>
+      </geometry>
+      <material name="">
+        <color rgba="0.1 0.1 0.1 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <geometry>
+        <mesh filename="package://Aurmar_description/meshes/robotiq_2f_85_gripper_visualization/meshes/collision/base_link.stl"/>
+      </geometry>
+    </collision>
+  </link>
+  <joint name="ee_fixed_joint" type="fixed">
+    <parent link="gripper_link"/>
+    <child link="ee_link"/>
+    <!--origin rpy="0.0 0.0 1.570796325" xyz="0.0 0.0922 0.0"/-->
+    <!--origin rpy="-1.57 0.0 1.57" xyz="0.0 0. 0.0"/-->
+    <origin rpy="0.0 0.0 -1.57" xyz="0.0 0. 0.1"/> 
+  </joint>
+  <link name="ee_link">
+    <collision>
+      <geometry>
+        <box size="0.01 0.01 0.01"/>
+      </geometry>
+
+      <origin rpy="0 0 0" xyz="0.0 0 0"/>
+    </collision>
+  </link>
+  <joint name="left_outer_knuckle_joint" type="fixed">
+    <origin rpy="0 0 3.141592653589793" xyz="0 -0.0306011 0.054904"/>
+    <parent link="gripper_link"/>
+    <child link="left_outer_knuckle"/>
+    <axis xyz="0 0 0"/>
+    <limit effort="1000" lower="0" upper="0.8" velocity="0.5"/>
+  </joint>
+  <link name="left_outer_knuckle">
+    <inertial>
+      <origin rpy="0 0 0" xyz="-0.000200000000003065 0.0199435877845359 0.0292245259211331"/>
+      <mass value="0.00853198276973456"/>
+      <inertia ixx="2.89328108496468E-06" ixy="-1.57935047237397E-19" ixz="-1.93980378593255E-19" iyy="1.86719750325683E-06" iyz="-1.21858577871576E-06" izz="1.21905238907251E-06"/>
+    </inertial>
+    <visual>
+      <origin rpy="90 0 0" xyz="0 0.016 0"/>
+      <geometry>
+        <mesh filename="package://Aurmar_description/meshes/robotiq_2f_85_gripper_visualization/meshes/visual/outer_knuckle.stl"/>
+      </geometry>
+      <material name="">
+        <color rgba="0.792156862745098 0.819607843137255 0.933333333333333 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin rpy="90 0 0" xyz="0 0 0"/>
+      <geometry>
+        <mesh filename="package://Aurmar_description/meshes/robotiq_2f_85_gripper_visualization/meshes/collision/outer_knuckle.stl"/>
+      </geometry>
+    </collision>
+  </link>
+  <joint name="left_bar_joint" type="fixed">
+    <origin rpy="0 0 0" xyz="0 0.0315 -0.0041"/>
+    <parent link="left_distal_phalanx"/>
+    <child link="left_bar"/>
+    <axis xyz="1 0 0"/>
+  </joint>
+  <link name="left_bar">
+    <inertial>
+      <origin rpy="0 0 0" xyz="0.00030115855001899 0.0373907951953854 -0.0208027427000385"/>
+      <mass value="0.022614240507152"/>
+      <inertia ixx="1.52518312458174E-05" ixy="9.76583423954399E-10" ixz="-5.43838577022588E-10" iyy="6.17694243867776E-06" iyz="6.78636130740228E-06" izz="1.16494917907219E-05"/>
+    </inertial>
+    <visual>
+      <origin rpy="-90 0 0" xyz="0 0 -0.06"/>
+      <geometry>
+        <mesh filename="package://Aurmar_description/meshes/robotiq_2f_85_gripper_visualization/meshes/visual/bar.stl"/>
+      </geometry>
+      <material name="">
+        <color rgba="0.1 0.1 0.1 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin rpy="90 0 -2" xyz="0 0 0"/>
+      <geometry>
+        <mesh filename="package://Aurmar_description/meshes/robotiq_2f_85_gripper_visualization/meshes/collision/bar.stl"/>
+      </geometry>
+    </collision>
+  </link>
+  <joint name="left_distal_phalanx_joint" type="fixed">
+    <origin rpy="0 0 0" xyz="0 0.0061 0.0471"/>
+    <parent link="left_proximal_phalanx"/>
+    <child link="left_distal_phalanx"/>
+    <axis xyz="0 0 0"/>
+    <limit effort="1000" lower="-0.8757" upper="0" velocity="0.5"/>
+    <mimic joint="left_outer_knuckle_joint" multiplier="-1" offset="0"/>
+  </joint>
+  <link name="left_distal_phalanx">
+    <inertial>
+      <origin rpy="0 0 0" xyz="0.000299999999999317 0.0160078233491243 -0.0136945669206257"/>
+      <mass value="0.0104003125914103"/>
+      <inertia ixx="2.71909453810972E-06" ixy="1.35402465472579E-21" ixz="-7.1817349065269E-22" iyy="7.69100314106116E-07" iyz="6.74715432769696E-07" izz="2.30315190420171E-06"/>
+    </inertial>
+    <visual>
+      <origin rpy="89.7 59.7 0" xyz="0 -0.09 -0.004"/>
+      <geometry>
+        <mesh filename="package://Aurmar_description/meshes/robotiq_2f_85_gripper_visualization/meshes/visual/distal_phalanx.stl"/>
+      </geometry>
+      <material name="">
+        <color rgba="0.1 0.1 0.1 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <geometry>
+        <mesh filename="package://Aurmar_description/meshes/robotiq_2f_85_gripper_visualization/meshes/collision/distal_phalanx.stl"/>
+      </geometry>
+    </collision>
+  </link>
+  <joint name="left_proximal_phalanx_joint" type="fixed">
+    <origin rpy=".125 0 3.141592653589793" xyz="0 -0.0127 0.06142"/>
+    <parent link="gripper_link"/>
+    <child link="left_proximal_phalanx"/>
+    <axis xyz="1 0 0"/>
+    <limit effort="1000" lower="0" upper="0.8757" velocity="0.5"/>
+    <mimic joint="left_outer_knuckle_joint" multiplier="1" offset="0"/>
+  </joint>
+  <link name="left_proximal_phalanx">
+    <inertial>
+      <origin rpy="0 0 0" xyz="0.000123011831763771 0.0507850843201817 0.00103968640075166"/>
+      <mass value="0.0271177346495152"/>
+      <inertia ixx="2.61910379223783E-05" ixy="-2.43616858946494E-07" ixz="-6.37789906117123E-09" iyy="2.8270243746167E-06" iyz="-5.37200748039765E-07" izz="2.83695868220296E-05"/>
+    </inertial>
+    <visual>
+      <origin rpy="0 0 0" xyz="0 -0.025 0.003"/>
+      <geometry>
+        <mesh filename="package://Aurmar_description/meshes/robotiq_2f_85_gripper_visualization/meshes/visual/proximal_phalanx.stl"/>
+      </geometry>
+      <material name="">
+        <color rgba="0.1 0.1 0.1 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <geometry>
+        <mesh filename="package://Aurmar_description/meshes/robotiq_2f_85_gripper_visualization/meshes/collision/proximal_phalanx.stl"/>
+      </geometry>
+    </collision>
+  </link>
+  <joint name="right_outer_knuckle_joint" type="fixed">
+    <origin rpy="0 0 0" xyz="0 0.0306011 0.054904"/>
+    <parent link="gripper_link"/>
+    <child link="right_outer_knuckle"/>
+    <axis xyz="1 0 0"/>
+    <limit effort="1000" lower="0" upper="0.81" velocity="0.5"/>
+    <mimic joint="left_outer_knuckle_joint" multiplier="1" offset="0"/>
+  </joint>
+  <link name="right_outer_knuckle">
+    <inertial>
+      <origin rpy="0 0 0" xyz="-0.000200000000003065 0.0199435877845359 0.0292245259211331"/>
+      <mass value="0.00853198276973456"/>
+      <inertia ixx="2.89328108496468E-06" ixy="-1.57935047237397E-19" ixz="-1.93980378593255E-19" iyy="1.86719750325683E-06" iyz="-1.21858577871576E-06" izz="1.21905238907251E-06"/>
+    </inertial>
+    <visual>
+      <origin rpy="90 0 0" xyz="0 0.016 0"/>
+      <geometry>
+        <mesh filename="package://Aurmar_description/meshes/robotiq_2f_85_gripper_visualization/meshes/visual/outer_knuckle.stl"/>
+      </geometry>
+      <material name="">
+        <color rgba="0.792156862745098 0.819607843137255 0.933333333333333 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <geometry>
+        <mesh filename="package://Aurmar_description/meshes/robotiq_2f_85_gripper_visualization/meshes/collision/outer_knuckle.stl"/>
+      </geometry>
+    </collision>
+  </link>
+  <joint name="right_bar_joint" type="fixed">
+    <origin rpy="0 0 0" xyz="0 0.0315 -0.0041"/>
+    <parent link="right_distal_phalanx"/>
+    <child link="right_bar"/>
+    <axis xyz="1 0 0"/>
+  </joint>
+  <link name="right_bar">
+    <inertial>
+      <origin rpy="0 0 0" xyz="0.00030115855001899 0.0373907951953854 -0.0208027427000385"/>
+      <mass value="0.022614240507152"/>
+      <inertia ixx="1.52518312458174E-05" ixy="9.76583423954399E-10" ixz="-5.43838577022588E-10" iyy="6.17694243867776E-06" iyz="6.78636130740228E-06" izz="1.16494917907219E-05"/>
+    </inertial>
+    <visual>
+      <origin rpy="-90 0 0" xyz="0 0 -0.06"/>
+      <geometry>
+        <mesh filename="package://Aurmar_description/meshes/robotiq_2f_85_gripper_visualization/meshes/visual/bar.stl"/>
+      </geometry>
+      <material name="">
+        <color rgba="0.1 0.1 0.1 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin rpy="90 0 90" xyz="0 0 0"/>
+      <geometry>
+        <mesh filename="package://Aurmar_description/meshes/robotiq_2f_85_gripper_visualization/meshes/collision/bar.stl"/>
+      </geometry>
+    </collision>
+  </link>
+ <joint name="right_distal_phalanx_joint" type="fixed">
+    <origin rpy="0 0 0" xyz="0 0.0061 0.0471"/>
+    <parent link="right_proximal_phalanx"/>
+    <child link="right_distal_phalanx"/>
+    <axis xyz="1 0 0"/>
+    <limit effort="1000" lower="-0.8757" upper="0" velocity="0.5"/>
+    <mimic joint="left_outer_knuckle_joint" multiplier="-1" offset="0"/>
+  </joint>
+  <link name="right_distal_phalanx">
+    <inertial>
+      <origin rpy="0 0 0" xyz="0.000299999999999317 0.0160078233491243 -0.0136945669206257"/>
+      <mass value="0.0104003125914103"/>
+      <inertia ixx="2.71909453810972E-06" ixy="1.35402465472579E-21" ixz="-7.1817349065269E-22" iyy="7.69100314106116E-07" iyz="6.74715432769696E-07" izz="2.30315190420171E-06"/>
+    </inertial>
+    <visual>
+      <origin rpy="89.7 59.7 0" xyz="0 -0.09 -0.005"/>
+      <geometry>
+        <mesh filename="package://Aurmar_description/meshes/robotiq_2f_85_gripper_visualization/meshes/visual/distal_phalanx.stl"/>
+      </geometry>
+      <material name="">
+        <color rgba="0.3 0.3 0.3 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <geometry>
+        <mesh filename="package://Aurmar_description/meshes/robotiq_2f_85_gripper_visualization/meshes/collision/distal_phalanx.stl"/>
+      </geometry>
+    </collision>
+  </link>
+  <joint name="right_proximal_phalanx_joint" type="fixed">
+    <origin rpy=".125 0 0.0" xyz="0 0.0127 0.06142"/>
+    <parent link="gripper_link"/>
+    <child link="right_proximal_phalanx"/>
+    <axis xyz="1 0 0"/>
+    <limit effort="1000" lower="0" upper="0.8757" velocity="0.5"/>
+    <mimic joint="left_outer_knuckle_joint" multiplier="1" offset="0"/>
+  </joint>
+  <link name="right_proximal_phalanx">
+    <inertial>
+      <origin rpy="0 0 0" xyz="0.000123011831763771 0.0507850843201817 0.00103968640075166"/>
+      <mass value="0.0271177346495152"/>
+      <inertia ixx="2.61910379223783E-05" ixy="-2.43616858946494E-07" ixz="-6.37789906117123E-09" iyy="2.8270243746167E-06" iyz="-5.37200748039765E-07" izz="2.83695868220296E-05"/>
+    </inertial>
+    <visual>
+      <origin rpy="0 0 0" xyz="0 -0.025 0.003"/>
+      <geometry>
+        <mesh filename="package://Aurmar_description/meshes/robotiq_2f_85_gripper_visualization/meshes/visual/proximal_phalanx.stl"/>
+      </geometry>
+      <material name="">
+        <color rgba="0.1 0.1 0.1 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <geometry>
+        <mesh filename="package://Aurmar_description/meshes/robotiq_2f_85_gripper_visualization/meshes/collision/proximal_phalanx.stl"/>
+      </geometry>
+    </collision>
+  </link>
+</robot>
