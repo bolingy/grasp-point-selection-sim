@@ -3,11 +3,11 @@ name: FrankaCubeStack
 
 physics_engine: ${..physics_engine}
 
-# if given, will override the device setting in gym. 
+# if given, will override the device setting in gym.
 env:
   numEnvs: ${resolve_default:8192,${...num_envs}}
   envSpacing: 1.5
-  episodeLength: 300
+  episodeLength: 100
   enableDebugVis: False
 
   clipObservations: 5.0
@@ -27,7 +27,7 @@ env:
   alignRewardScale: 2.0
   stackRewardScale: 16.0
 
-  controlType: osc  # options are {joint_tor, osc}
+  controlType: osc # options are {joint_tor, osc}
 
   asset:
     assetRoot: "../../assets"

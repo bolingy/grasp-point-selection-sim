@@ -38,7 +38,17 @@ from isaacgym.torch_utils import *
 from isaacgymenvs.utils.torch_jit_utils import *
 from isaacgymenvs.tasks.base.vec_task import VecTask
 
+# For camera module
+from PIL import Image as im
+import matplotlib.pyplot as plt
 
+from isaacgym import gymutil
+import math
+import imageio.v3 as iio
+import matplotlib.cm as cm
+# import cv2
+
+# This function is used to convert axis angle to quartenions
 @torch.jit.script
 def axisangle2quat(vec, eps=1e-6):
     """
@@ -104,7 +114,7 @@ class FrankaCubeStack(VecTask):
 
         # dimensions
         # obs include: cubeA_pose (7) + cubeB_pos (3) + eef_pose (7) + q_gripper (2)
-        self.cfg["env"]["numObservations"] = 19 if self.control_type == "osc" else 26
+        self.cfg["env"]["numObservations"] = 19 if self.control_type == "osc" else 27
         # actions include: delta EEF if OSC (6) or joint torques (7) + bool gripper (1)
         self.cfg["env"]["numActions"] = 7 if self.control_type == "osc" else 8
 
@@ -139,6 +149,9 @@ class FrankaCubeStack(VecTask):
         self._franka_effort_limits = None        # Actuator effort limits for franka
         self._global_indices = None         # Unique indices corresponding to all envs in flattened array
 
+        # camera handles
+        self.camera_handles = [[]]
+
         self.debug_viz = self.cfg["env"]["enableDebugVis"]
 
         self.up_axis = "z"
@@ -171,6 +184,9 @@ class FrankaCubeStack(VecTask):
 
         # Refresh tensors
         self._refresh()
+
+        self.count = 0
+        self.fig = plt.figure()
 
     def create_sim(self):
         self.sim_params.up_axis = gymapi.UP_AXIS_Z
@@ -287,17 +303,17 @@ class FrankaCubeStack(VecTask):
 
         # Define start pose for cubes (doesn't really matter since they're get overridden during reset() anyways)
         cubeA_start_pose = gymapi.Transform()
-        cubeA_start_pose.p = gymapi.Vec3(-1.0, 0.0, -10.0)
+        cubeA_start_pose.p = gymapi.Vec3(0.0, 0.1, -10.0)
         cubeA_start_pose.r = gymapi.Quat(0.0, 0.0, 0.0, 1.0)
         cubeB_start_pose = gymapi.Transform()
-        cubeB_start_pose.p = gymapi.Vec3(1.0, 0.0, -10.0)
+        cubeB_start_pose.p = gymapi.Vec3(0.0, 0.2, -10.0)
         cubeB_start_pose.r = gymapi.Quat(0.0, 0.0, 0.0, 1.0)
 
         # compute aggregate size
         num_franka_bodies = self.gym.get_asset_rigid_body_count(franka_asset)
         num_franka_shapes = self.gym.get_asset_rigid_shape_count(franka_asset)
-        max_agg_bodies = num_franka_bodies + 26 + 2    # 1 for table, table stand, cubeA, cubeB
-        max_agg_shapes = num_franka_shapes + 26 + 2     # 1 for table, table stand, cubeA, cubeB
+        max_agg_bodies = num_franka_bodies + 27 + 2    # 1 for table, table stand, cubeA, cubeB
+        max_agg_shapes = num_franka_shapes + 27 + 2     # 1 for table, table stand, cubeA, cubeB
 
         self.frankas = []
         self.envs = []
@@ -324,8 +340,8 @@ class FrankaCubeStack(VecTask):
                 new_quat = axisangle2quat(rand_rot).squeeze().numpy().tolist()
                 franka_start_pose.r = gymapi.Quat(*new_quat)'''
 
-            franka_actor = self.gym.create_actor(env_ptr, franka_asset, franka_start_pose, "franka", i, 0, 0)
-            self.gym.set_actor_dof_properties(env_ptr, franka_actor, franka_dof_props)
+            self.franka_actor = self.gym.create_actor(env_ptr, franka_asset, franka_start_pose, "franka", i, 0, 0)
+            self.gym.set_actor_dof_properties(env_ptr, self.franka_actor, franka_dof_props)
 
             if self.aggregate_mode == 2:
                 self.gym.begin_aggregate(env_ptr, max_agg_bodies, max_agg_shapes, True)
@@ -338,26 +354,50 @@ class FrankaCubeStack(VecTask):
                     count += 1
                     dims = cube[obj]['dims']
                     pose = cube[obj]['pose']
-                    self.add_table(dims, pose, franka_start_pose, env_ptr, color=[0.6, 0.6, 0.6])
-            #print('|!!!!!!!!!!!!!!!!!!pod actor count:', count)
+                    self.add_table(dims, pose, franka_start_pose, env_ptr, i, color=[0.6, 0.6, 0.6])
 
             if self.aggregate_mode == 1:
                 self.gym.begin_aggregate(env_ptr, max_agg_bodies, max_agg_shapes, True)
 
             # Create cubes
-            print('create cube!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
             self._cubeA_id = self.gym.create_actor(env_ptr, cubeA_asset, cubeA_start_pose, "cubeA", i, 2, 0)
             self._cubeB_id = self.gym.create_actor(env_ptr, cubeB_asset, cubeB_start_pose, "cubeB", i, 4, 0)
             # Set colors
             self.gym.set_rigid_body_color(env_ptr, self._cubeA_id, 0, gymapi.MESH_VISUAL, cubeA_color)
             self.gym.set_rigid_body_color(env_ptr, self._cubeB_id, 0, gymapi.MESH_VISUAL, cubeB_color)
+            self.gym.set_rigid_body_segmentation_id(env_ptr, self._cubeA_id, 0, 1)
+            self.gym.set_rigid_body_segmentation_id(env_ptr, self._cubeB_id, 0, 2)
 
             if self.aggregate_mode > 0:
                 self.gym.end_aggregate(env_ptr)
 
             # Store the created env pointers
             self.envs.append(env_ptr)
-            self.frankas.append(franka_actor)
+            self.frankas.append(self.franka_actor)
+
+            '''
+            Camera Setup
+            '''
+            # Camera environment setup
+            self.camera_handles.append([])
+            self.body_states = []
+            camera_properties = gymapi.CameraProperties()
+            camera_properties.enable_tensors = True
+            # camera_properties.horizontal_fov = 75.0
+            camera_properties.width = 1080
+            camera_properties.height = 720
+            camera_handle = self.gym.create_camera_sensor(env_ptr, camera_properties)
+            local_transform = gymapi.Transform()
+            local_transform.p = gymapi.Vec3(-0.26, -0.007, 0.801)
+            camera_rotation_x = gymapi.Quat.from_axis_angle(gymapi.Vec3(1, 0, 0), np.deg2rad(90))
+            camera_rotation_y = gymapi.Quat.from_axis_angle(gymapi.Vec3(1, 0, 0), np.deg2rad(90))
+            local_transform.r = camera_rotation_x* camera_rotation_y
+
+            camera_actor_handle = self.gym.get_actor_handle(env_ptr, 0)
+            camera_body_handle = self.gym.get_actor_rigid_body_handle(env_ptr, camera_actor_handle, 0)
+            self.gym.attach_camera_to_body(camera_handle, env_ptr, camera_body_handle, local_transform, gymapi.FOLLOW_TRANSFORM)
+            self.camera_handles[i].append(camera_handle)
+            self.body_states.append(self.gym.get_env_rigid_body_states(env_ptr, gymapi.STATE_ALL)['pose'])
 
         # Setup init state buffer
         self._init_cubeA_state = torch.zeros(self.num_envs, 13, device=self.device)
@@ -366,7 +406,9 @@ class FrankaCubeStack(VecTask):
         # Setup data
         self.init_data()
 
-    def add_table(self, table_dims, table_pose, robot_pose, env_ptr, color=[1.0,0.0,0.0]):
+
+
+    def add_table(self, table_dims, table_pose, robot_pose, env_ptr, env_id, color=[1.0,0.0,0.0]):
 
         table_dims = gymapi.Vec3(table_dims[0], table_dims[1], table_dims[2])
 
@@ -382,7 +424,7 @@ class FrankaCubeStack(VecTask):
                                           asset_options)
 
         table_pose = robot_pose * pose
-        table_handle = self.gym.create_actor(env_ptr, table_asset, table_pose, 'table', 1, 0)
+        table_handle = self.gym.create_actor(env_ptr, table_asset, table_pose, 'table', env_id, 0)
         self.gym.set_rigid_body_color(env_ptr, table_handle, 0, gymapi.MESH_VISUAL_AND_COLLISION, obj_color)
 
         # props = self.gym.get_actor_dof_properties(self.env_ptr, table_handle)
@@ -407,7 +449,7 @@ class FrankaCubeStack(VecTask):
             "cubeA_body_handle": self.gym.find_actor_rigid_body_handle(self.envs[0], self._cubeA_id, "box"),
             "cubeB_body_handle": self.gym.find_actor_rigid_body_handle(self.envs[0], self._cubeB_id, "box"),
         }
-
+        
         # Get total DOFs
         self.num_dofs = self.gym.get_sim_dof_count(self.sim) // self.num_envs
 
@@ -438,7 +480,7 @@ class FrankaCubeStack(VecTask):
             "cubeA_size": torch.ones_like(self._eef_state[:, 0]) * self.cubeA_size,
             "cubeB_size": torch.ones_like(self._eef_state[:, 0]) * self.cubeB_size,
         })
-
+        
         # Initialize actions
         self._pos_control = torch.zeros((self.num_envs, self.num_dofs), dtype=torch.float, device=self.device)
         self._effort_control = torch.zeros_like(self._pos_control)
@@ -447,7 +489,7 @@ class FrankaCubeStack(VecTask):
         #self._gripper_control = self._pos_control[:, 7:9]
 
         # Initialize indices    ------ > self.num_envs * num of actors
-        self._global_indices = torch.arange(self.num_envs * (3 + 26), dtype=torch.int32,
+        self._global_indices = torch.arange(self.num_envs * (3 + 27), dtype=torch.int32,
                                            device=self.device).view(self.num_envs, -1)
 
     def _update_states(self):
@@ -499,10 +541,9 @@ class FrankaCubeStack(VecTask):
         env_ids_int32 = env_ids.to(dtype=torch.int32)
 
         # Reset cubes, sampling cube B first, then A
-        # if not self._i:
-        self._reset_init_cube_state(cube='B', env_ids=env_ids, check_valid=False)
-        self._reset_init_cube_state(cube='A', env_ids=env_ids, check_valid=True)
-        # self._i = True
+        # Used offset to set the cubes in the particular location for each environment
+        self._reset_init_cube_state(cube='B', env_ids=env_ids, offset=[0, -0.1], check_valid=True)
+        self._reset_init_cube_state(cube='A', env_ids=env_ids, offset=[0, -0.05], check_valid=True)
 
         # Write these new init states to the sim states
         self._cubeA_state[env_ids] = self._init_cubeA_state[env_ids]
@@ -551,7 +592,7 @@ class FrankaCubeStack(VecTask):
         self.progress_buf[env_ids] = 0
         self.reset_buf[env_ids] = 0
 
-    def _reset_init_cube_state(self, cube, env_ids, check_valid=True):
+    def _reset_init_cube_state(self, cube, env_ids, offset, check_valid=True):
         """
         Simple method to sample @cube's position based on self.startPositionNoise and self.startRotationNoise, and
         automaticlly reset the pose internally. Populates the appropriate self._init_cubeX_state
@@ -580,7 +621,7 @@ class FrankaCubeStack(VecTask):
         elif cube.lower() == 'b':
             this_cube_state_all = self._init_cubeB_state
             other_cube_state = self._init_cubeA_state[env_ids, :]
-            cube_heights = self.states["cubeA_size"]
+            cube_heights = self.states["cubeB_size"]
         else:
             raise ValueError(f"Invalid cube specified, options are 'A' and 'B'; got: {cube}")
 
@@ -588,11 +629,10 @@ class FrankaCubeStack(VecTask):
         min_dists = (self.states["cubeA_size"] + self.states["cubeB_size"])[env_ids] * np.sqrt(2) / 2.0
 
         # We scale the min dist by 2 so that the cubes aren't too close together
-        min_dists = min_dists * 2.0
+        # min_dists = min_dists * 2.0
 
         # Sampling is "centered" around middle of table
-        centered_cube_xy_state = torch.tensor(self._table_surface_pos[:2], device=self.device, dtype=torch.float32)
-
+        centered_cube_xy_state = torch.tensor(np.array([2.8, 0.0]), device=self.device, dtype=torch.float32)
         # Set z value, which is fixed height
         sampled_cube_state[:, 2] = self._table_surface_pos[2] + cube_heights.squeeze(-1)[env_ids] / 2
 
@@ -606,13 +646,44 @@ class FrankaCubeStack(VecTask):
             # Indexes corresponding to envs we're still actively sampling for
             active_idx = torch.arange(num_resets, device=self.device)
             num_active_idx = len(active_idx)
+
+
+            # retrying for 100 times
             for i in range(100):
                 # Sample x y values
-                sampled_cube_state[active_idx, :2] = centered_cube_xy_state + \
-                                                     2.0 * self.start_position_noise * (
-                                                             torch.rand_like(sampled_cube_state[active_idx, :2]) - 0.5)
+                sampled_cube_state[active_idx, :2] = centered_cube_xy_state
+                # Setting the X axis value of the cube for cube A
+                if(cube == 'A'):
+                    # Set the offset for cube A on both the environment
+                    offset_xy = [offset, offset]
+                    offset_x_axis = torch.tensor(offset_xy).to(device=self.device)
+                    # Sometimes it only tries to sample for one environment, this might be due to frequency mismatch of the env (but not sure)
+                    if(active_idx.size()<torch.Size([2])):
+                        # Adding the offset on each env
+                        if(active_idx[0] == torch.tensor([0], device=self.device)):
+                            offset_xy = [offset]
+                            offset_x_axis = torch.tensor(offset_xy).to(device=self.device)
+                        if(active_idx[0] == torch.tensor([1], device=self.device)):
+                            offset_xy = [offset]
+                            offset_x_axis = torch.tensor(offset_xy).to(device=self.device)
+                else:
+                    # This condition is for cube B
+                    offset_xy = [offset, offset]
+                    offset_x_axis = torch.tensor(offset_xy).to(device=self.device)
+
+                    if(active_idx.size()<torch.Size([2])):
+                        if(active_idx[0] == torch.tensor([0], device=self.device)):
+                            offset_xy = [offset]
+                            offset_x_axis = torch.tensor(offset_xy).to(device=self.device)
+                        if(active_idx[0] == torch.tensor([1], device=self.device)):
+                            offset_xy = [offset]
+                            offset_x_axis = torch.tensor(offset_xy).to(device=self.device)
+                sampled_cube_state[active_idx, :2] += offset_x_axis
+
                 # Check if sampled values are valid
                 cube_dist = torch.linalg.norm(sampled_cube_state[:, :2] - other_cube_state[:, :2], dim=-1)
+                
+ 
                 active_idx = torch.nonzero(cube_dist < min_dists, as_tuple=True)[0]
                 num_active_idx = len(active_idx)
                 # If active idx is empty, then all sampling is valid :D
@@ -620,9 +691,9 @@ class FrankaCubeStack(VecTask):
                     success = True
                     break
             # Make sure we succeeded at sampling
-            assert success, "Sampling cube locations was unsuccessful! ):"
+            # assert success, "Sampling cube locations was unsuccessful! ):"
         else:
-            # We just directly sample
+            # We just directly sample if check_valid variable is False
             sampled_cube_state[:, :2] = centered_cube_xy_state.unsqueeze(0) + \
                                               2.0 * self.start_position_noise * (
                                                       torch.rand(num_resets, 2, device=self.device) - 0.5)
@@ -634,6 +705,7 @@ class FrankaCubeStack(VecTask):
             sampled_cube_state[:, 3:7] = quat_mul(axisangle2quat(aa_rot), sampled_cube_state[:, 3:7])
 
         # Lastly, set these sampled values as the new init state
+        # print('env id', env_ids, 'pose', sampled_cube_state)
         this_cube_state_all[env_ids, :] = sampled_cube_state
 
     def _compute_osc_torques(self, dpose):
@@ -669,9 +741,6 @@ class FrankaCubeStack(VecTask):
 
         # Split arm and gripper command
         u_arm, u_gripper = self.actions[:, :-1], self.actions[:, -1]
-
-        # print(u_arm, u_gripper)
-        # print(self.cmd_limit, self.action_scale)
 
         # Control arm (scale value first)
         u_arm = u_arm * self.cmd_limit / self.action_scale
@@ -727,11 +796,48 @@ class FrankaCubeStack(VecTask):
                     self.gym.add_lines(self.viewer, self.envs[i], 1, [p0[0], p0[1], p0[2], py[0], py[1], py[2]], [0.1, 0.85, 0.1])
                     self.gym.add_lines(self.viewer, self.envs[i], 1, [p0[0], p0[1], p0[2], pz[0], pz[1], pz[2]], [0.1, 0.1, 0.85])
 
+        self.gym.fetch_results(self.sim, True)
+
+        # communicate physics to graphics system
+        self.gym.step_graphics(self.sim)
+
+        # render the camera sensors
+        self.gym.render_all_camera_sensors(self.sim)
+        for i in range(0, self.num_envs):
+            # retrieving rgb iamges
+            rgb_image = self.gym.get_camera_image(self.sim, self.envs[i], self.camera_handles[i][0], gymapi.IMAGE_COLOR)
+            rgb_image_copy = rgb_image.copy()
+            rgb_image_copy = np.array(rgb_image_copy)
+            rgb_image_copy = rgb_image_copy.reshape(rgb_image_copy.shape[0], -1, 4)[..., :3]
+            
+            # retrieving depth and mask
+            depth_image = self.gym.get_camera_image(self.sim, self.envs[i], self.camera_handles[i][0], gymapi.IMAGE_DEPTH)
+            segmask = self.gym.get_camera_image(self.sim, self.envs[i], self.camera_handles[i][0], gymapi.IMAGE_SEGMENTATION)
+
+            # refining the depth iamge
+            depth_image = np.array(-depth_image)
+            # -inf implies no depth value, set it to zero. output will be black.
+            depth_image[depth_image == np.inf] = 0
+            # clamp depth image to 10 meters to make output image human friendly
+            depth_image[depth_image > 10] = 10
+            # normalizing the image, to make it visualizable
+            normalized_depth = -255.0*(depth_image/np.min(depth_image + 1e-4))
+            normalized_depth_image = im.fromarray(normalized_depth.astype(np.uint8))
+            
+            # To store the data count
+            self.count += 1
+            '''
+            To save rgb image, depth image and segmentation mask
+            '''
+            current_directory = os.getcwd()
+            plt.imsave(f'{current_directory}/../Data/segmask_{self.count}_{i}.png', np.array(segmask*30), cmap=cm.gray)
+            iio.imwrite(f"{current_directory}/../Data/rgb_frame_{self.count}_{i}.png", rgb_image_copy)
+            np.save(f"{current_directory}/../Data/depth_frame_{self.count}_{i}.npy", depth_image)
+
+        
 #####################################################################
 ###=========================jit functions=========================###
 #####################################################################
-
-
 @torch.jit.script
 def compute_franka_reward(
     reset_buf, progress_buf, actions, states, reward_settings, max_episode_length
