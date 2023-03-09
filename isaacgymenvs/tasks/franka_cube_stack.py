@@ -48,6 +48,9 @@ import imageio.v3 as iio
 import matplotlib.cm as cm
 # import cv2
 
+from suction_cup_modelling.suction_score_calcualtor import calcualte_suction_score
+
+
 # This function is used to convert axis angle to quartenions
 @torch.jit.script
 def axisangle2quat(vec, eps=1e-6):
@@ -746,6 +749,55 @@ class FrankaCubeStack(VecTask):
         return u
 
     def pre_physics_step(self, actions):
+        
+        '''
+        Camera access in the pre physics step to compute the force using suction cup deformation score
+        '''
+        # communicate physics to graphics system
+        self.gym.step_graphics(self.sim)
+        # render the camera sensors
+        self.gym.render_all_camera_sensors(self.sim)
+        for i in range(0, self.num_envs):
+            # retrieving rgb iamges
+            rgb_image = self.gym.get_camera_image(self.sim, self.envs[i], self.camera_handles[i][0], gymapi.IMAGE_COLOR)
+            rgb_image_copy = rgb_image.copy()
+            rgb_image_copy = np.array(rgb_image_copy)
+            rgb_image_copy = rgb_image_copy.reshape(rgb_image_copy.shape[0], -1, 4)[..., :3]
+            
+            # retrieving depth and mask
+            depth_image = self.gym.get_camera_image(self.sim, self.envs[i], self.camera_handles[i][0], gymapi.IMAGE_DEPTH)
+            segmask = self.gym.get_camera_image(self.sim, self.envs[i], self.camera_handles[i][0], gymapi.IMAGE_SEGMENTATION)
+
+            # refining the depth iamge
+            depth_image = np.array(-depth_image)
+            # -inf implies no depth value, set it to zero. output will be black.
+            depth_image[depth_image == np.inf] = 0
+            # clamp depth image to 10 meters to make output image human friendly
+            depth_image[depth_image > 10] = 10
+            # normalizing the image, to make it visualizable
+            normalized_depth = -255.0*(depth_image/np.min(depth_image + 1e-4))
+            normalized_depth_image = im.fromarray(normalized_depth.astype(np.uint8))
+
+            # adding noise to the depth iamge
+            noise_image = np.random.normal(0, 0.002, size=depth_image.shape)
+            # print(noise_image)
+            depth_image = depth_image + noise_image
+
+            # To store the data count
+            self.count += 1
+            object = calcualte_suction_score()
+            score = object.calculator(depth_image)
+            print(score)
+            '''
+            To save rgb image, depth image and segmentation mask (comment this section if you do not want to visualize as it slows down the processing)
+            '''
+            # plt.imsave(f'{self.current_directory}/../Data/segmask_{self.count}_{i}.png', np.array(segmask*30), cmap=cm.gray)
+            # iio.imwrite(f"{self.current_directory}/../Data/rgb_frame_{self.count}_{i}.png", rgb_image_copy)
+            # np.save(f"{self.current_directory}/../Data/depth_frame_{self.count}_{i}.npy", depth_image)
+
+        '''
+        Commands to the arm for eef control
+        '''
         self.actions = actions.clone().to(self.device)
 
         # Split arm and gripper command
@@ -804,49 +856,6 @@ class FrankaCubeStack(VecTask):
                     self.gym.add_lines(self.viewer, self.envs[i], 1, [p0[0], p0[1], p0[2], px[0], px[1], px[2]], [0.85, 0.1, 0.1])
                     self.gym.add_lines(self.viewer, self.envs[i], 1, [p0[0], p0[1], p0[2], py[0], py[1], py[2]], [0.1, 0.85, 0.1])
                     self.gym.add_lines(self.viewer, self.envs[i], 1, [p0[0], p0[1], p0[2], pz[0], pz[1], pz[2]], [0.1, 0.1, 0.85])
-
-        self.gym.fetch_results(self.sim, True)
-
-        # communicate physics to graphics system
-        self.gym.step_graphics(self.sim)
-
-        # render the camera sensors
-        self.gym.render_all_camera_sensors(self.sim)
-        for i in range(0, self.num_envs):
-            # retrieving rgb iamges
-            rgb_image = self.gym.get_camera_image(self.sim, self.envs[i], self.camera_handles[i][0], gymapi.IMAGE_COLOR)
-            rgb_image_copy = rgb_image.copy()
-            rgb_image_copy = np.array(rgb_image_copy)
-            rgb_image_copy = rgb_image_copy.reshape(rgb_image_copy.shape[0], -1, 4)[..., :3]
-            
-            # retrieving depth and mask
-            depth_image = self.gym.get_camera_image(self.sim, self.envs[i], self.camera_handles[i][0], gymapi.IMAGE_DEPTH)
-            segmask = self.gym.get_camera_image(self.sim, self.envs[i], self.camera_handles[i][0], gymapi.IMAGE_SEGMENTATION)
-
-            # refining the depth iamge
-            depth_image = np.array(-depth_image)
-            # -inf implies no depth value, set it to zero. output will be black.
-            depth_image[depth_image == np.inf] = 0
-            # clamp depth image to 10 meters to make output image human friendly
-            depth_image[depth_image > 10] = 10
-            # normalizing the image, to make it visualizable
-            normalized_depth = -255.0*(depth_image/np.min(depth_image + 1e-4))
-            normalized_depth_image = im.fromarray(normalized_depth.astype(np.uint8))
-
-            # adding noise to the depth iamge
-            noise_image = np.random.normal(0, 0.002, size=depth_image.shape)
-            # print(noise_image)
-            depth_image = depth_image + noise_image
-
-            # To store the data count
-            self.count += 1
-            '''
-            To save rgb image, depth image and segmentation mask
-            '''
-            self.current_directory = os.getcwd()
-            # plt.imsave(f'{self.current_directory}/../Data/segmask_{self.count}_{i}.png', np.array(segmask*30), cmap=cm.gray)
-            # iio.imwrite(f"{self.current_directory}/../Data/rgb_frame_{self.count}_{i}.png", rgb_image_copy)
-            # np.save(f"{self.current_directory}/../Data/depth_frame_{self.count}_{i}.npy", depth_image)
 
         
 #####################################################################

@@ -42,11 +42,9 @@ class calcualte_suction_score():
         point_y = (rgb_point[1] - camera_info.cy) * point_z / camera_info.fy
         return np.array([point_x, point_y, point_z])
 
-    def calculator(self):
-        P = np.array([[1.0, 0., 0., 0.], [0., 1.5, 0., 0.], [0., 0., 0., -1.], [0., 0., 0.1, 0]])
-        Pinv = np.linalg.inv(P)
+    def calculator(self, depth_image):
         current_directory = os.getcwd()
-        depth_image = np.load("/home/soofiyan_ws/Documents/Issac_gym_ws/Data/depth_frame_5_0.npy")
+        # depth_image = np.load(f'{current_directory}/../Data/depth_frame_5_0.npy')
         P = np.load(f'{current_directory}/camera_properties/projection_matrix.npy')
 
         cam_width = 1920
@@ -55,23 +53,10 @@ class calcualte_suction_score():
         cx, cy = cam_width/2, cam_height/2
         s = 1000.0
         camera_info = CameraInfo(cam_width, cam_height, fx, fy, cx, cy, s)
-
-        # fu = 2/P[0, 0]
-        # fv = 2/P[1, 1]
-        # cam_width = 1080
-        # cam_height = 720
-        # centerU = cam_width/2
-        # centerV = cam_height/2
-        # xmap = np.arange(cam_width)
-        # ymap = np.arange(cam_height)
-        # xmap, ymap = np.meshgrid(xmap, ymap)
-        # points_z = depth_image
-        # points_x = -(xmap - centerU)/cam_width*points_z*fu 
-        # points_y = (ymap - centerV)/cam_height*points_z*fv
         points = self.convert_rgb_depth_to_point_cloud(depth_image, camera_info)
-
+        score = 10
         '''
-        For visualization purpose
+        For visualization purpose 
         '''
         # points = points.transpose(1,2,0).reshape(-1,3)
         # pcd = o3d.geometry.PointCloud()
@@ -81,7 +66,5 @@ class calcualte_suction_score():
         #                                 front=[0.4257, -0.2125, -0.8795],
         #                                 lookat=[2.6172, 2.0475, 1.532],
         #                                 up=[-0.0694, -0.9768, 0.2024])
-
-object = calcualte_suction_score()
-object.main()
+        return score
 
