@@ -383,9 +383,12 @@ class FrankaCubeStack(VecTask):
             self.body_states = []
             camera_properties = gymapi.CameraProperties()
             camera_properties.enable_tensors = True
-            # camera_properties.horizontal_fov = 75.0
-            camera_properties.width = 1080
-            camera_properties.height = 720
+            camera_properties.horizontal_fov = 75.0
+            # camera_properties.vertical_fov = 65.0
+            camera_properties.width = 1920
+            camera_properties.height = 1080
+            camera_properties.far_plane = 10.0
+            camera_properties.near_plane = 0.1
             camera_handle = self.gym.create_camera_sensor(env_ptr, camera_properties)
             local_transform = gymapi.Transform()
             local_transform.p = gymapi.Vec3(-0.26, -0.007, 0.801)
@@ -398,7 +401,10 @@ class FrankaCubeStack(VecTask):
             self.gym.attach_camera_to_body(camera_handle, env_ptr, camera_body_handle, local_transform, gymapi.FOLLOW_TRANSFORM)
             self.camera_handles[i].append(camera_handle)
             self.body_states.append(self.gym.get_env_rigid_body_states(env_ptr, gymapi.STATE_ALL)['pose'])
-
+            self.projection_matrix = np.matrix(self.gym.get_camera_proj_matrix(self.sim, env_ptr, camera_handle))
+            self.current_directory = os.getcwd()
+            np.save(f'{self.current_directory}/camera_properties/projection_matrix.npy', self.projection_matrix)
+            print(self.projection_matrix)
         # Setup init state buffer
         self._init_cubeA_state = torch.zeros(self.num_envs, 13, device=self.device)
         self._init_cubeB_state = torch.zeros(self.num_envs, 13, device=self.device)
@@ -467,7 +473,7 @@ class FrankaCubeStack(VecTask):
         #self._eef_rf_state = self._rigid_body_state[:, self.handles["rightfinger_tip"], :]
         _jacobian = self.gym.acquire_jacobian_tensor(self.sim, "franka")
         jacobian = gymtorch.wrap_tensor(_jacobian)
-        hand_joint_index = self.gym.get_actor_joint_dict(env_ptr, franka_handle)['right_proximal_phalanx_joint']
+        hand_joint_index = self.gym.get_actor_joint_dict(env_ptr, franka_handle)['ee_fixed_joint']
         self._j_eef = jacobian[:, hand_joint_index, :, :7]
         _massmatrix = self.gym.acquire_mass_matrix_tensor(self.sim, "franka")
         mm = gymtorch.wrap_tensor(_massmatrix)
@@ -538,12 +544,15 @@ class FrankaCubeStack(VecTask):
         return self.obs_buf
 
     def reset_idx(self, env_ids):
+        # resetting the count for saving the iamges
+        self.count = 0
+
         env_ids_int32 = env_ids.to(dtype=torch.int32)
 
         # Reset cubes, sampling cube B first, then A
         # Used offset to set the cubes in the particular location for each environment
-        self._reset_init_cube_state(cube='B', env_ids=env_ids, offset=[0, -0.1], check_valid=True)
-        self._reset_init_cube_state(cube='A', env_ids=env_ids, offset=[0, -0.05], check_valid=True)
+        self._reset_init_cube_state(cube='B', env_ids=env_ids, offset=[0, -0.175], check_valid=True)
+        self._reset_init_cube_state(cube='A', env_ids=env_ids, offset=[0, -0.1], check_valid=True)
 
         # Write these new init states to the sim states
         self._cubeA_state[env_ids] = self._init_cubeA_state[env_ids]
@@ -552,9 +561,9 @@ class FrankaCubeStack(VecTask):
         # Reset agent
         reset_noise = torch.rand((len(env_ids), self.num_franka_dofs), device=self.device)
         pos = tensor_clamp(
-            self.franka_default_dof_pos.unsqueeze(0) +
-            self.franka_dof_noise * 2.0 * (reset_noise - 0.5),
+            self.franka_default_dof_pos.unsqueeze(0) + self.franka_dof_noise * 0.0 * (reset_noise - 0.5),
             self.franka_dof_lower_limits.unsqueeze(0), self.franka_dof_upper_limits)
+            # self.franka_dof_noise * 2.0 * (reset_noise - 0.5),
 
         # Overwrite gripper init pos (no noise since these are always position controlled)
         pos[:, -2:] = self.franka_default_dof_pos[-2:]
@@ -698,11 +707,11 @@ class FrankaCubeStack(VecTask):
                                               2.0 * self.start_position_noise * (
                                                       torch.rand(num_resets, 2, device=self.device) - 0.5)
 
-        # Sample rotation value
-        if self.start_rotation_noise > 0:
-            aa_rot = torch.zeros(num_resets, 3, device=self.device)
-            aa_rot[:, 2] = 2.0 * self.start_rotation_noise * (torch.rand(num_resets, device=self.device) - 0.5)
-            sampled_cube_state[:, 3:7] = quat_mul(axisangle2quat(aa_rot), sampled_cube_state[:, 3:7])
+        # # Sample rotation value
+        # if self.start_rotation_noise > 0:
+        #     aa_rot = torch.zeros(num_resets, 3, device=self.device)
+        #     aa_rot[:, 2] = 2.0 * self.start_rotation_noise * (torch.rand(num_resets, device=self.device) - 0.5)
+        #     sampled_cube_state[:, 3:7] = quat_mul(axisangle2quat(aa_rot), sampled_cube_state[:, 3:7])
 
         # Lastly, set these sampled values as the new init state
         # print('env id', env_ids, 'pose', sampled_cube_state)
@@ -823,16 +832,21 @@ class FrankaCubeStack(VecTask):
             # normalizing the image, to make it visualizable
             normalized_depth = -255.0*(depth_image/np.min(depth_image + 1e-4))
             normalized_depth_image = im.fromarray(normalized_depth.astype(np.uint8))
-            
+
+            # adding noise to the depth iamge
+            noise_image = np.random.normal(0, 0.002, size=depth_image.shape)
+            # print(noise_image)
+            depth_image = depth_image + noise_image
+
             # To store the data count
             self.count += 1
             '''
             To save rgb image, depth image and segmentation mask
             '''
-            current_directory = os.getcwd()
-            plt.imsave(f'{current_directory}/../Data/segmask_{self.count}_{i}.png', np.array(segmask*30), cmap=cm.gray)
-            iio.imwrite(f"{current_directory}/../Data/rgb_frame_{self.count}_{i}.png", rgb_image_copy)
-            np.save(f"{current_directory}/../Data/depth_frame_{self.count}_{i}.npy", depth_image)
+            self.current_directory = os.getcwd()
+            # plt.imsave(f'{self.current_directory}/../Data/segmask_{self.count}_{i}.png', np.array(segmask*30), cmap=cm.gray)
+            # iio.imwrite(f"{self.current_directory}/../Data/rgb_frame_{self.count}_{i}.png", rgb_image_copy)
+            # np.save(f"{self.current_directory}/../Data/depth_frame_{self.count}_{i}.npy", depth_image)
 
         
 #####################################################################

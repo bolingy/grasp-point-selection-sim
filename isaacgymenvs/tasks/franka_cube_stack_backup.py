@@ -410,7 +410,7 @@ class FrankaCubeStack(VecTask):
         self._arm_control = self._effort_control[:, :7]
         self._gripper_control = self._pos_control[:, 7:9]
 
-        # Initialize indices
+        # Initialize indicesself._arm_control
         self._global_indices = torch.arange(self.num_envs * 5, dtype=torch.int32,
                                            device=self.device).view(self.num_envs, -1)
 

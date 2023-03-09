@@ -196,7 +196,106 @@
       <inertia ixx="0.0006481268240825001" ixy="0.0" ixz="0.0" iyy="0.0006481268240825001" iyz="0.0" izz="0.0009183374999999999"/>
     </inertial>
   </link>
+
+  <!-- Suction Gripper -->
   <joint name="gripper_joint" type="fixed">
+    <parent link="wrist_3_link"/>
+    <child link="gripper_link"/>
+    <origin rpy="0 0 90" xyz="0 0 0"/>
+    <limit effort="1000" lower="0" upper="0.8" velocity="0.5"/>
+  </joint>
+  <link name="gripper_link">
+    <inertial>
+      <mass value="0.745"/>
+      <origin rpy="0 0 0" xyz="0 0.0 0.055"/>
+      <inertia ixx="0.003084" ixy="0.0" ixz="0.0" iyy="0.002999" iyz="0.0" izz="0.000546"/>
+    </inertial>
+    <visual>
+      <origin rpy="0 0 0" xyz="0 0 0.095"/>
+      <geometry>
+        <mesh filename="robotiq_epick_visualization/meshes/visual/robotiq_epick.dae" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <material name="">
+        <color rgba="1 1 1 1"/>
+      </material>
+    </visual>
+    <visual>
+      <origin rpy="0 0 0" xyz="0 0 0.11"/>
+      <geometry>
+        <cylinder length="0.03" radius="0.006"/>
+      </geometry>
+      <material name="">
+        <color rgba="1 1 1 1"/>
+      </material>
+    </visual>
+    <collision>
+      <!-- -0.095 + 0.102/2 = -0.044-->
+      <origin rpy="0 0 0" xyz="0 0 0.065"/>
+      <geometry>
+        <cylinder length="0.13" radius="0.044"/>
+      </geometry>
+    </collision>
+  </link>
+  <joint name="rod_joint" type="fixed">
+    <parent link="gripper_link"/>
+    <child link="epick_rod"/>
+    <origin rpy="0 0 0" xyz="0 0 0.13"/>
+  </joint>
+  <link name="epick_rod">
+    <gravity>0</gravity>
+    <visual>
+      <origin rpy="0 0 0.005" xyz="0 0 0"/>
+      <geometry>
+        <cylinder length="0.1" radius="0.01"/>
+      </geometry>
+      <!-- <material name="transparent">
+          <color rgba="0 0 0 0"/>
+        </material> -->
+    </visual>
+    <inertial>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <mass value="0.0001"/>
+      <inertia ixx="1e-08" ixy="0" ixz="0" iyy="1e-08" iyz="0" izz="1e-08"/>
+    </inertial>
+  </link>
+  <joint name="eef_hand_joint" type="fixed">
+    <parent link="epick_rod"/>
+    <child link="epick_end_effector"/>
+    <origin rpy="0 0 0" xyz="0 0 0.055"/>
+  </joint>
+  <link name="epick_end_effector">
+    <gravity>0</gravity>
+    <visual>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <geometry>
+        <cylinder length="0.01" radius="0.0225"/>
+      </geometry>
+    </visual>
+    <inertial>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <mass value="0.0001"/>
+      <inertia ixx="1e-08" ixy="0" ixz="0" iyy="1e-08" iyz="0" izz="1e-08"/>
+    </inertial>
+  </link>
+  <joint name="ee_fixed_joint" type="fixed">
+    <parent link="epick_end_effector"/>
+    <child link="ee_link"/>
+    <!--origin rpy="0.0 0.0 1.570796325" xyz="0.0 0.0922 0.0"/-->
+    <!--origin rpy="-1.57 0.0 1.57" xyz="0.0 0. 0.0"/-->
+    <origin rpy="0.0 0.0 -1.57" xyz="0.0 0.0 0.0"/> 
+  </joint>
+  <link name="ee_link">
+    <collision>
+      <geometry>
+        <box size="0.01 0.01 0.01"/>
+      </geometry>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+    </collision>
+  </link>
+
+
+  <!-- 2 finger gripper -->
+  <!-- <joint name="gripper_joint" type="fixed">
     <parent link="wrist_3_link"/>
     <child link="gripper_link"/>
     <origin rpy="0 0 90" xyz="0 0 0"/>
@@ -227,8 +326,6 @@
   <joint name="ee_fixed_joint" type="fixed">
     <parent link="gripper_link"/>
     <child link="ee_link"/>
-    <!--origin rpy="0.0 0.0 1.570796325" xyz="0.0 0.0922 0.0"/-->
-    <!--origin rpy="-1.57 0.0 1.57" xyz="0.0 0. 0.0"/-->
     <origin rpy="0.0 0.0 -1.57" xyz="0.0 0. 0.1"/> 
   </joint>
   <link name="ee_link">
@@ -239,8 +336,11 @@
 
       <origin rpy="0 0 0" xyz="0.0 0 0"/>
     </collision>
-  </link>
-  <joint name="left_outer_knuckle_joint" type="fixed">
+  </link> -->
+
+
+
+  <!-- <joint name="left_outer_knuckle_joint" type="fixed">
     <origin rpy="0 0 3.141592653589793" xyz="0 -0.0306011 0.054904"/>
     <parent link="gripper_link"/>
     <child link="left_outer_knuckle"/>
@@ -474,5 +574,5 @@
         <mesh filename="package://Aurmar_description/meshes/robotiq_2f_85_gripper_visualization/meshes/collision/proximal_phalanx.stl"/>
       </geometry>
     </collision>
-  </link>
+  </link> -->
 </robot>
