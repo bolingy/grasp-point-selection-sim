@@ -50,6 +50,7 @@ import open3d as o3d
 import cv2
 
 from suction_cup_modelling.suction_score_calcualtor import calcualte_suction_score
+from suction_cup_modelling.force_calculator import calcualte_force
 
 
 # This function is used to convert axis angle to quartenions
@@ -795,9 +796,15 @@ class FrankaCubeStack(VecTask):
             '''
             if(torch.unique(segmask).any() >= 1):
                 object_id = 1
-                object = calcualte_suction_score(depth_image, segmask, rgb_image_copy, cam_proj, object_id)
-                score = object.calculator()
-                print(score)
+                suction_score_object = calcualte_suction_score(depth_image, segmask, rgb_image_copy, cam_proj, object_id)
+                score = suction_score_object.calculator()
+                # print(score)
+                
+                force_object = calcualte_force(score)
+                force = force_object.regression()
+                print(score, force)
+
+                
             '''
             To save rgb image, depth image and segmentation mask (comment this section if you do not want to visualize as it slows down the processing)
             '''
