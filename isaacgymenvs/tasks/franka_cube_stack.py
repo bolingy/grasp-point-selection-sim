@@ -770,77 +770,34 @@ class FrankaCubeStack(VecTask):
         points = []
         # for i in range(0, self.num_envs):
         for i in range(1,2):
-            # retrieving rgb iamges
-            rgb_image = self.gym.get_camera_image(self.sim, self.envs[i], self.camera_handles[i][0], gymapi.IMAGE_COLOR)
-            rgb_image_copy = rgb_image.copy()
-            rgb_image_copy = np.array(rgb_image_copy)
-            rgb_image_copy = rgb_image_copy.reshape(rgb_image_copy.shape[0], -1, 4)[..., :3]
-            
+            # retrieving rgb iamge
+            rgb_camera_tensor = self.gym.get_camera_image_gpu_tensor(self.sim, self.envs[i], self.camera_handles[i][0], gymapi.IMAGE_COLOR)
+            torch_rgb_tensor = gymtorch.wrap_tensor(rgb_camera_tensor)
+            rgb_image = torch_rgb_tensor.to(self.device)
+            rgb_image_copy = torch.reshape(rgb_image, (rgb_image.shape[0], -1, 4))[..., :3]
+
+            depth_camera_tensor = self.gym.get_camera_image_gpu_tensor(self.sim, self.envs[i], self.camera_handles[i][0], gymapi.IMAGE_DEPTH)
+            torch_depth_tensor = gymtorch.wrap_tensor(depth_camera_tensor)
+            depth_image = torch_depth_tensor.to(self.device)
             # retrieving depth and mask
-            depth_image = self.gym.get_camera_image(self.sim, self.envs[i], self.camera_handles[i][0], gymapi.IMAGE_DEPTH)
-            segmask = self.gym.get_camera_image(self.sim, self.envs[i], self.camera_handles[i][0], gymapi.IMAGE_SEGMENTATION)
-
-            # # refining the depth iamge
-            depth_image = np.array(-depth_image)
-            # # -inf implies no depth value, set it to zero. output will be black.
-            depth_image[depth_image == np.inf] = 0
-            # # clamp depth image to 10 meters to make output image human friendly
-            depth_image[depth_image > 10] = 10.0
-            # # normalizing the image, to make it visualizable
-            # normalized_depth = -255.0*(depth_image/np.min(depth_image + 1e-4))
-            # normalized_depth_image = im.fromarray(normalized_depth.astype(np.uint8))
-            # print(depth_image)
-            # adding noise to the depth iamge
-            noise_image = np.random.normal(0, 0.0009, size=depth_image.shape)
-            # print(noise_image)
-            depth_image = depth_image + noise_image
-
+            mask_camera_tensor = self.gym.get_camera_image_gpu_tensor(self.sim, self.envs[i], self.camera_handles[i][0], gymapi.IMAGE_SEGMENTATION)
+            torch_mask_tensor = gymtorch.wrap_tensor(mask_camera_tensor)
+            segmask = torch_mask_tensor.to(self.device)
+            
             '''
             Point cloud with tensor
             '''
-            cam_vinv = torch.inverse((torch.tensor(self.gym.get_camera_view_matrix(self.sim, self.envs[i], self.camera_handles[i][0])))).to(self.device)
+            # cam_vinv = torch.inverse((torch.tensor(self.gym.get_camera_view_matrix(self.sim, self.envs[i], self.camera_handles[i][0])))).to(self.device)
             cam_proj = torch.tensor(self.gym.get_camera_proj_matrix(self.sim, self.envs[i], self.camera_handles[i][0]), device=self.device)
-            camera_tensor = self.gym.get_camera_image_gpu_tensor(self.sim, self.envs[i], self.camera_handles[i][0], gymapi.IMAGE_DEPTH)
-            torch_cam_tensor = gymtorch.wrap_tensor(camera_tensor)
-            segmask = np.asarray((segmask == 1), dtype=np.uint8)
-            depth_buffer = torch_cam_tensor.to(self.device)
-            depth_buffer[segmask == 0] = -10001
 
-            width = 1080
-            height = 720
-            camera_u = torch.arange(0, width, device=self.device)
-            camera_v = torch.arange(0, height, device=self.device)
-            camera_v, camera_u = torch.meshgrid(camera_v, camera_u, indexing='ij')
-            vinv = cam_vinv
-            proj = cam_proj
-            fu = 2/proj[0, 0]
-            fv = 2/proj[1, 1]
-            centerU = width/2
-            centerV = height/2
-
-            Z = depth_buffer
-            X = -(camera_u-centerU)/width * Z * fu
-            Y = (camera_v-centerV)/height * Z * fv
-
-            depth_bar = 10
-            Z = Z.view(-1)  
-            valid = Z > -depth_bar
-            X = X.view(-1)
-            Y = Y.view(-1)
-
-
-            position = torch.vstack((X, Y, Z, torch.ones(len(X), device=self.device)))[:, valid]
-            position = position.permute(1, 0)
-            # position = position@vinv
-
-            points = position[:, 0:3]
-            if(len(points) == 0):
-                continue
-            
-            ### Use this centroid
-            centroid = [torch.median(points[:, 0]), torch.median(points[:, 1]), torch.median(points[:, 2])]
-
-
+            '''
+            Here the function is called which will calculate the conical spring score for each object which is denoted by item_id
+            '''
+            if(torch.unique(segmask).any() >= 1):
+                object_id = 1
+                object = calcualte_suction_score(depth_image, segmask, rgb_image_copy, cam_proj, object_id)
+                score = object.calculator()
+                print(score)
             '''
             To save rgb image, depth image and segmentation mask (comment this section if you do not want to visualize as it slows down the processing)
             '''

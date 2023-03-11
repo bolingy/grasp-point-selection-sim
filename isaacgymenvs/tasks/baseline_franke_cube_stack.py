@@ -798,49 +798,82 @@ class FrankaCubeStack(VecTask):
             '''
             Point cloud with tensor
             '''
-            cam_vinv = torch.inverse((torch.tensor(self.gym.get_camera_view_matrix(self.sim, self.envs[i], self.camera_handles[i][0])))).to(self.device)
-            cam_proj = torch.tensor(self.gym.get_camera_proj_matrix(self.sim, self.envs[i], self.camera_handles[i][0]), device=self.device)
-            camera_tensor = self.gym.get_camera_image_gpu_tensor(self.sim, self.envs[i], self.camera_handles[i][0], gymapi.IMAGE_DEPTH)
-            torch_cam_tensor = gymtorch.wrap_tensor(camera_tensor)
-            segmask = np.asarray((segmask == 1), dtype=np.uint8)
-            depth_buffer = torch_cam_tensor.to(self.device)
-            depth_buffer[segmask == 0] = -10001
+            # cam_vinv = torch.inverse((torch.tensor(self.gym.get_camera_view_matrix(self.sim, self.envs[i], self.camera_handles[i][0])))).to(self.device)
+            # cam_proj = torch.tensor(self.gym.get_camera_proj_matrix(self.sim, self.envs[i], self.camera_handles[i][0]), device=self.device)
+            # print(cam_proj)
+            # print(cam_vinv)
+            # camera_tensor = self.gym.get_camera_image_gpu_tensor(self.sim, self.envs[i], self.camera_handles[i][0], gymapi.IMAGE_DEPTH)
+            # torch_cam_tensor = gymtorch.wrap_tensor(camera_tensor)
+            # depth_buffer = torch_cam_tensor.to(self.device)
 
-            width = 1080
-            height = 720
-            camera_u = torch.arange(0, width, device=self.device)
-            camera_v = torch.arange(0, height, device=self.device)
-            camera_v, camera_u = torch.meshgrid(camera_v, camera_u, indexing='ij')
-            vinv = cam_vinv
-            proj = cam_proj
-            fu = 2/proj[0, 0]
-            fv = 2/proj[1, 1]
-            centerU = width/2
-            centerV = height/2
+            # width = 1920
+            # height = 1080
+            # camera_u = torch.arange(0, width, device=self.device)
+            # camera_v = torch.arange(0, height, device=self.device)
+            # camera_v, camera_u = torch.meshgrid(camera_v, camera_u, indexing='ij')
+            # vinv = cam_vinv
+            # proj = cam_proj
+            # fu = 2/proj[0, 0]
+            # fv = 2/proj[1, 1]
+            # centerU = width/2
+            # centerV = height/2
 
-            Z = depth_buffer
-            X = -(camera_u-centerU)/width * Z * fu
-            Y = (camera_v-centerV)/height * Z * fv
+            # Z = depth_buffer
+            # X = -(camera_u-centerU)/width * Z * fu
+            # Y = (camera_v-centerV)/height * Z * fv
 
-            depth_bar = 10
-            Z = Z.view(-1)  
-            valid = Z > -depth_bar
-            X = X.view(-1)
-            Y = Y.view(-1)
+            # depth_bar = 10
+            # Z = Z.view(-1)  
+            # valid = Z > -depth_bar
+            # X = X.view(-1)
+            # Y = Y.view(-1)
 
 
-            position = torch.vstack((X, Y, Z, torch.ones(len(X), device=self.device)))[:, valid]
-            position = position.permute(1, 0)
+            # position = torch.vstack((X, Y, Z, torch.ones(len(X), device=self.device)))[:, valid]
+            # position = position.permute(1, 0)
             # position = position@vinv
 
-            points = position[:, 0:3]
-            if(len(points) == 0):
-                continue
-            print(torch.max(points[:, 0])-torch.min(points[:, 0]), torch.max(points[:, 1])-torch.min(points[:, 1]), torch.max(points[:, 2])-torch.min(points[:, 2]))
-            num_points = points.shape[0]
-            print(torch.median(points, 1))
-            centroid = [torch.median(points[:, 0]), torch.median(points[:, 1]), torch.median(points[:, 2])]
-            print(centroid)
+            # points = position[:, 0:3]
+            # print(points, points.shape)
+
+            '''
+            Point cloud with numpy
+            '''
+            vinv = np.linalg.inv(np.matrix(self.gym.get_camera_view_matrix(self.sim, self.envs[i], self.camera_handles[i][0])))
+            proj = self.gym.get_camera_proj_matrix(self.sim, self.envs[i], self.camera_handles[i][0])
+            depth_image[segmask == 0] = -10001
+            segmask = np.asarray((segmask == 1), dtype=np.uint8)
+            fu = 2/proj[0, 0]
+            fv = 2/proj[1, 1]
+
+            cam_width = 1080
+            cam_height = 720
+
+            points= np.empty((0, 3), float)
+            centerU = cam_width/2
+            centerV = cam_height/2
+
+
+            for i in range(cam_width):
+                for j in range(cam_height):
+                    if depth_image[j, i] < -10000:
+                        continue
+                    if segmask[j, i] == 1:
+                        u = -(i-centerU)/(cam_width)  # image-space coordinate
+                        v = (j-centerV)/(cam_height)  # image-space coordinate
+                        d = depth_image[j, i]  # depth buffer value
+                        X2 = np.array([d*fu*u, d*fv*v, d, 1])  # deprojection vector
+                        p2 = X2  # Inverse camera view to get world coordinates
+                        points = np.vstack((points, [[p2[0], p2[1], p2[2]]]))
+
+                        points = points[i1*j1+j1:i2*j2+j2]
+            try:
+                print(np.max(points[:,0]) - np.min(points[:,0]), np.max(points[:,1]) - np.min(points[:,1]), np.max(points[:,2]) - np.min(points[:,2]))
+                # plt.imshow(rgb_image_copy)
+                # plt.show()
+                # print(max(points[:, 0]), min(points[:, 1]))
+            except:
+                pass
             if points.any():
                 # pcd = o3d.geometry.PointCloud()
                 # pcd.points = o3d.utility.Vector3dVector(points)
@@ -858,8 +891,8 @@ class FrankaCubeStack(VecTask):
                 rotrect = cv2.minAreaRect(big_contour)
                 (center), (width, height), angle = rotrect
                 center3D_depth_value = depth_image[int(center[1]), int(center[0])]
-                u = -(center[0]-centerU)/(width)  # image-space coordinate
-                v = (center[1]-centerV)/(height)  # image-space coordinate
+                u = -(center[0]-centerU)/(cam_width)  # image-space coordinate
+                v = (center[1]-centerV)/(cam_height)  # image-space coordinate
                 # print(center[0], center[1])
                 d = depth_image[int(center[1]), int(center[0])]  # depth buffer value
                 X2 = np.array([d*fu*u, d*fv*v, d, 1])  # deprojection vector

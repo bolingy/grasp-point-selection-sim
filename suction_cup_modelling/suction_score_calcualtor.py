@@ -4,110 +4,105 @@ import cv2
 from matplotlib import pyplot as plt, patches
 import open3d as o3d
 import os
+import torch
 
 class CameraInfo():
-    def __init__(self, width, height, fx, fy, cx, cy, scale):
+    def __init__(self, width, height, fx, fy, cx, cy):
         self.width = width
         self.height = height
         self.fx = fx
         self.fy = fy
         self.cx = cx
         self.cy = cy
-        self.scale = scale
 
 class calcualte_suction_score():
-    def convert_rgb_depth_to_point_cloud(self, depth_img, camera_info, Vinv):
-        xmap = np.arange(camera_info.width)
-        ymap = np.arange(camera_info.height)
-        xmap, ymap = np.meshgrid(xmap, ymap)
-        points = np.zeros((camera_info.width, camera_info.height, 3))
-        for i in range(camera_info.width):
-            for j in range(camera_info.height):
-                u = -(i-camera_info.cx)/(camera_info.width)  # image-space coordinate
-                v = (j-camera_info.cy)/(camera_info.height)  # image-space coordinate
-                d = depth_img[j, i]  # depth buffer value
-                X2 = [d*camera_info.fx*u, d*camera_info.fy*v, d, 1]  # deprojection vector
-                p2 = X2*Vinv  # Inverse camera view to get world coordinates
-                points[i][j] = [p2[0, 2], p2[0, 0], p2[0, 1]]
-        # points_z = depth_img
-        # points_x = ((xmap - camera_info.cx)/camera_info.width)*points_z*camera_info.fx
-        # points_y = (-(ymap - camera_info.cy)/camera_info.height)*points_z*camera_info.fy
-        # X2 = np.array([points_x, points_y, points_z, np.ones(depth_img.shape)])
-        # # X2 = np.reshape(X2, (camera_info.width*camera_info.height, 4))
-        # # transformed_point = np.dot(X2, Vinv)
-        # points = X2.T@Vinv
-        # points = points[:, :, :3]
-        # points = points.reshape(-1,3)
-        # pcd = o3d.geometry.PointCloud()
-        # pcd.points = o3d.utility.Vector3dVector(points)
-        # o3d.visualization.draw_geometries([pcd],
-        #                                 zoom=0.3412,
-        #                                 front=[0.4257, -0.2125, -0.8795],
-        #                                 lookat=[2.6172, 2.0475, 1.532],
-        #                                 up=[-0.0694, -0.9768, 0.2024])
+    def __init__(self, depth_image, segmask, rgb_img, cam_proj, object_id):
+        self.depth_image = depth_image
+        self.segmask = segmask
+        self.rgb_img = rgb_img
+        self.cam_proj = cam_proj
+        self.object_id = object_id
+        self.device = 'cuda:0'
+
+        '''
+        Store the base coordiantes of the suction cup points
+        '''
+        base_coordinate = torch.tensor([0.02, 0, 0]).to(self.device)
+        self.suction_coordinates = base_coordinate.view(1, 3)
+        for angle in range(45, 360, 45):
+            x = base_coordinate[0]*math.cos(angle*math.pi/180) - \
+                base_coordinate[1]*math.sin(angle*math.pi/180)
+            y = base_coordinate[0]*math.sin(angle*math.pi/180) + \
+                base_coordinate[1]*math.cos(angle*math.pi/180)
+            '''
+            Appending all the coordiantes in suction_cooridnates and the object_suction_coordinate is the x and y 3D cooridnate of the object suction points
+            '''
+            self.suction_coordinates = torch.cat((self.suction_coordinates, torch.tensor([[x, y, 0.]]).to(self.device)), dim=0)
+
+    def convert_rgb_depth_to_point_cloud(self, camera_info):
+        camera_u = torch.arange(0, camera_info.width, device=self.device)
+        camera_v = torch.arange(0, camera_info.height, device=self.device)
+        camera_v, camera_u = torch.meshgrid(camera_v, camera_u, indexing='ij')
+
+        Z = self.depth_image
+        X = -(camera_u-camera_info.cx)/camera_info.width * Z * camera_info.fx
+        Y = (camera_v-camera_info.cy)/camera_info.height * Z * camera_info.fy
+
+        depth_bar = 10
+        Z = Z.view(-1)  
+        valid = Z > -depth_bar
+        X = X.view(-1)
+        Y = Y.view(-1)
+
+        position = torch.vstack((X, Y, Z, torch.ones(len(X), device=self.device)))[:, valid]
+        position = position.permute(1, 0)
+        # position = position@vinv
+        points = position[:, 0:3]
         return points
 
-    def find_nearest(self, array, value, camera_info):
-        diff = 999.
-        point_cloud_index = np.array([0, 0])
-        for j in range(camera_info.height):
-            for k in range(camera_info.width):
-                compare = abs(array[k][j][0]-value[0]) + abs(array[k][j][1]-value[1])
-                if(diff > compare):
-                    diff = compare
-                    point_cloud_index = np.array([k, j])
-        return point_cloud_index
+    def find_nearest(self, centroid, points):
+        suction_points = centroid[:2] + self.suction_coordinates[:,:2]
+        distances = torch.cdist(points[:,:2], suction_points)
+        min_indices = torch.argmin(distances, dim=0)
+        point_cloud_suction = points[min_indices]
+        return point_cloud_suction
 
-    def convert_pixel_to_point_cloud(self, depth_point, rgb_point, camera_info, Vinv):
-        point_z = depth_point
-        point_x = ((rgb_point[0] - camera_info.cx)/camera_info.width)*point_z*camera_info.fx
-        point_y = (-(rgb_point[1] - camera_info.cy)/camera_info.height)*point_z*camera_info.fy
-        X2 = np.array([point_x, point_y, point_z, 1])
-        transformed_point = X2*Vinv
-        points = np.array([transformed_point[0, 2], transformed_point[0, 0], transformed_point[0, 1]])
-        return points
 
-    def calculator(self, depth_image, seg_mask, rgb_img, cam_proj, cam_vinv, bin_id):
-        print(cam_vinv)
-        current_directory = os.getcwd()
-        # depth_image = np.load(f'{current_directory}/../Data/depth_frame_5_0.npy')
-        cam_proj = cam_proj.cpu().numpy()
-        fu = 2/cam_proj[0, 0]
-        fv = 2/cam_proj[1, 1]
-        Vinv = cam_vinv.cpu().numpy()
-        print(Vinv)
-        # Ignore any points which originate from ground plane or empty space
-        depth_image[seg_mask == 0] = -10001
-        cam_width = 1920
-        cam_height = 1080
-        centerU = cam_width/2
-        centerV = cam_height/2
-        points = []
-        for i in range(cam_width):
-            for j in range(cam_height):
-                if depth_image[j, i] < -10000:
-                    continue
-                if seg_mask[j, i] > 0:
-                    u = -(i-centerU)/(cam_width)  # image-space coordinate
-                    v = (j-centerV)/(cam_height)  # image-space coordinate
-                    d = depth_image[j, i]  # depth buffer value
-                    X2 = [d*fu*u, d*fv*v, d, 1]  # deprojection vector
-                    p2 = X2*Vinv  # Inverse camera view to get world coordinates
-                    points.append([p2[0, 2], p2[0, 0], p2[0, 1]])
-        # score = 10
-        plt.imshow(rgb_img, aspect='auto')
-        plt.show()
+    def calculator(self):
+        self.segmask = (self.segmask == self.object_id)
+        self.depth_image = -self.depth_image
+        self.depth_image[self.segmask == 0] = -10001
+
+        noise_image = torch.normal(0, 0.0009, size=self.depth_image.size()).to(self.device)
+        self.depth_image = self.depth_image + noise_image
+
+        width = 1080
+        height = 720
+        fx = 2/self.cam_proj[0, 0]
+        fy = 2/self.cam_proj[1, 1]
+        cx = width/2
+        cy = height/2
+        camera_info = CameraInfo(1080, 720, fx, fy, cx, cy)
+        points = self.convert_rgb_depth_to_point_cloud(camera_info)
+
+        centroid = torch.FloatTensor([torch.median(points[:, 0]), torch.median(points[:, 1]), torch.median(points[:, 2])]).to(self.device)
         '''
-        For visualization purpose 
+        Debugging print statements one for the width and height and other one is the centroid
         '''
-        # points = points.transpose(1,2,0).reshape(-1,3)
-        print(points)
-        pcd = o3d.geometry.PointCloud()
-        pcd.points = o3d.utility.Vector3dVector(points)
-        o3d.visualization.draw_geometries([pcd],
-                                        zoom=0.3412,
-                                        front=[0.4257, -0.2125, -0.8795],
-                                        lookat=[2.6172, 2.0475, 1.532],
-                                        up=[-0.0694, -0.9768, 0.2024])
-        return 10
+        # print(torch.max(points[:,0]) - torch.min(points[:,0]), torch.max(points[:,1]) - torch.min(points[:,1]), torch.max(points[:,2]) - torch.min(points[:,2]))
+        # print("centroid", centroid)
+
+        '''
+        Finding the suction points accordint to the base coordiante
+        '''
+        point_cloud_suction = self.find_nearest(centroid, points)
+        
+        '''
+        Calcualte the conical spring score
+        '''
+        minimum_suction_point = torch.min(point_cloud_suction[:,2]).to(self.device)
+        ri = torch.clamp(torch.abs(point_cloud_suction[:,2] - minimum_suction_point) / 0.023, max=1.0)
+        suction_score = 1-torch.max(ri)
+
+        return suction_score
 
