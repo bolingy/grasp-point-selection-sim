@@ -26,11 +26,9 @@ while True:
 	# action = torch.tensor([[ 0.0600, -2.5000,  2.0300,  0.5800,  1.6700,  1.7400],
     #     [ 0.500, 0.000,  0.00,  0, 0, 0]],
     #    device='cuda:0')
-      
-	# obs, reward, done, info = envs.step(
-	# 	# torch.rand((ne,)+envs.action_space.shape, device="cuda:0")
-	# 	action
-	# )
-	obs, reward, done, info = envs.step(action)
+	# obs, reward, done, info = envs.step(action)
+	obs, reward, done, info = envs.step(
+		torch.rand((ne,)+envs.action_space.shape, device="cuda:0")
+	)
 
 	gymapi.Transform()

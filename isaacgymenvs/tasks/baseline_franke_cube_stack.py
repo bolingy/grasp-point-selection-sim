@@ -836,11 +836,85 @@ class FrankaCubeStack(VecTask):
             points = position[:, 0:3]
             if(len(points) == 0):
                 continue
-            
-            ### Use this centroid
+            print(torch.max(points[:, 0])-torch.min(points[:, 0]), torch.max(points[:, 1])-torch.min(points[:, 1]), torch.max(points[:, 2])-torch.min(points[:, 2]))
+            num_points = points.shape[0]
+            print(torch.median(points, 1))
             centroid = [torch.median(points[:, 0]), torch.median(points[:, 1]), torch.median(points[:, 2])]
+            print(centroid)
+            if points.any():
+                # pcd = o3d.geometry.PointCloud()
+                # pcd.points = o3d.utility.Vector3dVector(points)
+                # o3d.visualization.draw_geometries([pcd],
+                #                                 zoom=0.3412,
+                #                                 front=[0.4257, -0.2125, -0.8795],
+                #                                 # lookat=[1.32404573, 2.77499986, -0.12350497],
+                #                                 lookat = [1.32719177,  5.7750001,  -0.12350497],
+                #                                 up=[-0.0694, -0.9768, 0.2024])
+                
+                contours = cv2.findContours(
+                segmask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+                contours = contours[0] if len(contours) == 2 else contours[1]
+                big_contour = max(contours, key=cv2.contourArea)
+                rotrect = cv2.minAreaRect(big_contour)
+                (center), (width, height), angle = rotrect
+                center3D_depth_value = depth_image[int(center[1]), int(center[0])]
+                u = -(center[0]-centerU)/(width)  # image-space coordinate
+                v = (center[1]-centerV)/(height)  # image-space coordinate
+                # print(center[0], center[1])
+                d = depth_image[int(center[1]), int(center[0])]  # depth buffer value
+                X2 = np.array([d*fu*u, d*fv*v, d, 1])  # deprojection vector
+                p2 = X2  # Inverse camera view to get world coordinates
+                centroid_world_coordinate = [p2[0], p2[1], p2[2]]
+                # print(centroid_world_coordinate)
+
+                base_coordinate = np.array([0.02, 0, 0], dtype=np.float32)
+                suction_coordinates = [base_coordinate]
+                object_base_coordinate = centroid_world_coordinate + base_coordinate
+                object_suction_coordinate = [object_base_coordinate]
+
+                for angle in range(45, 360, 45):
+                    x = base_coordinate[0]*math.cos(angle*math.pi/180) - \
+                        base_coordinate[1]*math.sin(angle*math.pi/180)
+                    y = base_coordinate[0]*math.sin(angle*math.pi/180) + \
+                        base_coordinate[1]*math.cos(angle*math.pi/180)
+                    '''
+                    Appending all the coordiantes in suction_cooridnates and the object_suction_coordinate is the x and y 3D cooridnate of the object suction points
+                    '''
+                    suction_coordinates = np.append(
+                        suction_coordinates, np.array([[x, y, 0.]]), axis=0)
+                    object_suction_coordinate = np.append(object_suction_coordinate, np.array(
+                        [[x+centroid_world_coordinate[0], y+centroid_world_coordinate[1], 0.]]), axis=0)
+                # print(points.shape[0])
+                # print(suction_coordinates)
+                points1= np.empty((0, 3), float)
+                for suction_points in suction_coordinates:
+                    diff = 999.
+                    point_cloud_index = np.array([0, 0, 0])
+                    for j in range(points.shape[0]):
+                        # for k in range(cam_width):
+                        compare = abs(points[j][0]-(centroid_world_coordinate[0]+suction_points[0])) + abs(points[j][1]-(centroid_world_coordinate[1]+suction_points[1]))
+                        if(diff > compare):
+                            diff = compare
+                            point_cloud_index = points[j]
+                    points1 = np.vstack((points1, [point_cloud_index]))
+
+                    # print(points1)
+                # pcd = o3d.geometry.PointCloud()
+                # pcd.points = o3d.utility.Vector3dVector(points1)
+                # o3d.visualization.draw_geometries([pcd],
+                #                                 zoom=0.3412,
+                #                                 front=[0.4257, -0.2125, -0.8795],
+                #                                 # lookat=[1.32404573, 2.77499986, -0.12350497],
+                #                                 lookat = [-0.11878591, 1.34449499, 5.7750001],
+                #                                 up=[-0.0694, -0.9768, 0.2024])    
 
 
+
+            # if(np.unique(segmask).any() >= 1):
+            #     bin_id = "3F"
+            #     object = calcualte_suction_score()
+            #     score = object.calculator(depth_image, segmask, rgb_image_copy, cam_proj, cam_vinv, bin_id)
+            #     print(score)
             '''
             To save rgb image, depth image and segmentation mask (comment this section if you do not want to visualize as it slows down the processing)
             '''
