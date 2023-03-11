@@ -209,8 +209,8 @@ class FrankaCubeStack(VecTask):
         asset_options.use_mesh_materials = True
         franka_asset = self.gym.load_asset(self.sim, asset_root, franka_asset_file, asset_options)
 
-        franka_dof_stiffness = to_torch([800, 800, 800, 800, 800, 800], dtype=torch.float, device=self.device)
-        franka_dof_damping = to_torch([40, 40, 40, 40, 40, 40], dtype=torch.float, device=self.device)
+        franka_dof_stiffness = to_torch([0, 0, 0, 0, 0, 0], dtype=torch.float, device=self.device)
+        franka_dof_damping = to_torch([0, 0, 0, 0, 0, 0], dtype=torch.float, device=self.device)
 
         # Create table asset
         table_pos = [0.0, 0.0, 1.0]
@@ -639,7 +639,7 @@ class FrankaCubeStack(VecTask):
     def _compute_osc_torques(self, dpose):
         # Solve for Operational Space Control # Paper: khatib.stanford.edu/publications/pdfs/Khatib_1987_RA.pdf
         # Helpful resource: studywolf.wordpress.com/2013/09/17/robot-control-4-operation-space-control/
-        q, qd = self._q[:, :7], self._qd[:, :7]
+        q, qd = self._q[:, :6], self._qd[:, :6]
         mm_inv = torch.inverse(self._mm)
         m_eef_inv = self._j_eef @ mm_inv @ torch.transpose(self._j_eef, 1, 2)
         m_eef = torch.inverse(m_eef_inv)
@@ -679,6 +679,15 @@ class FrankaCubeStack(VecTask):
             u_arm = self._compute_osc_torques(dpose=u_arm)
         self._arm_control[:, :] = u_arm
 
+        # Debugging controller
+        '''print('-----------------------------------------------')
+        cur_joint = -5
+        self._arm_control[:, :] = torch.zeros_like(self._arm_control)
+        self._arm_control[:, cur_joint] = 100
+        print('joint pose:', self._q[0, cur_joint])
+        print('dof upper:', self.franka_dof_upper_limits[cur_joint], ' dof lower:', self.franka_dof_lower_limits[cur_joint],
+              'effort:', self._franka_effort_limits[cur_joint])
+        print(self._effort_control[0])'''
         # Control gripper
         '''u_fingers = torch.zeros_like(self._gripper_control)
         u_fingers[:, 0] = torch.where(u_gripper >= 0.0, self.franka_dof_upper_limits[-2].item(),
