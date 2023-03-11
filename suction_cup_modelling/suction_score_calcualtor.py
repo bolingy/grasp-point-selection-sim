@@ -84,7 +84,6 @@ class calcualte_suction_score():
         cy = height/2
         camera_info = CameraInfo(1080, 720, fx, fy, cx, cy)
         points = self.convert_rgb_depth_to_point_cloud(camera_info)
-
         centroid = torch.FloatTensor([torch.median(points[:, 0]), torch.median(points[:, 1]), torch.median(points[:, 2])]).to(self.device)
         '''
         Debugging print statements one for the width and height and other one is the centroid

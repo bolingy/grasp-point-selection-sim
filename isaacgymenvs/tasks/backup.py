@@ -678,34 +678,33 @@ class FrankaCubeStack(VecTask):
                 # Setting the X axis value of the cube for cube A
                 if(cube == 'A'):
                     # Set the offset for cube A on both the environment
-                    offset_xy = torch.zeros(1, 2).to(self.device)
+                    offset_xy = torch.ones(1, 2).to(self.device)
                     # offset_x_axis = torch.tensor(offset_xy).to(device=self.device)
-                    offset_x_axis = offset_xy +  torch.tensor([offset]).to(self.device)
+                    offset_x_axis = torch.matmul(offset_xy, torch.tensor(offset).to(self.device))
                     # Sometimes it only tries to sample for one environment, this might be due to frequency mismatch of the env (but not sure)
                     if(active_idx.size()<torch.Size([2])):
                         # Adding the offset on each env
                         if(active_idx[0] == torch.tensor([0], device=self.device)):
                             offset_xy = torch.ones(len(env_ids), 1).to(self.device)
-                            offset_x_axis = offset_xy +  torch.tensor([offset]).to(self.device)
+                            offset_x_axis = torch.matmul(offset_xy, torch.tensor(offset).to(self.device))
                         if(active_idx[0] == torch.tensor([1], device=self.device)):
                             offset_xy = torch.ones(len(env_ids), 1).to(self.device)
-                            offset_x_axis = offset_xy +  torch.tensor([offset]).to(self.device)
+                            offset_x_axis = torch.matmul(offset_xy, torch.tensor(offset).to(self.device))
                 else:
-                    # Set the offset for cube A on both the environment
-                    offset_xy = torch.zeros(1, 2).to(self.device)
+                    # This condition is for cube B
+                    offset_xy = torch.ones(1, 2).to(self.device)
                     # offset_x_axis = torch.tensor(offset_xy).to(device=self.device)
-                    offset_x_axis = offset_xy +  torch.tensor([offset]).to(self.device)
-                    # Sometimes it only tries to sample for one environment, this might be due to frequency mismatch of the env (but not sure)
+                    offset_x_axis = torch.matmul(offset_xy, torch.tensor(offset).to(self.device))
                     if(active_idx.size()<torch.Size([2])):
-                        # Adding the offset on each env
                         if(active_idx[0] == torch.tensor([0], device=self.device)):
                             offset_xy = torch.ones(len(env_ids), 1).to(self.device)
-                            offset_x_axis = offset_xy +  torch.tensor([offset]).to(self.device)
+                            offset_x_axis = torch.matmul(offset_xy, torch.tensor(offset).to(self.device))
                         if(active_idx[0] == torch.tensor([1], device=self.device)):
                             offset_xy = torch.ones(len(env_ids), 1).to(self.device)
-                            offset_x_axis = offset_xy +  torch.tensor([offset]).to(self.device)
-                            
+                            offset_x_axis = torch.matmul(offset_xy, torch.tensor(offset).to(self.device))
+                print("offset", offset_x_axis)
                 sampled_cube_state[active_idx, :2] += offset_x_axis
+                print(sampled_cube_state)
 
                 # Check if sampled values are valid
                 cube_dist = torch.linalg.norm(sampled_cube_state[:, :2] - other_cube_state[:, :2], dim=-1)
