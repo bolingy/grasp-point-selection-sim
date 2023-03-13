@@ -2,8 +2,6 @@ import isaacgym
 import isaacgymenvs
 import torch
 
-from isaacgym import gymapi
-
 ne = 20
 
 envs = isaacgymenvs.make(
@@ -17,9 +15,12 @@ envs = isaacgymenvs.make(
 print("Observation space is", envs.observation_space)
 print("Action space is", envs.action_space)
 obs = envs.reset()
-gym = gymapi.acquire_gym()
-
 while True:
-	action = torch.tensor(ne * [[0.5, 0, 0, 0, 0, 0, 1]], device="cuda:0")
-	obs, reward, done, info = envs.step(action)
-	gymapi.Transform()
+	
+	action = torch.tensor(ne * [[0.2, 0, 0.5, 0, 0, 0, 1]])
+	obs, reward, done, info = envs.step(
+		#torch.rand((ne,)+envs.action_space.shape, device="cuda:0")
+		action
+		)
+	
+	#print(torch.rand((ne,)+envs.action_space.shape, device="cuda:0").shape)

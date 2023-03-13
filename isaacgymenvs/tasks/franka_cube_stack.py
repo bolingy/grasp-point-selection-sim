@@ -170,7 +170,7 @@ class FrankaCubeStack(VecTask):
 
         # Franka defaults
         self.franka_default_dof_pos = to_torch(
-            [1.0, -1.0, 2.83, 0.58, 1.67, 1.74], device=self.device
+            [0.06, -2.5, 2.03, 0.58, 1.67, 1.74], device=self.device
         )
 
         # OSC Gains
@@ -230,8 +230,8 @@ class FrankaCubeStack(VecTask):
         asset_options.use_mesh_materials = True
         franka_asset = self.gym.load_asset(self.sim, asset_root, franka_asset_file, asset_options)
 
-        franka_dof_stiffness = to_torch([800, 800, 800, 800, 800, 800], dtype=torch.float, device=self.device)
-        franka_dof_damping = to_torch([40, 40, 40, 40, 40, 40], dtype=torch.float, device=self.device)
+        franka_dof_stiffness = to_torch([0, 0, 0, 0, 0, 0], dtype=torch.float, device=self.device)
+        franka_dof_damping = to_torch([0, 0, 0, 0, 0, 0], dtype=torch.float, device=self.device)
 
         # Create table asset
         table_pos = [0.0, 0.0, 1.0]
@@ -420,8 +420,6 @@ class FrankaCubeStack(VecTask):
         # Setup data
         self.init_data()
 
-
-
     def add_table(self, table_dims, table_pose, robot_pose, env_ptr, env_id, color=[1.0,0.0,0.0]):
 
         table_dims = gymapi.Vec3(table_dims[0], table_dims[1], table_dims[2])
@@ -569,7 +567,8 @@ class FrankaCubeStack(VecTask):
         # Reset agent
         reset_noise = torch.rand((len(env_ids), self.num_franka_dofs), device=self.device)
         pos = tensor_clamp(
-            self.franka_default_dof_pos.unsqueeze(0) + self.franka_dof_noise * 0.0 * (reset_noise - 0.5),
+            self.franka_default_dof_pos.unsqueeze(0) +
+            self.franka_dof_noise * 2.0 * (reset_noise - 0.5),
             self.franka_dof_lower_limits.unsqueeze(0), self.franka_dof_upper_limits)
             # self.franka_dof_noise * 2.0 * (reset_noise - 0.5),
 
@@ -738,7 +737,7 @@ class FrankaCubeStack(VecTask):
     def _compute_osc_torques(self, dpose):
         # Solve for Operational Space Control # Paper: khatib.stanford.edu/publications/pdfs/Khatib_1987_RA.pdf
         # Helpful resource: studywolf.wordpress.com/2013/09/17/robot-control-4-operation-space-control/
-        q, qd = self._q[:, :7], self._qd[:, :7]
+        q, qd = self._q[:, :6], self._qd[:, :6]
         mm_inv = torch.inverse(self._mm)
         m_eef_inv = self._j_eef @ mm_inv @ torch.transpose(self._j_eef, 1, 2)
         m_eef = torch.inverse(m_eef_inv)
