@@ -142,10 +142,6 @@ class FrankaCubeStack(VecTask):
         self._cubeA_id = None                   # Actor ID corresponding to cubeA for a given env
         self._cubeB_id = None                   # Actor ID corresponding to cubeB for a given env
 
-        self._init_cylinder_state = None
-        self._cylinder_state = None
-        self._cylinder_id = None
-
         # Tensor placeholders
         self._root_state = None             # State of root body        (n_envs, 13)
         self._dof_state = None  # State of all joints       (n_envs, n_dof)
@@ -205,8 +201,6 @@ class FrankaCubeStack(VecTask):
         self.frame_count = 0
         self.fig = plt.figure()
 
-        self.current_directory = os.getcwd()
-
     def create_sim(self):
         self.sim_params.up_axis = gymapi.UP_AXIS_Z
         self.sim_params.gravity.x = 0
@@ -263,7 +257,6 @@ class FrankaCubeStack(VecTask):
 
         self.cubeA_size = 0.050
         self.cubeB_size = 0.070
-        self.cylinder_size = 0.011
 
         # Create cubeA asset
         cubeA_opts = gymapi.AssetOptions()
@@ -274,21 +267,6 @@ class FrankaCubeStack(VecTask):
         cubeB_opts = gymapi.AssetOptions()
         cubeB_asset = self.gym.create_box(self.sim, *([self.cubeB_size] * 3), cubeB_opts)
         cubeB_color = gymapi.Vec3(0.0, 0.4, 0.1)
-
-
-        asset_options = gymapi.AssetOptions()
-        asset_options.flip_visual_attachments = True
-        asset_options.fix_base_link = False
-        asset_options.collapse_fixed_joints = True
-        asset_options.disable_gravity = False
-        asset_options.thickness = 0.001
-        asset_options.default_dof_drive_mode = gymapi.DOF_MODE_EFFORT
-        asset_options.use_mesh_materials = True
-        cylinder_asset_file = "urdf/Aurmar_description/objects/cylinder.urdf"
-        # load cylinder asset
-        cylinder_asset = self.gym.load_asset(self.sim, asset_root, cylinder_asset_file, asset_options)
-        cylinder_color = gymapi.Vec3(0.5, 0.1, 0.5)
-
 
         self.num_franka_bodies = self.gym.get_asset_rigid_body_count(franka_asset)
         self.num_franka_dofs = self.gym.get_asset_dof_count(franka_asset)
@@ -343,15 +321,12 @@ class FrankaCubeStack(VecTask):
         cubeB_start_pose = gymapi.Transform()
         cubeB_start_pose.p = gymapi.Vec3(0.0, 0.2, -10.0)
         cubeB_start_pose.r = gymapi.Quat(0.0, 0.0, 0.0, 1.0)
-        cylinder_start_pose = gymapi.Transform()
-        cylinder_start_pose.p = gymapi.Vec3(0.0, -0.1, -10.0)
-        cylinder_start_pose.r = gymapi.Quat(0.0, 0.0, 0.0, 1.0)
 
         # compute aggregate size
         num_franka_bodies = self.gym.get_asset_rigid_body_count(franka_asset)
         num_franka_shapes = self.gym.get_asset_rigid_shape_count(franka_asset)
-        max_agg_bodies = num_franka_bodies + 27 + 3    # 1 for table, table stand, cubeA, cubeB
-        max_agg_shapes = num_franka_shapes + 27 + 3     # 1 for table, table stand, cubeA, cubeB
+        max_agg_bodies = num_franka_bodies + 27 + 2    # 1 for table, table stand, cubeA, cubeB
+        max_agg_shapes = num_franka_shapes + 27 + 2     # 1 for table, table stand, cubeA, cubeB
 
         self.frankas = []
         self.envs = []
@@ -406,12 +381,6 @@ class FrankaCubeStack(VecTask):
             self.gym.set_rigid_body_segmentation_id(env_ptr, self._cubeA_id, 0, 1)
             self.gym.set_rigid_body_segmentation_id(env_ptr, self._cubeB_id, 0, 2)
 
-            # Create cylinder
-            self._cylinder_id = self.gym.create_actor(env_ptr, cylinder_asset, cylinder_start_pose, "cylinder", i, 3, 0)
-            # Set colors
-            self.gym.set_rigid_body_color(env_ptr, self._cylinder_id, 0, gymapi.MESH_VISUAL, cylinder_color)
-            self.gym.set_rigid_body_segmentation_id(env_ptr, self._cylinder_id, 0, 3)
-
             if self.aggregate_mode > 0:
                 self.gym.end_aggregate(env_ptr)
 
@@ -453,9 +422,6 @@ class FrankaCubeStack(VecTask):
         self._init_cubeA_state = torch.zeros(self.num_envs, 13, device=self.device)
         self._init_cubeB_state = torch.zeros(self.num_envs, 13, device=self.device)
 
-        # Cylinder init state buffer
-        self._init_cylinder_state = torch.zeros(self.num_envs, 13, device=self.device)
-
         # Setup data
         self.init_data()
 
@@ -487,6 +453,8 @@ class FrankaCubeStack(VecTask):
 
         #self.table_handles.append(table_handle)
 
+
+
     def init_data(self):
         # Setup sim handles
         env_ptr = self.envs[0]
@@ -497,7 +465,6 @@ class FrankaCubeStack(VecTask):
             # Cubes
             "cubeA_body_handle": self.gym.find_actor_rigid_body_handle(self.envs[0], self._cubeA_id, "box"),
             "cubeB_body_handle": self.gym.find_actor_rigid_body_handle(self.envs[0], self._cubeB_id, "box"),
-            "cylinder_body_handle": self.gym.find_actor_rigid_body_handle(self.envs[0], self._cylinder_id, "cylinder"),
         }
         
         # Get total DOFs
@@ -524,7 +491,6 @@ class FrankaCubeStack(VecTask):
         self._mm = mm[:, :7, :7]
         self._cubeA_state = self._root_state[:, self._cubeA_id, :]
         self._cubeB_state = self._root_state[:, self._cubeB_id, :]
-        self._cylinder_state = self._root_state[:, self._cylinder_id, :]
 
         # Initialize states
         self.states.update({
@@ -540,7 +506,7 @@ class FrankaCubeStack(VecTask):
         #self._gripper_control = self._pos_control[:, 7:9]
 
         # Initialize indices    ------ > self.num_envs * num of actors
-        self._global_indices = torch.arange(self.num_envs * (3 + 28), dtype=torch.int32,
+        self._global_indices = torch.arange(self.num_envs * (3 + 27), dtype=torch.int32,
                                            device=self.device).view(self.num_envs, -1)
 
     def _update_states(self):
@@ -596,14 +562,12 @@ class FrankaCubeStack(VecTask):
 
         # Reset cubes, sampling cube B first, then A
         # Used offset to set the cubes in the particular location for each environment
-        self._reset_init_object_state(object='cubeA', env_ids=env_ids, offset=[0, -0.1], check_valid=True)
-        self._reset_init_object_state(object='cubeB', env_ids=env_ids, offset=[0, -0.175], check_valid=True)
-        self._reset_init_object_state(object='cylinder', env_ids=env_ids, offset=[0, -0.3], check_valid=True)
+        self._reset_init_cube_state(cube='B', env_ids=env_ids, offset=[0, -0.175], check_valid=True)
+        self._reset_init_cube_state(cube='A', env_ids=env_ids, offset=[0, -0.1], check_valid=True)
 
         # Write these new init states to the sim states
         self._cubeA_state[env_ids] = self._init_cubeA_state[env_ids]
         self._cubeB_state[env_ids] = self._init_cubeB_state[env_ids]
-        self._cylinder_state[env_ids] = self._init_cylinder_state[env_ids]
 
         # Reset agent
         reset_noise = torch.rand((len(env_ids), self.num_franka_dofs), device=self.device)
@@ -641,7 +605,7 @@ class FrankaCubeStack(VecTask):
                                               len(multi_env_ids_int32))
 
         # Update cube states
-        multi_env_ids_cubes_int32 = self._global_indices[env_ids, -3:].flatten()
+        multi_env_ids_cubes_int32 = self._global_indices[env_ids, -2:].flatten()
         self.gym.set_actor_root_state_tensor_indexed(
             self.sim, gymtorch.unwrap_tensor(self._root_state),
             gymtorch.unwrap_tensor(multi_env_ids_cubes_int32), len(multi_env_ids_cubes_int32))
@@ -649,7 +613,7 @@ class FrankaCubeStack(VecTask):
         self.progress_buf[env_ids] = 0
         self.reset_buf[env_ids] = 0
 
-    def _reset_init_object_state(self, object, env_ids, offset, check_valid=True):
+    def _reset_init_cube_state(self, cube, env_ids, offset, check_valid=True):
         """
         Simple method to sample @cube's position based on self.startPositionNoise and self.startRotationNoise, and
         automaticlly reset the pose internally. Populates the appropriate self._init_cubeX_state
@@ -671,21 +635,22 @@ class FrankaCubeStack(VecTask):
         sampled_cube_state = torch.zeros(num_resets, 13, device=self.device)
 
         # Get correct references depending on which one was selected
-        if object.lower()[:4] == 'cube':
-            if(object.lower()[4] == 'a'):
-                this_object_state_all = self._init_cubeA_state
-                # other_cube_state = self._init_cubeB_state[env_ids, :]
-                # cube_heights = self.states["cubeA_size"]
-            elif(object.lower()[4] == 'b'):
-                this_object_state_all = self._init_cubeB_state
-                # other_cube_state = self._init_cubeA_state[env_ids, :]
-                # cube_heights = self.states["cubeB_size"]
-        elif object.lower()[:4] == 'cyli':
-            this_object_state_all = self._init_cylinder_state
-            # other_cube_state = self._init_cubeB_state[env_ids, :]
-            # cylinder_heights = self.states["cubeA_size"]
+        if cube.lower() == 'a':
+            this_cube_state_all = self._init_cubeA_state
+            other_cube_state = self._init_cubeB_state[env_ids, :]
+            cube_heights = self.states["cubeA_size"]
+        elif cube.lower() == 'b':
+            this_cube_state_all = self._init_cubeB_state
+            other_cube_state = self._init_cubeA_state[env_ids, :]
+            cube_heights = self.states["cubeB_size"]
         else:
-            raise ValueError(f"Invalid cube specified, options are 'A' and 'B'; got: {object}")
+            raise ValueError(f"Invalid cube specified, options are 'A' and 'B'; got: {cube}")
+
+        # Minimum cube distance for guarenteed collision-free sampling is the sum of each cube's effective radius
+        min_dists = (self.states["cubeA_size"] + self.states["cubeB_size"])[env_ids] * np.sqrt(2) / 2.0
+
+        # We scale the min dist by 2 so that the cubes aren't too close together
+        # min_dists = min_dists * 2.0
 
         # Sampling is "centered" around middle of table
         centered_cube_xy_state = torch.tensor(np.array([2.8, 0.0]), device=self.device, dtype=torch.float32)
@@ -711,28 +676,51 @@ class FrankaCubeStack(VecTask):
 
 
             # retrying for 100 times
-            for i in range(10000):
+            for i in range(100):
                 # Sample x y values
                 sampled_cube_state[active_idx, :2] = centered_cube_xy_state
-                # Setting the X axis value for the object
-                # Set the offset for cube A on both the environment
-                offset_xy = torch.zeros(1, 2).to(self.device)
-                # offset_x_axis = torch.tensor(offset_xy).to(device=self.device)
-                offset_x_axis = offset_xy +  torch.tensor([offset]).to(self.device)
-                # Sometimes it only tries to sample for one environment, this might be due to frequency mismatch of the env (but not sure)
-                if(active_idx.size()<torch.Size([num_resets])):
-                    continue
+                # Setting the X axis value of the cube for cube A
+                if(cube == 'A'):
+                    # Set the offset for cube A on both the environment
+                    offset_xy = torch.zeros(1, 2).to(self.device)
+                    # offset_x_axis = torch.tensor(offset_xy).to(device=self.device)
+                    offset_x_axis = offset_xy +  torch.tensor([offset]).to(self.device)
+                    # Sometimes it only tries to sample for one environment, this might be due to frequency mismatch of the env (but not sure)
+                    if(active_idx.size()<torch.Size([2])):
+                        # Adding the offset on each env
+                        if(active_idx[0] == torch.tensor([0], device=self.device)):
+                            offset_xy = torch.ones(len(env_ids), 1).to(self.device)
+                            offset_x_axis = offset_xy +  torch.tensor([offset]).to(self.device)
+                        if(active_idx[0] == torch.tensor([1], device=self.device)):
+                            offset_xy = torch.ones(len(env_ids), 1).to(self.device)
+                            offset_x_axis = offset_xy +  torch.tensor([offset]).to(self.device)
                 else:
-                    sampled_cube_state[active_idx, :2] += offset_x_axis
-                    break
-                        
-                '''
-                This code is to sample only for the particular environment
-                '''
-                # if(active_idx[0] == torch.tensor([0], device=self.device)):
-                #     offset_xy = torch.ones(len(env_ids), 1).to(self.device)
-                #     offset_x_axis = offset_xy +  torch.tensor([offset]).to(self.device)
+                    # Set the offset for cube A on both the environment
+                    offset_xy = torch.zeros(1, 2).to(self.device)
+                    # offset_x_axis = torch.tensor(offset_xy).to(device=self.device)
+                    offset_x_axis = offset_xy +  torch.tensor([offset]).to(self.device)
+                    # Sometimes it only tries to sample for one environment, this might be due to frequency mismatch of the env (but not sure)
+                    if(active_idx.size()<torch.Size([2])):
+                        # Adding the offset on each env
+                        if(active_idx[0] == torch.tensor([0], device=self.device)):
+                            offset_xy = torch.ones(len(env_ids), 1).to(self.device)
+                            offset_x_axis = offset_xy +  torch.tensor([offset]).to(self.device)
+                        if(active_idx[0] == torch.tensor([1], device=self.device)):
+                            offset_xy = torch.ones(len(env_ids), 1).to(self.device)
+                            offset_x_axis = offset_xy +  torch.tensor([offset]).to(self.device)
+                            
+                sampled_cube_state[active_idx, :2] += offset_x_axis
 
+                # Check if sampled values are valid
+                cube_dist = torch.linalg.norm(sampled_cube_state[:, :2] - other_cube_state[:, :2], dim=-1)
+                
+ 
+                active_idx = torch.nonzero(cube_dist < min_dists, as_tuple=True)[0]
+                num_active_idx = len(active_idx)
+                # If active idx is empty, then all sampling is valid :D
+                if num_active_idx == 0:
+                    success = True
+                    break
             # Make sure we succeeded at sampling
             # assert success, "Sampling cube locations was unsuccessful! ):"
         else:
@@ -749,7 +737,7 @@ class FrankaCubeStack(VecTask):
 
         # Lastly, set these sampled values as the new init state
         # print('env id', env_ids, 'pose', sampled_cube_state)
-        this_object_state_all[env_ids, :] = sampled_cube_state
+        this_cube_state_all[env_ids, :] = sampled_cube_state
 
     def _compute_osc_torques(self, dpose):
         # Solve for Operational Space Control # Paper: khatib.stanford.edu/publications/pdfs/Khatib_1987_RA.pdf
@@ -812,6 +800,8 @@ class FrankaCubeStack(VecTask):
             # cam_vinv = torch.inverse((torch.tensor(self.gym.get_camera_view_matrix(self.sim, self.envs[i], self.camera_handles[i][0])))).to(self.device)
             cam_proj = torch.tensor(self.gym.get_camera_proj_matrix(self.sim, self.envs[i], self.camera_handles[i][0]), device=self.device)
 
+            
+
             width = self.camera_properties.width
             height = self.camera_properties.height
             fx = width/(2/cam_proj[0, 0])
@@ -823,13 +813,13 @@ class FrankaCubeStack(VecTask):
             '''
             Here the function is called which will calculate the conical spring score for each object which is denoted by item_id
             ''' 
-            object_id = torch.tensor(3).to(self.device)
+            object_id = torch.tensor(2).to(self.device)
             total_objects = 3
-            if(len(torch.unique(segmask)) == total_objects+1):
+            if(len(torch.unique(segmask)) == total_objects):
                 '''
                 DexNet 3.0
                 '''
-                if(self.frame_count == 10):
+                if(self.frame_count < 1):
                     camera_intrinsics = CameraIntrinsics(frame="camera", fx=self.camera_info.fx, fy=self.camera_info.fy, cx=self.camera_info.cx, cy=self.camera_info.cy, skew=0.0, height=self.camera_info.height, width=self.camera_info.width)
                     
                     segmask_dexnet = segmask.detach().clone()
@@ -840,13 +830,14 @@ class FrankaCubeStack(VecTask):
                     depth_image_dexnet = depth_image.detach().clone()
                     # depth_image_dexnet -= 0.5
                     noise_image = torch.normal(0, 0.0009, size=depth_image_dexnet.size()).to(self.device)
-                    # depth_image_dexnet = depth_image_dexnet + noise_image
+                    depth_image_dexnet = depth_image_dexnet + noise_image
                     depth_numpy = depth_image_dexnet.cpu().numpy()
                     depth_img_dexnet = DepthImage(depth_numpy, frame=camera_intrinsics.frame)
 
                     dexnet_object = dexnet3(depth_img_dexnet, segmask_dexnet, None, camera_intrinsics)
                     action, grasps_and_predictions = dexnet_object.inference()
                     print(f"Quality is {action.q_value} grasp location is {action.grasp.center.x}, {action.grasp.center.y}")
+                    self.frame_count += 1
                     '''
                     Suction Cup Deformation
                     '''
@@ -861,10 +852,10 @@ class FrankaCubeStack(VecTask):
             '''
             To save rgb image, depth image and segmentation mask (comment this section if you do not want to visualize as it slows down the processing)
             '''
-            self.frame_count += 1
-            # plt.imsave(f'{self.current_directory}/../Data/segmask_{self.frame_count}_{i}.png', segmask.detach().cpu().numpy(), cmap=cm.gray)
-            # iio.imwrite(f"{self.current_directory}/../Data/rgb_frame_{self.frame_count}_{i}.png", rgb_image_copy.detach().cpu().numpy())
-            # np.save(f"{self.current_directory}/../Data/depth_frame_{self.frame_count}_{i}.npy", depth_image.detach().cpu().numpy())
+            # self.frame_count += 1
+            # plt.imsave(f'{self.current_directory}/../Data/segmask_{self.frame_count}_{i}.png', np.array(segmask*30), cmap=cm.gray)
+            # iio.imwrite(f"{self.current_directory}/../Data/rgb_frame_{self.frame_count}_{i}.png", rgb_image_copy)
+            # np.save(f"{self.current_directory}/../Data/depth_frame_{self.frame_count}_{i}.npy", depth_image)
         
         '''
         Commands to the arm for eef control

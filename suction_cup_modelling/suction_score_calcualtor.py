@@ -16,14 +16,14 @@ class CameraInfo():
         self.cy = cy
 
 class calcualte_suction_score():
-    def __init__(self, depth_image, segmask, rgb_img, cam_proj, object_id):
+    def __init__(self, depth_image, segmask, rgb_img, camera_info, grasps_and_predictions, object_id):
         self.depth_image = depth_image
         self.segmask = segmask
         self.rgb_img = rgb_img
-        self.cam_proj = cam_proj
+        self.camera_info = camera_info
+        self.grasps_and_predictions = grasps_and_predictions
         self.object_id = object_id
         self.device = 'cuda:0'
-
         '''
         Store the base coordiantes of the suction cup points
         '''
@@ -39,14 +39,14 @@ class calcualte_suction_score():
             '''
             self.suction_coordinates = torch.cat((self.suction_coordinates, torch.tensor([[x, y, 0.]]).to(self.device)), dim=0)
 
-    def convert_rgb_depth_to_point_cloud(self, camera_info):
-        camera_u = torch.arange(0, camera_info.width, device=self.device)
-        camera_v = torch.arange(0, camera_info.height, device=self.device)
+    def convert_rgb_depth_to_point_cloud(self):
+        camera_u = torch.arange(0, self.camera_info.width, device=self.device)
+        camera_v = torch.arange(0, self.camera_info.height, device=self.device)
         camera_v, camera_u = torch.meshgrid(camera_v, camera_u, indexing='ij')
 
         Z = self.depth_image
-        X = -(camera_u-camera_info.cx)/camera_info.width * Z * camera_info.fx
-        Y = (camera_v-camera_info.cy)/camera_info.height * Z * camera_info.fy
+        X = (camera_u-self.camera_info.cx)/self.camera_info.fx * Z
+        Y = (camera_v-self.camera_info.cy)/self.camera_info.fy * Z
 
         depth_bar = 10
         Z = Z.view(-1)  
@@ -59,6 +59,23 @@ class calcualte_suction_score():
         # position = position@vinv
         points = position[:, 0:3]
         return points
+    
+    def convert_uv_point_to_xyz_point(self, u, v):
+        Z = self.depth_image[v, u]
+        X = (u-self.camera_info.cx)/self.camera_info.fx * Z
+        Y = (v-self.camera_info.cy)/self.camera_info.fy * Z
+
+        depth_bar = 10
+        Z = Z.view(-1)  
+        valid = Z > -depth_bar
+        X = X.view(-1)
+        Y = Y.view(-1)
+
+        position = torch.vstack((X, Y, Z, torch.ones(len(X), device=self.device)))[:, valid]
+        position = position.permute(1, 0)
+        # position = position@vinv
+        points = position[:, 0:3]
+        return points[0]
 
     def find_nearest(self, centroid, points):
         suction_points = centroid[:2] + self.suction_coordinates[:,:2]
@@ -70,21 +87,23 @@ class calcualte_suction_score():
 
     def calculator(self):
         self.segmask = (self.segmask == self.object_id)
-        self.depth_image = -self.depth_image
         self.depth_image[self.segmask == 0] = -10001
 
         noise_image = torch.normal(0, 0.0009, size=self.depth_image.size()).to(self.device)
-        self.depth_image = self.depth_image + noise_image
+        # For calculating the suction deformation score no noise is used
+        # self.depth_image = self.depth_image + noise_image
 
-        width = 1080
-        height = 720
-        fx = 2/self.cam_proj[0, 0]
-        fy = 2/self.cam_proj[1, 1]
-        cx = width/2
-        cy = height/2
-        camera_info = CameraInfo(1080, 720, fx, fy, cx, cy)
-        points = self.convert_rgb_depth_to_point_cloud(camera_info)
-        centroid = torch.FloatTensor([torch.median(points[:, 0]), torch.median(points[:, 1]), torch.median(points[:, 2])]).to(self.device)
+        '''
+        Centroid method using median of point cloud
+        '''
+        points = self.convert_rgb_depth_to_point_cloud()
+        centroid_point = torch.FloatTensor([torch.median(points[:, 0]), torch.median(points[:, 1]), torch.median(points[:, 2])]).to(self.device)
+
+        '''
+        Given sample point convert to xyz point
+        '''
+        xyz_point = self.convert_uv_point_to_xyz_point(self.grasps_and_predictions[0][1].center.x, self.grasps_and_predictions[0][1].center.y)
+        print("centroid", xyz_point)
         '''
         Debugging print statements one for the width and height and other one is the centroid
         '''
@@ -94,13 +113,15 @@ class calcualte_suction_score():
         '''
         Finding the suction points accordint to the base coordiante
         '''
-        point_cloud_suction = self.find_nearest(centroid, points)
+        point_cloud_suction = self.find_nearest(centroid_point, points)
+        print(point_cloud_suction)
         
         '''
         Calcualte the conical spring score
         '''
         minimum_suction_point = torch.min(point_cloud_suction[:,2]).to(self.device)
         ri = torch.clamp(torch.abs(point_cloud_suction[:,2] - minimum_suction_point) / 0.023, max=1.0)
+        print(ri)
         suction_score = 1-torch.max(ri)
 
         return suction_score

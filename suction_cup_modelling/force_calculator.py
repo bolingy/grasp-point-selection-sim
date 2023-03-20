@@ -25,12 +25,12 @@ class calcualte_force():
         self.device = 'cuda:0'
 
     def regression(self):
-        if(self.suction_score < 0.8):
+        if(self.suction_score < 80):
             prediction = self.suction_score*self.curved_object_slope + self.curved_object_intercept
-            mu, sigma = prediction, 1.6678003887167776
+            mu, sigma = prediction, np.sqrt(1.6678003887167776)
             force = torch.normal(mu, sigma).to(self.device)
         else:
             prediction = self.suction_score*self.flat_object_slope + self.flat_object_intercept
-            mu, sigma = prediction, 1.4155587192333443
+            mu, sigma = prediction, np.sqrt(1.4155587192333443)
             force = torch.normal(mu, sigma).to(self.device)
         return force
