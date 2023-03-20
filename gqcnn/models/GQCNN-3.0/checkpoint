@@ -1,0 +1,6 @@
+model_checkpoint_path: "/mnt/data/jmahler/suction/models/model_kqwoezhxfk/model.ckpt"
+all_model_checkpoint_paths: "/mnt/data/jmahler/suction/models/model_kqwoezhxfk/model_700000.ckpt"
+all_model_checkpoint_paths: "/mnt/data/jmahler/suction/models/model_kqwoezhxfk/model_750000.ckpt"
+all_model_checkpoint_paths: "/mnt/data/jmahler/suction/models/model_kqwoezhxfk/model_800000.ckpt"
+all_model_checkpoint_paths: "/mnt/data/jmahler/suction/models/model_kqwoezhxfk/model_850000.ckpt"
+all_model_checkpoint_paths: "/mnt/data/jmahler/suction/models/model_kqwoezhxfk/model.ckpt"
