@@ -10,11 +10,14 @@ from autolab_core import (YamlConfig, Logger, BinaryImage, CameraIntrinsics,
                           ColorImage, DepthImage, RgbdImage)
 from visualization import Visualizer2D as vis
 
-from gqcnn.grasping import (RobustGraspingPolicy,
+from gqcnn.gqcnn.grasping import (RobustGraspingPolicy,
                             CrossEntropyRobustGraspingPolicy, RgbdImageState,
                             FullyConvolutionalGraspingPolicyParallelJaw,
                             FullyConvolutionalGraspingPolicySuction)
-from gqcnn.utils import GripperMode
+from gqcnn.gqcnn.utils import GripperMode
+
+from pathlib import Path
+cur_path = str(Path(__file__).parent.absolute())
 
 class dexnet3():
     def __init__(self, depth_image, segmask, rgb_img, cam_intr):
@@ -22,8 +25,8 @@ class dexnet3():
         self.segmask = segmask
         self.rgb_im_filename = rgb_img
         self.camera_intr = cam_intr
-        self.config_filename = "../cfg/examples/gqcnn_suction.yaml"
-        self.model_dir = "../models"
+        self.config_filename = cur_path+"/../cfg/examples/gqcnn_suction.yaml"
+        self.model_dir = cur_path+"/../models"
         self.model_name = "GQCNN-3.0"
 
         self.logger = Logger.get_logger("../examples/policy_for_training.py")
