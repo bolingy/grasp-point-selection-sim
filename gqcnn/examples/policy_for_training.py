@@ -22,11 +22,13 @@ class dexnet3():
         self.segmask = segmask
         self.rgb_im_filename = rgb_img
         self.camera_intr = cam_intr
-        self.config_filename = "/home/soofiyan_ws/Documents/Issac_gym_ws/grasp-point-selection-sim/gqcnn/cfg/examples/gqcnn_suction.yaml"
-        self.model_dir = "/home/soofiyan_ws/Documents/Issac_gym_ws/grasp-point-selection-sim/gqcnn/models"
+        cwd = os.getcwd()
+        # cwd = "/home/soofiyan_ws/Documents/Issac_gym_ws/grasp-point-selection-sim"
+        self.config_filename = cwd+"/gqcnn/cfg/examples/gqcnn_suction.yaml"
+        self.model_dir = cwd+"/gqcnn/models"
         self.model_name = "GQCNN-3.0"
 
-        self.logger = Logger.get_logger("/home/soofiyan_ws/Documents/Issac_gym_ws/grasp-point-selection-sim/gqcnn/examples/policy_for_training.py")
+        self.logger = Logger.get_logger(cwd+"/gqcnn/examples/policy_for_training.py")
     
     def inference(self):
         # Get configs
@@ -97,9 +99,14 @@ class dexnet3():
         grasps_and_predictions = sorted(grasps_and_predictions,
                                         key=lambda x: x[2],
                                         reverse=True)
+        # std_dev_np = np.array([])
         for i in range(num_grasps):
             print(f"action coordinates --> ({grasps_and_predictions[i][1].center.x}, {grasps_and_predictions[i][1].center.y}) score --> {grasps_and_predictions[i][2]}")
-        
+            # std_dev_np = np.append(std_dev_np, grasps_and_predictions[i][2])
+
+        # print("std_dev: ", np.std(std_dev_np))
+        # print("mean: ", np.mean(std_dev_np))
+
         self.logger.info("Planning took %.3f sec" % (time.time() - policy_start))
 
         # Vis final grasp.
@@ -116,11 +123,67 @@ class dexnet3():
         
         return action, grasps_and_predictions
 
-# if __name__ == "__main__":
-#     depth_im_filename = "/home/soofiyan_ws/catkin_ws/src/gqcnn/data/examples/clutter/primesense/depth_0.npy"
-#     segmask_filename = "/home/soofiyan_ws/catkin_ws/src/gqcnn/data/examples/clutter/primesense/segmask_0.png"
-#     camera_intr_filename = "/home/soofiyan_ws/catkin_ws/src/gqcnn/data/calib/primesense/primesense.intr"
-#     object = dexnet3(depth_im_filename, segmask_filename, None, camera_intr_filename)
-#     action = object.inference()
-#     print(action.q_value)
-#     print(action.grasp.center.x, action.grasp.center.y)
+import cv2
+import random
+import imutils
+if __name__ == "__main__":
+    depth_im_filename = np.load("/home/soofiyan_ws/Documents/Issac_gym_ws/grasp-point-selection-sim/gqcnn/data/examples/single_object/primesense/depth_2.npy")
+    segmask = cv2.imread("/home/soofiyan_ws/Documents/Issac_gym_ws/grasp-point-selection-sim/gqcnn/data/examples/single_object/primesense/segmask_2.png", cv2.IMREAD_GRAYSCALE)
+    # camera_intr_filename = "/home/soofiyan_ws/catkin_ws/src/gqcnn/data/calib/primesense/primesense.intr"
+    segmentation = np.where(segmask == 255)
+    bbox = 0, 0, 0, 0
+    if len(segmentation) != 0 and len(segmentation[1]) != 0 and len(segmentation[0]) != 0:
+        x_min = int(np.min(segmentation[1]))
+        x_max = int(np.max(segmentation[1]))
+        y_min = int(np.min(segmentation[0]))
+        y_max = int(np.max(segmentation[0]))
+
+        bbox = x_min, x_max, y_min, y_max
+
+    segmask = cv2.rectangle(segmask, (x_min, y_min), (x_max, y_max), (255, 0, 0), 1)
+    
+    print(bbox)
+
+    depth_left = depth_im_filename[y_min, x_min]
+    depth_right = depth_im_filename[y_max, x_max]
+    print(depth_left, depth_right)
+    x_world_left = (x_min-319.5)/525.0 * depth_left
+    x_world_right = (x_max-319.5)/525.0 * depth_right
+    y_world_left = (y_min-239.5)/525.0 * depth_left
+    y_world_right = (y_max-239.5)/525.0 * depth_right
+
+    division_x = ((x_world_right-x_world_left)/0.005)[0]
+    division_y = ((y_world_right-y_world_left)/0.005)[0]
+
+    range_x = x_max - x_min
+    range_y = y_max - y_min
+    prev_x_coordinate = x_min
+    prev_y_coordinate = y_min
+    print(range_x/division_x)
+    for i in range(x_min, x_max, round(range_x/division_x)):
+        for j in range(y_min, y_max, round(range_y/division_y)):
+            x = random.randint(prev_x_coordinate, prev_x_coordinate+round(range_x/division_x))
+            y = random.randint(prev_y_coordinate, prev_y_coordinate+round(range_y/division_y))
+            # print(x, y, segmask[y,x], depth_im_filename[y,x])
+            if(segmask[y,x]):
+                cv2.circle(segmask, (x,y), radius=1, color=(0, 0, 0), thickness=-1)
+            prev_x_coordinate = i
+            prev_y_coordinate = j
+
+    cv2.imshow("segmask", segmask)
+    cv2.waitKey(0)
+
+    # camera_intrinsics = CameraIntrinsics(frame="camera", fx=525.0, fy=525.0, cx=319.5, cy=239.5, skew=0.0, height=480, width=640)
+    
+    # segmask_dexnet = segmask
+    # segmask_numpy = segmask_dexnet.astype(np.uint8)
+    # segmask_dexnet = BinaryImage(segmask_numpy, frame=camera_intrinsics.frame)
+    
+    # depth_image_dexnet = depth_im_filename
+    # depth_numpy = depth_image_dexnet
+    # depth_img_dexnet = DepthImage(depth_numpy, frame=camera_intrinsics.frame)
+
+    # dexnet_object = dexnet3(depth_img_dexnet, segmask_dexnet, None, camera_intrinsics)
+    # action = dexnet_object.inference()
+    # print(action.q_value)
+    # print(action.grasp.center.x, action.grasp.center.y)

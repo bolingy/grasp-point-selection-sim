@@ -16,7 +16,7 @@ policy:
   # sampling params
   sampling:
     # type
-    type: suction
+    type: grid_suction
 
     # params
     max_suction_dir_optical_axis_angle: 30
@@ -26,10 +26,10 @@ policy:
     min_suction_dist: 1.0
     angle_dist_weight: 5.0
     depth_gaussian_sigma: 1.0
-    num_grasp_samples: 50
+    num_grasp_samples: 1000
 
     max_dist_from_center: 260
-    max_num_samples: 100
+    max_num_samples: 10000
 
   # metric params
   metric:
@@ -44,7 +44,7 @@ policy:
     grasp_sampling : 0
     tf_images: 0
     plane: 0
-    grasp_candidates: 0
+    grasp_candidates: 1
     elite_grasps: 0
     grasp_ranking: 0
     grasp_plan: 0
@@ -52,8 +52,8 @@ policy:
     final_grasp: 1
     input_images: 0
 
-    vmin: 0.9
-    vmax: 1.4
+    vmin: 0.4
+    vmax: 0.9
 
     k: 25
 

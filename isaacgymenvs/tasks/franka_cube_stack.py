@@ -59,6 +59,7 @@ from suction_cup_modelling.suction_score_calcualtor import CameraInfo
 from gqcnn.examples.policy_for_training import dexnet3
 
 from autolab_core import (YamlConfig, Logger, BinaryImage, CameraIntrinsics, ColorImage, DepthImage, RgbdImage)
+import assets.urdf_models.models_data as md
 
 # This function is used to convert axis angle to quartenions
 @torch.jit.script
@@ -145,6 +146,8 @@ class FrankaCubeStack(VecTask):
         self._init_cylinder_state = None
         self._cylinder_state = None
         self._cylinder_id = None
+
+        self.models_lib = md.model_lib()
 
         # Tensor placeholders
         self._root_state = None             # State of root body        (n_envs, 13)
@@ -289,6 +292,12 @@ class FrankaCubeStack(VecTask):
         cylinder_asset = self.gym.load_asset(self.sim, asset_root, cylinder_asset_file, asset_options)
         cylinder_color = gymapi.Vec3(0.5, 0.1, 0.5)
 
+        self.object_models = ["sugar_box"]
+        object_model_asset_file = []
+        object_model_asset = []
+        for counter, model in enumerate(self.object_models):
+            object_model_asset_file.append("urdf_models/models/"+model+"/model.urdf")
+            object_model_asset.append(self.gym.load_asset(self.sim, asset_root, object_model_asset_file[counter], asset_options))
 
         self.num_franka_bodies = self.gym.get_asset_rigid_body_count(franka_asset)
         self.num_franka_dofs = self.gym.get_asset_dof_count(franka_asset)
@@ -346,6 +355,12 @@ class FrankaCubeStack(VecTask):
         cylinder_start_pose = gymapi.Transform()
         cylinder_start_pose.p = gymapi.Vec3(0.0, -0.1, -10.0)
         cylinder_start_pose.r = gymapi.Quat(0.0, 0.0, 0.0, 1.0)
+
+        object_model_start_pose = []
+        for counter in range(len(self.object_models)):
+            object_model_start_pose.append(gymapi.Transform())
+            object_model_start_pose[counter].p = gymapi.Vec3(0.0, -0.1, -10.0)
+            object_model_start_pose[counter].r = gymapi.Quat(0.0, 0.0, 0.0, 1.0)
 
         # compute aggregate size
         num_franka_bodies = self.gym.get_asset_rigid_body_count(franka_asset)
@@ -412,6 +427,11 @@ class FrankaCubeStack(VecTask):
             self.gym.set_rigid_body_color(env_ptr, self._cylinder_id, 0, gymapi.MESH_VISUAL, cylinder_color)
             self.gym.set_rigid_body_segmentation_id(env_ptr, self._cylinder_id, 0, 3)
 
+            self._object_model_id = []
+            for counter in range(len(self.object_models)):
+                self._object_model_id.append(self.gym.create_actor(env_ptr, object_model_asset[counter], object_model_start_pose[counter], self.object_models[counter], i, counter+4, 0))
+                self.gym.set_rigid_body_segmentation_id(env_ptr, self._object_model_id[counter], 0, counter+4)
+
             if self.aggregate_mode > 0:
                 self.gym.end_aggregate(env_ptr)
 
@@ -427,9 +447,9 @@ class FrankaCubeStack(VecTask):
             self.body_states = []
             self.camera_properties = gymapi.CameraProperties()
             self.camera_properties.enable_tensors = True
-            self.camera_properties.horizontal_fov = 75.0
-            self.camera_properties.width = 1920
-            self.camera_properties.height = 1080
+            self.camera_properties.horizontal_fov = 54.0
+            self.camera_properties.width = 640
+            self.camera_properties.height = 480
             camera_handle = self.gym.create_camera_sensor(env_ptr, self.camera_properties)
             local_transform = gymapi.Transform()
             local_transform.p = gymapi.Vec3(-0.54, 0.05, 0.6)
@@ -455,6 +475,9 @@ class FrankaCubeStack(VecTask):
 
         # Cylinder init state buffer
         self._init_cylinder_state = torch.zeros(self.num_envs, 13, device=self.device)
+        self._init_object_model_state = []
+        for counter in range(len(self.object_models)):
+            self._init_object_model_state.append(torch.zeros(self.num_envs, 13, device=self.device))
 
         # Setup data
         self.init_data()
@@ -499,6 +522,9 @@ class FrankaCubeStack(VecTask):
             "cubeB_body_handle": self.gym.find_actor_rigid_body_handle(self.envs[0], self._cubeB_id, "box"),
             "cylinder_body_handle": self.gym.find_actor_rigid_body_handle(self.envs[0], self._cylinder_id, "cylinder"),
         }
+
+        for counter in range(len(self.object_models)):
+            self.handles[self.object_models[counter]+"_body_handle"] = self.gym.find_actor_rigid_body_handle(self.envs[0], self._object_model_id[counter], self.object_models[counter])
         
         # Get total DOFs
         self.num_dofs = self.gym.get_sim_dof_count(self.sim) // self.num_envs
@@ -526,6 +552,10 @@ class FrankaCubeStack(VecTask):
         self._cubeB_state = self._root_state[:, self._cubeB_id, :]
         self._cylinder_state = self._root_state[:, self._cylinder_id, :]
 
+        self._object_model_state = []
+        for counter in range(len(self.object_models)):
+            self._object_model_state.append(self._root_state[:, self._object_model_id[counter], :])
+
         # Initialize states
         self.states.update({
             "cubeA_size": torch.ones_like(self._eef_state[:, 0]) * self.cubeA_size,
@@ -540,7 +570,7 @@ class FrankaCubeStack(VecTask):
         #self._gripper_control = self._pos_control[:, 7:9]
 
         # Initialize indices    ------ > self.num_envs * num of actors
-        self._global_indices = torch.arange(self.num_envs * (3 + 28), dtype=torch.int32,
+        self._global_indices = torch.arange(self.num_envs * (3 + 28 + len(self.object_models)), dtype=torch.int32,
                                            device=self.device).view(self.num_envs, -1)
 
     def _update_states(self):
@@ -600,10 +630,16 @@ class FrankaCubeStack(VecTask):
         self._reset_init_object_state(object='cubeB', env_ids=env_ids, offset=[0, -0.175], check_valid=True)
         self._reset_init_object_state(object='cylinder', env_ids=env_ids, offset=[0, -0.3], check_valid=True)
 
+        for counter in range(len(self.object_models)):
+            self._reset_init_object_state(object=self.object_models[counter], env_ids=env_ids, offset=[0, 0.1], check_valid=True)
+
         # Write these new init states to the sim states
         self._cubeA_state[env_ids] = self._init_cubeA_state[env_ids]
         self._cubeB_state[env_ids] = self._init_cubeB_state[env_ids]
         self._cylinder_state[env_ids] = self._init_cylinder_state[env_ids]
+
+        for counter in range(len(self.object_models)):
+            self._object_model_state[counter][env_ids] = self._init_object_model_state[counter][env_ids]
 
         # Reset agent
         reset_noise = torch.rand((len(env_ids), self.num_franka_dofs), device=self.device)
@@ -641,7 +677,7 @@ class FrankaCubeStack(VecTask):
                                               len(multi_env_ids_int32))
 
         # Update cube states
-        multi_env_ids_cubes_int32 = self._global_indices[env_ids, -3:].flatten()
+        multi_env_ids_cubes_int32 = self._global_indices[env_ids, -3-len(self.object_models):].flatten()
         self.gym.set_actor_root_state_tensor_indexed(
             self.sim, gymtorch.unwrap_tensor(self._root_state),
             gymtorch.unwrap_tensor(multi_env_ids_cubes_int32), len(multi_env_ids_cubes_int32))
@@ -671,6 +707,7 @@ class FrankaCubeStack(VecTask):
         sampled_cube_state = torch.zeros(num_resets, 13, device=self.device)
 
         # Get correct references depending on which one was selected
+        print(self.object_models[0], object.lower()[:4])
         if object.lower()[:4] == 'cube':
             if(object.lower()[4] == 'a'):
                 this_object_state_all = self._init_cubeA_state
@@ -684,6 +721,8 @@ class FrankaCubeStack(VecTask):
             this_object_state_all = self._init_cylinder_state
             # other_cube_state = self._init_cubeB_state[env_ids, :]
             # cylinder_heights = self.states["cubeA_size"]
+        elif object == self.object_models[0]:
+            this_object_state_all = self._init_object_model_state[0]
         else:
             raise ValueError(f"Invalid cube specified, options are 'A' and 'B'; got: {object}")
 
@@ -823,29 +862,38 @@ class FrankaCubeStack(VecTask):
             '''
             Here the function is called which will calculate the conical spring score for each object which is denoted by item_id
             ''' 
-            object_id = torch.tensor(3).to(self.device)
-            total_objects = 3
+            object_id = torch.tensor(4).to(self.device)
+            total_objects = 3+len(self.object_models)
             if(len(torch.unique(segmask)) == total_objects+1):
-                '''
+                '''q
                 DexNet 3.0
                 '''
                 if(self.frame_count == 10):
                     camera_intrinsics = CameraIntrinsics(frame="camera", fx=self.camera_info.fx, fy=self.camera_info.fy, cx=self.camera_info.cx, cy=self.camera_info.cy, skew=0.0, height=self.camera_info.height, width=self.camera_info.width)
                     
                     segmask_dexnet = segmask.detach().clone()
-                    segmask_numpy = segmask_dexnet.cpu().numpy().astype(np.uint8)
-                    segmask_numpy[segmask_numpy == object_id.cpu().numpy()] = 255
+                    segmask_numpy = np.zeros_like(segmask_dexnet.cpu().numpy().astype(np.uint8))
+
+                    segmask_numpy_temp = np.zeros_like(segmask_dexnet.cpu().numpy().astype(np.uint8))
+                    segmask_numpy_temp[segmask_dexnet.cpu().numpy().astype(np.uint8) == object_id.cpu().numpy()] = 1
+
+                    segmask_numpy[segmask_dexnet.cpu().numpy().astype(np.uint8) == object_id.cpu().numpy()] = 255
                     segmask_dexnet = BinaryImage(segmask_numpy, frame=camera_intrinsics.frame)
                     
                     depth_image_dexnet = depth_image.detach().clone()
-                    # depth_image_dexnet -= 0.5
+                    depth_image_dexnet -= 0.5
                     noise_image = torch.normal(0, 0.0009, size=depth_image_dexnet.size()).to(self.device)
-                    # depth_image_dexnet = depth_image_dexnet + noise_image
+                    depth_image_dexnet = depth_image_dexnet + noise_image
+                    
                     depth_numpy = depth_image_dexnet.cpu().numpy()
-                    depth_img_dexnet = DepthImage(depth_numpy, frame=camera_intrinsics.frame)
+                    depth_numpy_temp = depth_numpy*segmask_numpy_temp
+                    depth_numpy_temp[depth_numpy_temp == 0] = 0.75
+                    
+                    depth_img_dexnet = DepthImage(depth_numpy_temp, frame=camera_intrinsics.frame)
 
                     dexnet_object = dexnet3(depth_img_dexnet, segmask_dexnet, None, camera_intrinsics)
                     action, grasps_and_predictions = dexnet_object.inference()
+
                     print(f"Quality is {action.q_value} grasp location is {action.grasp.center.x}, {action.grasp.center.y}")
                     '''
                     Suction Cup Deformation

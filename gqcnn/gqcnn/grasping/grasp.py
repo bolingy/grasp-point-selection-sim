@@ -290,8 +290,8 @@ class SuctionPoint2D(object):
             self.center = Point(center, frame=frame)
         if isinstance(axis, list):
             self.axis = np.array(axis)
-        if np.abs(np.linalg.norm(self.axis) - 1.0) > 1e-3:
-            raise ValueError("Illegal axis. Must be norm 1.")
+        # if np.abs(np.linalg.norm(self.axis) - 1.0) > 1e-3:
+        #     raise ValueError("Illegal axis. Must be norm 1.")
 
         self.depth = depth
         # If `camera_intr` is `None` use default primesense camera intrinsics.

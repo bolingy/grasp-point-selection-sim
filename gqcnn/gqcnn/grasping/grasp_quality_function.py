@@ -985,7 +985,6 @@ class GQCnnQualityFunction(GraspQualityFunction):
         gripper_mode = self.gqcnn.gripper_mode
         num_grasps = len(grasps)
         depth_im = state.rgbd_im.depth
-
         # Allocate tensors.
         tensor_start = time()
         image_tensor = np.zeros(
@@ -1001,6 +1000,9 @@ class GQCnnQualityFunction(GraspQualityFunction):
             im_tf = depth_im_scaled
             im_tf = depth_im_scaled.transform(translation, grasp.angle)
             im_tf = im_tf.crop(gqcnn_im_height, gqcnn_im_width)
+            # print(gqcnn_im_height, gqcnn_im_width)
+            # plt.imshow(im_tf.data)
+            # plt.show()
             image_tensor[i, ...] = im_tf.raw_data
 
             if gripper_mode == GripperMode.PARALLEL_JAW:
