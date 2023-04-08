@@ -174,7 +174,7 @@ class FrankaCubeStack(VecTask):
         self.up_axis = "z"
         self.up_axis_idx = 2
 
-        self.franka_hand = "wrist_3_link"
+        self.franka_hand = "ee_link"
         with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../configs")+'/collision_primitives_3d.yml') as file:
             self.world_params = yaml.load(file, Loader=yaml.FullLoader)
 
@@ -238,13 +238,13 @@ class FrankaCubeStack(VecTask):
         asset_options.flip_visual_attachments = True
         asset_options.fix_base_link = True
         asset_options.collapse_fixed_joints = False
-        #asset_options.disable_gravity = True
+        asset_options.disable_gravity = True
         asset_options.thickness = 0.001
         asset_options.default_dof_drive_mode = gymapi.DOF_MODE_EFFORT
         asset_options.use_mesh_materials = True
         franka_asset = self.gym.load_asset(self.sim, asset_root, franka_asset_file, asset_options)
 
-        franka_dof_stiffness = to_torch([200, 200, 200, 200, 200, 200], dtype=torch.float, device=self.device)
+        franka_dof_stiffness = to_torch([0, 0, 0, 0, 0, 0], dtype=torch.float, device=self.device)
         franka_dof_damping = to_torch([0, 0, 0, 0, 0, 0], dtype=torch.float, device=self.device)
 
         # Create table asset
@@ -865,17 +865,13 @@ class FrankaCubeStack(VecTask):
             # plt.imsave(f'{self.current_directory}/../Data/segmask_{self.frame_count}_{i}.png', segmask.detach().cpu().numpy(), cmap=cm.gray)
             # iio.imwrite(f"{self.current_directory}/../Data/rgb_frame_{self.frame_count}_{i}.png", rgb_image_copy.detach().cpu().numpy())
             # np.save(f"{self.current_directory}/../Data/depth_frame_{self.frame_count}_{i}.npy", depth_image.detach().cpu().numpy())
-        
+
         '''
         Commands to the arm for eef control
         '''
         self.actions = actions.clone().to(self.device)
-
         # Split arm and gripper command
         u_arm, u_gripper = self.actions[:, :-1], self.actions[:, -1]
-
-        # print(u_arm, u_gripper)
-        # print(self.cmd_limit, self.action_scale)
 
         # Control arm (scale value first)
         u_arm = u_arm * self.cmd_limit / self.action_scale
