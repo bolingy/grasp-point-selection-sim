@@ -16,7 +16,7 @@ class CameraInfo():
         self.cy = cy
 
 class calcualte_suction_score():
-    def __init__(self, depth_image, segmask, rgb_img, camera_info, grasps_and_predictions, object_id):
+    def __init__(self, depth_image, segmask, rgb_img, camera_info, grasps_and_predictions, object_id, action):
         self.depth_image = depth_image
         self.segmask = segmask
         self.rgb_img = rgb_img
@@ -24,10 +24,12 @@ class calcualte_suction_score():
         self.grasps_and_predictions = grasps_and_predictions
         self.object_id = object_id
         self.device = 'cuda:0'
+        self.action = action
+
         '''
         Store the base coordiantes of the suction cup points
         '''
-        base_coordinate = torch.tensor([0.02, 0, 0]).to(self.device)
+        base_coordinate = torch.tensor([0.015, 0, 0]).to(self.device)
         self.suction_coordinates = base_coordinate.view(1, 3)
         for angle in range(45, 360, 45):
             x = base_coordinate[0]*math.cos(angle*math.pi/180) - \
@@ -98,7 +100,6 @@ class calcualte_suction_score():
         '''
         points = self.convert_rgb_depth_to_point_cloud()
         centroid_point = torch.FloatTensor([torch.median(points[:, 0]), torch.median(points[:, 1]), torch.median(points[:, 2])]).to(self.device)
-
         '''
         Given sample point convert to xyz point
         '''
@@ -113,7 +114,7 @@ class calcualte_suction_score():
         '''
         Finding the suction points accordint to the base coordiante
         '''
-        point_cloud_suction = self.find_nearest(centroid_point, points)
+        point_cloud_suction = self.find_nearest(xyz_point, points)
         print(point_cloud_suction)
         
         '''
@@ -124,5 +125,5 @@ class calcualte_suction_score():
         print(ri)
         suction_score = 1-torch.max(ri)
 
-        return suction_score
+        return suction_score, torch.tensor([xyz_point[2], -xyz_point[0], -xyz_point[1]])
 

@@ -177,15 +177,19 @@ class FrankaCubeStack(VecTask):
         self.up_axis = "z"
         self.up_axis_idx = 2
 
-        self.franka_hand = "wrist_3_link"
+        self.franka_hand = "ee_link"
+        self.franka_base = "base_link"
         with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../configs")+'/collision_primitives_3d.yml') as file:
             self.world_params = yaml.load(file, Loader=yaml.FullLoader)
 
         super().__init__(config=self.cfg, rl_device=rl_device, sim_device=sim_device, graphics_device_id=graphics_device_id, headless=headless, virtual_screen_capture=virtual_screen_capture, force_render=force_render)
 
         # Franka defaults
+        # self.franka_default_dof_pos = to_torch(
+        #     [0.06, -2.5, 2.53, 0.58, 1.67, 1.74], device=self.device
+        # )
         self.franka_default_dof_pos = to_torch(
-            [0.06, -2.5, 2.53, 0.58, 1.67, 1.74], device=self.device
+            [0.06, -2.5, 2.53, 0, 1.57, 0], device=self.device
         )
 
         # OSC Gains
@@ -241,13 +245,13 @@ class FrankaCubeStack(VecTask):
         asset_options.flip_visual_attachments = True
         asset_options.fix_base_link = True
         asset_options.collapse_fixed_joints = False
-        #asset_options.disable_gravity = True
+        asset_options.disable_gravity = True
         asset_options.thickness = 0.001
         asset_options.default_dof_drive_mode = gymapi.DOF_MODE_EFFORT
         asset_options.use_mesh_materials = True
         franka_asset = self.gym.load_asset(self.sim, asset_root, franka_asset_file, asset_options)
 
-        franka_dof_stiffness = to_torch([200, 200, 200, 200, 200, 200], dtype=torch.float, device=self.device)
+        franka_dof_stiffness = to_torch([0, 0, 0, 0, 0, 0], dtype=torch.float, device=self.device)
         franka_dof_damping = to_torch([0, 0, 0, 0, 0, 0], dtype=torch.float, device=self.device)
 
         # Create table asset
@@ -365,8 +369,8 @@ class FrankaCubeStack(VecTask):
         # compute aggregate size
         num_franka_bodies = self.gym.get_asset_rigid_body_count(franka_asset)
         num_franka_shapes = self.gym.get_asset_rigid_shape_count(franka_asset)
-        max_agg_bodies = num_franka_bodies + 27 + 3    # 1 for table, table stand, cubeA, cubeB
-        max_agg_shapes = num_franka_shapes + 27 + 3     # 1 for table, table stand, cubeA, cubeB
+        max_agg_bodies = num_franka_bodies + 27 + 3 + len(self.object_models)   # 1 for table, table stand, cubeA, cubeB
+        max_agg_shapes = num_franka_shapes + 27 + 3 + len(self.object_models)    # 1 for table, table stand, cubeA, cubeB
 
         self.frankas = []
         self.envs = []
@@ -453,13 +457,13 @@ class FrankaCubeStack(VecTask):
             camera_handle = self.gym.create_camera_sensor(env_ptr, self.camera_properties)
             local_transform = gymapi.Transform()
             local_transform.p = gymapi.Vec3(-0.54, 0.05, 0.6)
-            camera_rotation_x = gymapi.Quat.from_axis_angle(gymapi.Vec3(1, 0, 0), np.deg2rad(90))
-            camera_rotation_y = gymapi.Quat.from_axis_angle(gymapi.Vec3(1, 0, 0), np.deg2rad(90))
-            local_transform.r = camera_rotation_x* camera_rotation_y
+            camera_rotation_x = gymapi.Quat.from_axis_angle(gymapi.Vec3(1, 0, 0), np.deg2rad(180))
+            local_transform.r = camera_rotation_x
 
             camera_actor_handle = self.gym.get_actor_handle(env_ptr, 0)
             camera_body_handle = self.gym.get_actor_rigid_body_handle(env_ptr, camera_actor_handle, 0)
-            self.gym.attach_camera_to_body(camera_handle, env_ptr, camera_body_handle, local_transform, gymapi.FOLLOW_TRANSFORM)
+            franka_base_link_handle = self.gym.find_actor_rigid_body_handle(env_ptr, 0, self.franka_base)
+            self.gym.attach_camera_to_body(camera_handle, env_ptr, franka_base_link_handle, local_transform, gymapi.FOLLOW_TRANSFORM)
             self.camera_handles[i].append(camera_handle)
             self.body_states.append(self.gym.get_env_rigid_body_states(env_ptr, gymapi.STATE_ALL)['pose'])
 
@@ -516,11 +520,14 @@ class FrankaCubeStack(VecTask):
         franka_handle = 0
         self.handles = {
             # Franka
+            "base_link": self.gym.find_actor_rigid_body_handle(env_ptr, franka_handle, self.franka_base),
             "hand": self.gym.find_actor_rigid_body_handle(env_ptr, franka_handle, self.franka_hand),
             # Cubes
             "cubeA_body_handle": self.gym.find_actor_rigid_body_handle(self.envs[0], self._cubeA_id, "box"),
             "cubeB_body_handle": self.gym.find_actor_rigid_body_handle(self.envs[0], self._cubeB_id, "box"),
             "cylinder_body_handle": self.gym.find_actor_rigid_body_handle(self.envs[0], self._cylinder_id, "cylinder"),
+            # Camera
+            "camera0": self.gym.find_actor_rigid_body_handle(self.envs[0], self._cubeA_id, "camera0"),
         }
 
         for counter in range(len(self.object_models)):
@@ -539,6 +546,7 @@ class FrankaCubeStack(VecTask):
         self._q = self._dof_state[..., 0]
         self._qd = self._dof_state[..., 1]
         self._eef_state = self._rigid_body_state[:, self.handles["hand"], :]
+        self._base_link = self._rigid_body_state[:, self.handles["base_link"], :]
         #self._eef_lf_state = self._rigid_body_state[:, self.handles["leftfinger_tip"], :]
         #self._eef_rf_state = self._rigid_body_state[:, self.handles["rightfinger_tip"], :]
         _jacobian = self.gym.acquire_jacobian_tensor(self.sim, "franka")
@@ -577,6 +585,7 @@ class FrankaCubeStack(VecTask):
         #print("cubeA_pos", self._cubeA_state[:, :3], "cubeB_pos", self._cubeB_state[:, :3])
         self.states.update({
             # Franka
+            "base_link": self._base_link[:, :3],
             "q": self._q[:, :],
             "q_gripper": self._q[:, -2:],
             "eef_pos": self._eef_state[:, :3],
@@ -707,7 +716,6 @@ class FrankaCubeStack(VecTask):
         sampled_cube_state = torch.zeros(num_resets, 13, device=self.device)
 
         # Get correct references depending on which one was selected
-        print(self.object_models[0], object.lower()[:4])
         if object.lower()[:4] == 'cube':
             if(object.lower()[4] == 'a'):
                 this_object_state_all = self._init_cubeA_state
@@ -717,7 +725,7 @@ class FrankaCubeStack(VecTask):
                 this_object_state_all = self._init_cubeB_state
                 # other_cube_state = self._init_cubeA_state[env_ids, :]
                 # cube_heights = self.states["cubeB_size"]
-        elif object.lower()[:4] == 'cyli':
+        elif object.lower() == 'cylinder':
             this_object_state_all = self._init_cylinder_state
             # other_cube_state = self._init_cubeB_state[env_ids, :]
             # cylinder_heights = self.states["cubeA_size"]
@@ -828,8 +836,10 @@ class FrankaCubeStack(VecTask):
         # render the camera sensors
         self.gym.render_all_camera_sensors(self.sim)
         points = []
+
+        object_coordiante_camera = torch.tensor([1.0970, -0.1153, -0.1223])
         # for i in range(0, self.num_envs):
-        for i in range(1,2):
+        for i in range(self.num_envs):
             # retrieving rgb iamge
             rgb_camera_tensor = self.gym.get_camera_image_gpu_tensor(self.sim, self.envs[i], self.camera_handles[i][0], gymapi.IMAGE_COLOR)
             torch_rgb_tensor = gymtorch.wrap_tensor(rgb_camera_tensor)
@@ -862,13 +872,13 @@ class FrankaCubeStack(VecTask):
             '''
             Here the function is called which will calculate the conical spring score for each object which is denoted by item_id
             ''' 
-            object_id = torch.tensor(4).to(self.device)
+            object_id = torch.tensor(2).to(self.device)
             total_objects = 3+len(self.object_models)
             if(len(torch.unique(segmask)) == total_objects+1):
                 '''q
                 DexNet 3.0
                 '''
-                if(self.frame_count == 10):
+                if(self.frame_count == 30):
                     camera_intrinsics = CameraIntrinsics(frame="camera", fx=self.camera_info.fx, fy=self.camera_info.fy, cx=self.camera_info.cx, cy=self.camera_info.cy, skew=0.0, height=self.camera_info.height, width=self.camera_info.width)
                     
                     segmask_dexnet = segmask.detach().clone()
@@ -899,13 +909,15 @@ class FrankaCubeStack(VecTask):
                     Suction Cup Deformation
                     '''
                     depth_image_suction = depth_image.detach().clone()
-                    suction_score_object = calcualte_suction_score(depth_image_suction, segmask, rgb_image_copy, self.camera_info, grasps_and_predictions, object_id)
-                    score = suction_score_object.calculator()
-                    
+                    suction_score_object = calcualte_suction_score(depth_image_suction, segmask, rgb_image_copy, self.camera_info, grasps_and_predictions, object_id, action)
+                    score, xyz_point = suction_score_object.calculator()
+                    object_coordiante_camera = xyz_point
+                    # print("eef pos and object coordiante", self.states["eef_pos"], object_coordiante)
                     force_object = calcualte_force(score)
                     force = force_object.regression()
                     print(f"suction deforamtion score --> {score}, Force along z axis --> {force}")
-            
+            # -0.54, 0.05, 0.6
+            # 0.2719, 0.1220, 1.0947
             '''
             To save rgb image, depth image and segmentation mask (comment this section if you do not want to visualize as it slows down the processing)
             '''
@@ -913,17 +925,28 @@ class FrankaCubeStack(VecTask):
             # plt.imsave(f'{self.current_directory}/../Data/segmask_{self.frame_count}_{i}.png', segmask.detach().cpu().numpy(), cmap=cm.gray)
             # iio.imwrite(f"{self.current_directory}/../Data/rgb_frame_{self.frame_count}_{i}.png", rgb_image_copy.detach().cpu().numpy())
             # np.save(f"{self.current_directory}/../Data/depth_frame_{self.frame_count}_{i}.npy", depth_image.detach().cpu().numpy())
-        
+
         '''
         Commands to the arm for eef control
         '''
-        self.actions = actions.clone().to(self.device)
+        # print(torch.tensor([-object_coordiante_camera[0]+0.54, -object_coordiante_camera[1]+0.05, -object_coordiante_camera[2]+0.6]), object_coordiante_camera)
+        object_coordiante = torch.tensor([object_coordiante_camera[0]-0.54-0.25, object_coordiante_camera[1]-0.05, object_coordiante_camera[2]-0.6])
+        # base_coordinates = torch.tensor([2.3136, -0.1312,  1.6062])
 
+        eef_pos_local = -self.states["base_link"][0] + self.states["eef_pos"][0]
+        print("eef pose local ", eef_pos_local)
+        print("object ", object_coordiante)
+        print("eef angle ", self.states["eef_quat"])
+        print("base link ", self.states["base_link"][0])
+        # 0.3826834, 0, 0, 0.9238795
+        actions = torch.tensor(self.num_envs * [[(object_coordiante[0]-eef_pos_local[0]), (object_coordiante[1]-eef_pos_local[1]), (object_coordiante[2]-eef_pos_local[2]), 0, 0, 0, 1]])  
+
+
+        print("action ", actions[0][:3])
+        print()
+        self.actions = actions.clone().to(self.device)
         # Split arm and gripper command
         u_arm, u_gripper = self.actions[:, :-1], self.actions[:, -1]
-
-        # print(u_arm, u_gripper)
-        # print(self.cmd_limit, self.action_scale)
 
         # Control arm (scale value first)
         u_arm = u_arm * self.cmd_limit / self.action_scale

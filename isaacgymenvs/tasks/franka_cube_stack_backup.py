@@ -638,6 +638,7 @@ class FrankaCubeStack(VecTask):
 
         # Control arm (scale value first)
         u_arm = u_arm * self.cmd_limit / self.action_scale
+        print('uarm shape', u_arm.shape)
         if self.control_type == "osc":
             u_arm = self._compute_osc_torques(dpose=u_arm)
         self._arm_control[:, :] = u_arm

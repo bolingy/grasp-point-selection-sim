@@ -10,11 +10,14 @@ from autolab_core import (YamlConfig, Logger, BinaryImage, CameraIntrinsics,
                           ColorImage, DepthImage, RgbdImage)
 from visualization import Visualizer2D as vis
 
-from gqcnn.grasping import (RobustGraspingPolicy,
+from gqcnn.gqcnn.grasping import (RobustGraspingPolicy,
                             CrossEntropyRobustGraspingPolicy, RgbdImageState,
                             FullyConvolutionalGraspingPolicyParallelJaw,
                             FullyConvolutionalGraspingPolicySuction)
-from gqcnn.utils import GripperMode
+from gqcnn.gqcnn.utils import GripperMode
+
+from pathlib import Path
+cur_path = str(Path(__file__).parent.absolute())
 
 class dexnet3():
     def __init__(self, depth_image, segmask, rgb_img, cam_intr):
@@ -22,13 +25,11 @@ class dexnet3():
         self.segmask = segmask
         self.rgb_im_filename = rgb_img
         self.camera_intr = cam_intr
-        cwd = os.getcwd()
-        # cwd = "/home/soofiyan_ws/Documents/Issac_gym_ws/grasp-point-selection-sim"
-        self.config_filename = cwd+"/gqcnn/cfg/examples/gqcnn_suction.yaml"
-        self.model_dir = cwd+"/gqcnn/models"
+        self.config_filename = "/home/soofiyan_ws/Documents/Issac_gym_ws/grasp-point-selection-sim/gqcnn/cfg/examples/gqcnn_suction.yaml"
+        self.model_dir = "/home/soofiyan_ws/Documents/Issac_gym_ws/grasp-point-selection-sim/gqcnn/models"
         self.model_name = "GQCNN-3.0"
 
-        self.logger = Logger.get_logger(cwd+"/gqcnn/examples/policy_for_training.py")
+        self.logger = Logger.get_logger("/home/soofiyan_ws/Documents/Issac_gym_ws/grasp-point-selection-sim/gqcnn/examples/policy_for_training.py")
     
     def inference(self):
         # Get configs
@@ -110,7 +111,7 @@ class dexnet3():
         self.logger.info("Planning took %.3f sec" % (time.time() - policy_start))
 
         # Vis final grasp.
-        policy_config["vis"]["final_grasp"] = 1
+        # policy_config["vis"]["final_grasp"] = 0
         if policy_config["vis"]["final_grasp"]:
             vis.figure(size=(10, 10))
             vis.imshow(rgbd_im.depth,
