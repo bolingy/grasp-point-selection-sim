@@ -201,6 +201,9 @@ class FrankaCubeStack(VecTask):
 
         self.franka_hand = "ee_link"
         self.franka_base = "base_link"
+
+        self.action_contrib = 1
+
         with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../configs")+'/collision_primitives_3d.yml') as file:
             self.world_params = yaml.load(file, Loader=yaml.FullLoader)
 
@@ -276,7 +279,7 @@ class FrankaCubeStack(VecTask):
         franka_asset = self.gym.load_asset(self.sim, asset_root, franka_asset_file, asset_options)
 
         franka_dof_stiffness = to_torch([0, 0, 0, 0, 0, 0], dtype=torch.float, device=self.device)
-        franka_dof_damping = to_torch([0.1, 0.1, 0.1, 0.1, 0.1, 0.1], dtype=torch.float, device=self.device)
+        franka_dof_damping = to_torch([1, 1, 1, 1, 1, 1], dtype=torch.float, device=self.device)
 
         # Create table asset
         table_pos = [0.0, 0.0, 1.0]
@@ -400,6 +403,15 @@ class FrankaCubeStack(VecTask):
         self.frankas = []
         self.envs = []
 
+        # force sensor
+        body_idx = self.gym.find_asset_rigid_body_index(franka_asset, "ee_link")
+        # body_names = [self.gym.get_asset_rigid_body_name(franka_asset, i) for i in range(8)]
+        # print(body_names)
+        print(body_idx)
+        sensor_pose = gymapi.Transform()
+        self.gym.create_asset_force_sensor(franka_asset, body_idx, sensor_pose)
+
+
         # Create environments
         for i in range(self.num_envs):
             # create env instance
@@ -423,8 +435,7 @@ class FrankaCubeStack(VecTask):
                 franka_start_pose.r = gymapi.Quat(*new_quat)'''
 
             self.franka_actor = self.gym.create_actor(env_ptr, franka_asset, franka_start_pose, "franka", i, 0, 0)
-            # self.gym.enable_actor_dof_force_sensors(env_ptr, self.franka_actor)
-            # self.gym.set_actor_dof_properties(env_ptr, self.franka_actor, franka_dof_props)
+            self.gym.enable_actor_dof_force_sensors(env_ptr, self.franka_actor)
 
             if self.aggregate_mode == 2:
                 self.gym.begin_aggregate(env_ptr, max_agg_bodies, max_agg_shapes, True)
@@ -462,20 +473,8 @@ class FrankaCubeStack(VecTask):
                 self._object_model_id.append(self.gym.create_actor(env_ptr, object_model_asset[counter], object_model_start_pose[counter], self.object_models[counter], i, counter+4, 0))
                 self.gym.set_rigid_body_segmentation_id(env_ptr, self._object_model_id[counter], 0, counter+4)
 
-            # force sensor
-            body_idx = self.gym.find_asset_rigid_body_index(franka_asset, "wrist_3_link")
-            print(body_idx)
-            sensor_pose1 = gymapi.Transform(gymapi.Vec3(0.0, 0.0, 0.0))
-            # sensor_pose2 = gymapi.Transform(gymapi.Vec3(-0.2, 0.0, 0.0))
-            sensor_props = gymapi.ForceSensorProperties()
-            sensor_props.enable_forward_dynamics_forces = False
-            sensor_props.enable_constraint_solver_forces = False
-            sensor_idx1 = self.gym.create_asset_force_sensor(franka_asset, body_idx, sensor_pose1, sensor_props)
-            # sensor_idx2 = self.gym.create_asset_force_sensor(franka_asset, body_idx, sensor_pose2)
-            force_sensor_start_pose = gymapi.Transform()
-            force_sensor_start_pose.p = gymapi.Vec3(0.0, 0.0, 0.0)
-            force_sensor_start_pose.r = gymapi.Quat(0.0, 0.0, 0.0, 1.0)
-            # self._force_sensor_actor_handle = self.gym.create_actor(env_ptr, franka_asset, sensor_pose1, "force_sensor", i, 0, 0)
+            
+            
 
 
             if self.aggregate_mode > 0:
@@ -524,6 +523,10 @@ class FrankaCubeStack(VecTask):
         self._init_object_model_state = []
         for counter in range(len(self.object_models)):
             self._init_object_model_state.append(torch.zeros(self.num_envs, 13, device=self.device))
+
+        self.extremities_index = self.gym.find_actor_rigid_body_handle(env_ptr, self.franka_actor, "ee_link")
+        # self._force_sensor_actor_handle = self.gym.create_actor(env_ptr, franka_asset, "wrist_3_link")
+
 
         # Setup data
         self.init_data()
@@ -878,6 +881,7 @@ class FrankaCubeStack(VecTask):
         self.gym.step_graphics(self.sim)
         # render the camera sensors
         self.gym.render_all_camera_sensors(self.sim)
+        
         points = []
 
         # for i in range(0, self.num_envs):
@@ -914,7 +918,7 @@ class FrankaCubeStack(VecTask):
             '''
             Here the function is called which will calculate the conical spring score for each object which is denoted by item_id
             ''' 
-            object_id = torch.tensor(3).to(self.device)
+            object_id = torch.tensor(2).to(self.device)
             total_objects = 3+len(self.object_models)
             if(len(torch.unique(segmask)) == total_objects+1):
                 '''
@@ -972,13 +976,13 @@ class FrankaCubeStack(VecTask):
         Commands to the arm for eef control
         '''
         # print(torch.tensor([-object_coordiante_camera[0]+0.54, -object_coordiante_camera[1]+0.05, -object_coordiante_camera[2]+0.6]), object_coordiante_camera)
-        object_coordiante = torch.tensor([self.object_coordiante_camera[0]-0.54+0.55, self.object_coordiante_camera[1]-0.05, self.object_coordiante_camera[2]-0.6])
+        object_coordiante = torch.tensor([self.object_coordiante_camera[0]-0.54-0.25, self.object_coordiante_camera[1]-0.05, self.object_coordiante_camera[2]-0.6])
         # base_coordinates = torch.tensor([2.3136, -0.1312,  1.6062])
 
         eef_pos_local = -self.states["base_link"][0] + self.states["eef_pos"][0]
         # print("eef pose local ", eef_pos_local)
         # print("object ", object_coordiante)
-        print("eef angle ", self.states["eef_quat"])
+        # print("eef angle ", self.states["eef_quat"])
         # print("base link ", self.states["base_link"][0])
 
         # print("eef angle in euler", euler_from_quaternion(self.states["eef_quat"][0][0], self.states["eef_quat"][0][1], self.states["eef_quat"][0][2], self.states["eef_quat"][0][3]))
@@ -991,8 +995,9 @@ class FrankaCubeStack(VecTask):
         # print("action ", actions[0][:6])
         # print("max ", torch.max(actions[0][:6]))
 
-        # # if(torch.max(actions[0][:6]) <= 0.001):
-        # #     actions = torch.tensor(self.num_envs*[[0.1, 0, 0, 0, 0, 0, 1]])
+        if(torch.max(actions[0][:6]) <= 0.1):
+            self.action_contrib = 0
+            actions = torch.tensor(self.num_envs*[[0.1, 0, 0, 0, 0, 0, 1]])
         # print("action ", actions[0][:6])
         # print()
         self.actions = actions.clone().to(self.device)
@@ -1019,6 +1024,14 @@ class FrankaCubeStack(VecTask):
         self.gym.set_dof_actuation_force_tensor(self.sim, gymtorch.unwrap_tensor(self._effort_control))
 
     def post_physics_step(self):
+
+        self.gym.refresh_force_sensor_tensor(self.sim)
+        try:
+            _fsdata = self.gym.acquire_force_sensor_tensor(self.sim)
+            fsdata = gymtorch.wrap_tensor(_fsdata)
+            print("forces", fsdata)
+        except:
+            pass
         # num_sensors = self.gym.get_actor_force_sensor_count(self.env, self._force_sensor_actor_handle)
         # for i in range(num_sensors):
         #     sensor = self.gym.get_actor_force_sensor(self.env, self._force_sensor_actor_handle, i)
