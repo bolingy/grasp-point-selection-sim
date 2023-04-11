@@ -33,12 +33,13 @@ import yaml
 
 from isaacgym import gymtorch
 from isaacgym import gymapi
+from isaacgym import gymutil
 from isaacgym.torch_utils import *
 
 from isaacgymenvs.utils.torch_jit_utils import *
 from isaacgymenvs.tasks.base.vec_task import VecTask
 
-from motion_primitives import Primitives
+from .motion_primitives import Primitives
 
 
 @torch.jit.script
@@ -101,14 +102,14 @@ class FrankaCubeStack(VecTask):
 
         # Controller type
         self.control_type = self.cfg["env"]["controlType"]
-        assert self.control_type in {"osc", "joint_tor"},\
+        assert self.control_type in {"osc", "joint_tor", "osc_primitives"},\
             "Invalid control type specified. Must be one of: {osc, joint_tor}"
 
         # dimensions
         # obs include: cubeA_pose (7) + cubeB_pos (3) + eef_pose (7) + q_gripper (2)
-        self.cfg["env"]["numObservations"] = 19 if self.control_type == "osc" else 26
+        self.cfg["env"]["numObservations"] = 19 if self.control_type == "osc" or self.control_type == "osc_primitives" else 26
         # actions include: delta EEF if OSC (6) or joint torques (7) + bool gripper (1)
-        self.cfg["env"]["numActions"] = 7 if self.control_type == "osc" else 8
+        self.cfg["env"]["numActions"] = 7 if self.control_type == "osc" or self.control_type == "osc_primitives" else 8
 
         # Values to be filled in at runtime
         self.states = {}                        # will be dict filled with relevant states to use for reward calculation
@@ -175,7 +176,7 @@ class FrankaCubeStack(VecTask):
         self._refresh()
 
         # Primitives
-        self.primitives = Primitives()
+        self.primitives = Primitives(self.states['eef_pos'])
 
     def create_sim(self):
         self.sim_params.up_axis = gymapi.UP_AXIS_Z
@@ -399,7 +400,18 @@ class FrankaCubeStack(VecTask):
 
         #self.table_handles.append(table_handle)
 
+    def draw_sphere(self, env, pose:gymapi.Transform, diameter:float, edges:int, color:tuple=(1, 0, 0)):
+        sphere_rot = gymapi.Quat.from_euler_zyx(0.5 * np.pi, 0, 0)
+        sphere_pose = gymapi.Transform(r=sphere_rot)
+        sphere_geom = gymutil.WireframeSphereGeometry(diameter, edges, edges, sphere_pose, color)
 
+        verts = sphere_geom.instance_verts(pose)
+        colors = np.empty(1, dtype=gymapi.Vec3.dtype)
+        self.gym.add_lines(self.viewer, env, sphere_geom.num_lines(), verts, sphere_geom.colors())
+        
+        # Coordinates
+        axes_geom = gymutil.AxesGeometry(0.1)
+        gymutil.draw_lines(axes_geom, self.gym, self.viewer, env, pose)
 
     def init_data(self):
         # Setup sim handles
@@ -493,7 +505,7 @@ class FrankaCubeStack(VecTask):
     def compute_observations(self):
         self._refresh()
         obs = ["cubeA_quat", "cubeA_pos", "cubeA_to_cubeB_pos", "eef_pos", "eef_quat"]
-        obs += ["q_gripper"] if self.control_type == "osc" else ["q"]
+        obs += ["q_gripper"] if self.control_type == "osc" or self.control_type == "osc_primitives" else ["q"]
         self.obs_buf = torch.cat([self.states[ob] for ob in obs], dim=-1)
 
         maxs = {ob: torch.max(self.states[ob]).item() for ob in obs}
@@ -668,6 +680,35 @@ class FrankaCubeStack(VecTask):
                          -self._franka_effort_limits[:7].unsqueeze(0), self._franka_effort_limits[:7].unsqueeze(0))
 
         return u
+    
+    def _compute_osc_torques_primitives(self, dpose):
+
+        # Solve for Operational Space Control # Paper: khatib.stanford.edu/publications/pdfs/Khatib_1987_RA.pdf
+        # Helpful resource: studywolf.wordpress.com/2013/09/17/robot-control-4-operation-space-control/
+        q, qd = self._q[:, :6], self._qd[:, :6]
+        mm_inv = torch.inverse(self._mm)
+        m_eef_inv = self._j_eef @ mm_inv @ torch.transpose(self._j_eef, 1, 2)
+        m_eef = torch.inverse(m_eef_inv)
+
+        # Transform our cartesian action `dpose` into joint torques `u`
+        u = torch.transpose(self._j_eef, 1, 2) @ m_eef @ (
+                self.kp * dpose - self.kd * self.states["eef_vel"]).unsqueeze(-1)
+
+        # Nullspace control torques `u_null` prevents large changes in joint configuration
+        # They are added into the nullspace of OSC so that the end effector orientation remains constant
+        # roboticsproceedings.org/rss07/p31.pdf
+        j_eef_inv = m_eef @ self._j_eef @ mm_inv
+        u_null = self.kd_null * -qd + self.kp_null * (
+                (self.franka_default_dof_pos[:7] - q + np.pi) % (2 * np.pi) - np.pi)
+        u_null[:, self.num_franka_dofs:] *= 0
+        u_null = self._mm @ u_null.unsqueeze(-1)
+        u += (torch.eye(self.num_franka_dofs, device=self.device).unsqueeze(0) - torch.transpose(self._j_eef, 1, 2) @ j_eef_inv) @ u_null
+
+        # Clip the values to be within valid effort range
+        u = tensor_clamp(u.squeeze(-1),
+                         -self._franka_effort_limits[:7].unsqueeze(0), self._franka_effort_limits[:7].unsqueeze(0))
+
+        return u
 
     def pre_physics_step(self, actions):
         self.actions = actions.clone().to(self.device)
@@ -682,8 +723,19 @@ class FrankaCubeStack(VecTask):
         u_arm = u_arm * self.cmd_limit / self.action_scale
         if self.control_type == "osc":
             u_arm = self._compute_osc_torques(dpose=u_arm)
+        elif self.control_type == "osc_primitives":
+            self.primitives.current_pose = self.states["eef_pos"]
+            action = "right"
+            u_arm[:,0:3] = self.primitives.move(action, self.states["eef_pos"])
+            print('-------------------->', u_arm)
+            print(type(u_arm))
+            # for i in range(len(self.envs)):
+            #     goal = self.primitives.get_gymapi_transform([u_arm[i][0], u_arm[i][1], u_arm[i][2], 0, 0, 0, 1])
+            #     self.draw_sphere(self.envs[i], goal, 0.05, 12, (0, 0, 1))
+            u_arm = self._compute_osc_torques_primitives(dpose=u_arm)
         self._arm_control[:, :] = u_arm
 
+        
         # Debugging controller
         '''print('-----------------------------------------------')
         cur_joint = -5
@@ -740,6 +792,14 @@ class FrankaCubeStack(VecTask):
                     self.gym.add_lines(self.viewer, self.envs[i], 1, [p0[0], p0[1], p0[2], px[0], px[1], px[2]], [0.85, 0.1, 0.1])
                     self.gym.add_lines(self.viewer, self.envs[i], 1, [p0[0], p0[1], p0[2], py[0], py[1], py[2]], [0.1, 0.85, 0.1])
                     self.gym.add_lines(self.viewer, self.envs[i], 1, [p0[0], p0[1], p0[2], pz[0], pz[1], pz[2]], [0.1, 0.1, 0.85])
+        
+        # Draw Target Goal
+        self.gym.clear_lines(self.viewer)
+        for i in range(len(self.envs)):
+            eef_pos = self.states["eef_pos"][i]
+            eef_rot = self.states["eef_quat"][i]
+            goal = self.primitives.get_gymapi_transform([eef_pos[0], eef_pos[1], eef_pos[2], eef_rot[0], eef_rot[1], eef_rot[2], eef_rot[3]])
+            self.draw_sphere(self.envs[i], goal, 0.05, 12, (1, 0, 1))
 
 #####################################################################
 ###=========================jit functions=========================###
