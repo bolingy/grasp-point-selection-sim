@@ -279,7 +279,7 @@ class FrankaCubeStack(VecTask):
         franka_asset = self.gym.load_asset(self.sim, asset_root, franka_asset_file, asset_options)
 
         franka_dof_stiffness = to_torch([0, 0, 0, 0, 0, 0], dtype=torch.float, device=self.device)
-        franka_dof_damping = to_torch([1, 1, 1, 1, 1, 1], dtype=torch.float, device=self.device)
+        franka_dof_damping = to_torch([0.1, 0.1, 0.1, 0.1, 0.1, 0.1], dtype=torch.float, device=self.device)
 
         # Create table asset
         table_pos = [0.0, 0.0, 1.0]
@@ -364,7 +364,7 @@ class FrankaCubeStack(VecTask):
 
         # Define start pose for franka
         franka_start_pose = gymapi.Transform()
-        franka_start_pose.p = gymapi.Vec3(2.208, 0.002, 2.020) #gymapi.Vec3(-0.45, 0.0, 1.0 + table_thickness / 2 + table_stand_height)
+        franka_start_pose.p = gymapi.Vec3(0, 0, 2.020) #gymapi.Vec3(-0.45, 0.0, 1.0 + table_thickness / 2 + table_stand_height)
         from scipy.spatial.transform import Rotation as R
         r = R.from_euler('zyx', [0, 0, 180], degrees=True).as_quat()
         franka_start_pose.r = gymapi.Quat(r[0], r[1], r[2], r[3])#gymapi.Quat(0.0, 0.0, 0.0, 1.0)
@@ -404,7 +404,7 @@ class FrankaCubeStack(VecTask):
         self.envs = []
 
         # force sensor
-        body_idx = self.gym.find_asset_rigid_body_index(franka_asset, "ee_link")
+        body_idx = self.gym.find_asset_rigid_body_index(franka_asset, "wrist_3_link")
         # body_names = [self.gym.get_asset_rigid_body_name(franka_asset, i) for i in range(8)]
         # print(body_names)
         print(body_idx)
@@ -524,7 +524,7 @@ class FrankaCubeStack(VecTask):
         for counter in range(len(self.object_models)):
             self._init_object_model_state.append(torch.zeros(self.num_envs, 13, device=self.device))
 
-        self.extremities_index = self.gym.find_actor_rigid_body_handle(env_ptr, self.franka_actor, "ee_link")
+        self.extremities_index = self.gym.find_actor_rigid_body_handle(env_ptr, self.franka_actor, "wrist_3_link")
         # self._force_sensor_actor_handle = self.gym.create_actor(env_ptr, franka_asset, "wrist_3_link")
 
 
@@ -740,6 +740,8 @@ class FrankaCubeStack(VecTask):
         self.progress_buf[env_ids] = 0
         self.reset_buf[env_ids] = 0
 
+        self.action_contrib = 1
+
     def _reset_init_object_state(self, object, env_ids, offset, check_valid=True):
         """
         Simple method to sample @cube's position based on self.startPositionNoise and self.startRotationNoise, and
@@ -781,7 +783,7 @@ class FrankaCubeStack(VecTask):
             raise ValueError(f"Invalid cube specified, options are 'A' and 'B'; got: {object}")
 
         # Sampling is "centered" around middle of table
-        centered_cube_xy_state = torch.tensor(np.array([2.8, 0.0]), device=self.device, dtype=torch.float32)
+        centered_cube_xy_state = torch.tensor(np.array([0.6, 0.0]), device=self.device, dtype=torch.float32)
         
         # Set z value, which is fixed height
         # sampled_cube_state[:, 2] = self._table_surface_pos[2] + cube_heights.squeeze(-1)[env_ids] / 2
@@ -976,7 +978,7 @@ class FrankaCubeStack(VecTask):
         Commands to the arm for eef control
         '''
         # print(torch.tensor([-object_coordiante_camera[0]+0.54, -object_coordiante_camera[1]+0.05, -object_coordiante_camera[2]+0.6]), object_coordiante_camera)
-        object_coordiante = torch.tensor([self.object_coordiante_camera[0]-0.54-0.25, self.object_coordiante_camera[1]-0.05, self.object_coordiante_camera[2]-0.6])
+        object_coordiante = torch.tensor([self.object_coordiante_camera[0]-0.54-0.25, self.object_coordiante_camera[1]-0.05, self.object_coordiante_camera[2]-0.6-0.01])
         # base_coordinates = torch.tensor([2.3136, -0.1312,  1.6062])
 
         eef_pos_local = -self.states["base_link"][0] + self.states["eef_pos"][0]
@@ -994,10 +996,10 @@ class FrankaCubeStack(VecTask):
         actions = torch.tensor(self.num_envs * [[(object_coordiante[0]-eef_pos_local[0]), (object_coordiante[1]-eef_pos_local[1]), (object_coordiante[2]-eef_pos_local[2]), 0.1*error_angle[0], 0.1*error_angle[1], 0.1*error_angle[2], 1]])  
         # print("action ", actions[0][:6])
         # print("max ", torch.max(actions[0][:6]))
-
-        if(torch.max(actions[0][:6]) <= 0.1):
-            self.action_contrib = 0
-            actions = torch.tensor(self.num_envs*[[0.1, 0, 0, 0, 0, 0, 1]])
+        if(self.frame_count >= 30):
+            if(torch.max(actions[0][:6]) <= 0.1):
+                self.action_contrib = 0
+                actions = torch.tensor(self.num_envs*[[0.1, 0, 0, 0, 0, 0, 1]])
         # print("action ", actions[0][:6])
         # print()
         self.actions = actions.clone().to(self.device)
@@ -1013,9 +1015,9 @@ class FrankaCubeStack(VecTask):
         # Control gripper
         '''u_fingers = torch.zeros_like(self._gripper_control)
         u_fingers[:, 0] = torch.where(u_gripper >= 0.0, self.franka_dof_upper_limits[-2].item(),
-                                      self.franka_dof_lower_limits[-2].item())
+                                    self.franka_dof_lower_limits[-2].item())
         u_fingers[:, 1] = torch.where(u_gripper >= 0.0, self.franka_dof_upper_limits[-1].item(),
-                                      self.franka_dof_lower_limits[-1].item())
+                                    self.franka_dof_lower_limits[-1].item())
         # Write gripper command to appropriate tensor buffer
         self._gripper_control[:, :] = u_fingers'''
 
