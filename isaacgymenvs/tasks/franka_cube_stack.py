@@ -38,6 +38,8 @@ from isaacgym.torch_utils import *
 from isaacgymenvs.utils.torch_jit_utils import *
 from isaacgymenvs.tasks.base.vec_task import VecTask
 
+from motion_primitives import Primitives
+
 
 @torch.jit.script
 def axisangle2quat(vec, eps=1e-6):
@@ -171,6 +173,9 @@ class FrankaCubeStack(VecTask):
 
         # Refresh tensors
         self._refresh()
+
+        # Primitives
+        self.primitives = Primitives()
 
     def create_sim(self):
         self.sim_params.up_axis = gymapi.UP_AXIS_Z
