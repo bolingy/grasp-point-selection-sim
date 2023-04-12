@@ -664,6 +664,22 @@ class FrankaCubeStack(VecTask):
 
         return u
 
+    def _compute_ik(self, dpose):
+        damping = 0.05
+        j_eef_T = torch.transpose(self._j_eef, 1, 2)
+        lmbda = torch.eye(6, device=self.device) * (damping ** 2)
+        u = (j_eef_T @ torch.inverse(self.j_eef @ j_eef_T + lmbda) @ dpose).view(self.num_envs, 7)
+        return u
+
+    def orientation_error(self, desired, current):
+        '''
+        input: desired orientation - quaterion, current orientation - quaterion
+        output: orientation err - euler
+        '''
+        cc = quat_conjugate(current)
+        q_r = quat_mul(desired, cc)
+        return q_r[:, 0:3] * torch.sign(q_r[:, 3]).unsqueeze(-1)
+
     def pre_physics_step(self, actions):
         self.actions = actions.clone().to(self.device)
 
