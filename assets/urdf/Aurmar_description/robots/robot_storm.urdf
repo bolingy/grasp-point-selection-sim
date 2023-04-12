@@ -242,9 +242,9 @@
     <origin rpy="0 0 0" xyz="0 0 0.13"/>
   </joint>
   <link name="epick_rod">
-    <gravity>0</gravity>
+    <!-- <gravity>0</gravity> -->
     <visual>
-      <origin rpy="0 0 0.005" xyz="0 0 0"/>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
       <geometry>
         <cylinder length="0.1" radius="0.01"/>
       </geometry>
@@ -252,6 +252,15 @@
           <color rgba="0 0 0 0"/>
         </material> -->
     </visual>
+    <collision>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <geometry>
+        <cylinder length="0.1" radius="0.01"/>
+      </geometry>
+      <!-- <material name="transparent">
+          <color rgba="0 0 0 0"/>
+        </material> -->
+    </collision>
     <inertial>
       <origin rpy="0 0 0" xyz="0 0 0"/>
       <mass value="0.0001"/>
@@ -264,13 +273,19 @@
     <origin rpy="0 0 0" xyz="0 0 0.055"/>
   </joint>
   <link name="epick_end_effector">
-    <gravity>0</gravity>
+    <!-- <gravity>0</gravity> -->
     <visual>
       <origin rpy="0 0 0" xyz="0 0 0"/>
       <geometry>
         <cylinder length="0.01" radius="0.0225"/>
       </geometry>
     </visual>
+    <collision>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <geometry>
+        <cylinder length="0.01" radius="0.015"/>
+      </geometry>
+    </collision>
     <inertial>
       <origin rpy="0 0 0" xyz="0 0 0"/>
       <mass value="0.0001"/>
@@ -282,7 +297,7 @@
     <child link="ee_link"/>
     <!--origin rpy="0.0 0.0 1.570796325" xyz="0.0 0.0922 0.0"/-->
     <!--origin rpy="-1.57 0.0 1.57" xyz="0.0 0. 0.0"/-->
-    <origin rpy="0.0 0.0 -1.57" xyz="0.0 0.0 0.0"/> 
+    <origin rpy="0.0 0.0 0.0" xyz="0.0 0.0 0.0"/> 
   </joint>
   <link name="ee_link">
     <collision>

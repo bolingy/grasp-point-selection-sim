@@ -61,6 +61,7 @@ from gqcnn.examples.policy_for_training import dexnet3
 from autolab_core import (YamlConfig, Logger, BinaryImage, CameraIntrinsics, ColorImage, DepthImage, RgbdImage)
 import assets.urdf_models.models_data as md
 
+from scipy.spatial.transform import Rotation as R
 # This function is used to convert axis angle to quartenions
 @torch.jit.script
 def axisangle2quat(vec, eps=1e-6):
@@ -200,6 +201,7 @@ class FrankaCubeStack(VecTask):
         self.up_axis_idx = 2
 
         self.franka_hand = "ee_link"
+        self.franka_wrist_3_link = "wrist_3_link"
         self.franka_base = "base_link"
 
         self.action_contrib = 1
@@ -407,7 +409,6 @@ class FrankaCubeStack(VecTask):
         body_idx = self.gym.find_asset_rigid_body_index(franka_asset, "wrist_3_link")
         # body_names = [self.gym.get_asset_rigid_body_name(franka_asset, i) for i in range(8)]
         # print(body_names)
-        print(body_idx)
         sensor_pose = gymapi.Transform()
         self.gym.create_asset_force_sensor(franka_asset, body_idx, sensor_pose)
 
@@ -472,10 +473,6 @@ class FrankaCubeStack(VecTask):
             for counter in range(len(self.object_models)):
                 self._object_model_id.append(self.gym.create_actor(env_ptr, object_model_asset[counter], object_model_start_pose[counter], self.object_models[counter], i, counter+4, 0))
                 self.gym.set_rigid_body_segmentation_id(env_ptr, self._object_model_id[counter], 0, counter+4)
-
-            
-            
-
 
             if self.aggregate_mode > 0:
                 self.gym.end_aggregate(env_ptr)
@@ -566,6 +563,7 @@ class FrankaCubeStack(VecTask):
         self.handles = {
             # Franka
             "base_link": self.gym.find_actor_rigid_body_handle(env_ptr, franka_handle, self.franka_base),
+            "wrist_3_link": self.gym.find_actor_rigid_body_handle(env_ptr, franka_handle, self.franka_wrist_3_link),
             "hand": self.gym.find_actor_rigid_body_handle(env_ptr, franka_handle, self.franka_hand),
             # Cubes
             "cubeA_body_handle": self.gym.find_actor_rigid_body_handle(self.envs[0], self._cubeA_id, "box"),
@@ -592,6 +590,7 @@ class FrankaCubeStack(VecTask):
         self._qd = self._dof_state[..., 1]
         self._eef_state = self._rigid_body_state[:, self.handles["hand"], :]
         self._base_link = self._rigid_body_state[:, self.handles["base_link"], :]
+        self._wrist_3_link = self._rigid_body_state[:, self.handles["wrist_3_link"], :]
         #self._eef_lf_state = self._rigid_body_state[:, self.handles["leftfinger_tip"], :]
         #self._eef_rf_state = self._rigid_body_state[:, self.handles["rightfinger_tip"], :]
         _jacobian = self.gym.acquire_jacobian_tensor(self.sim, "franka")
@@ -630,7 +629,8 @@ class FrankaCubeStack(VecTask):
         #print("cubeA_pos", self._cubeA_state[:, :3], "cubeB_pos", self._cubeB_state[:, :3])
         self.states.update({
             # Franka
-            "base_link": self._base_link[:, :3],
+            "base_link": self._base_link[:, :7],
+            "wrist_3_link": self._wrist_3_link[:, :7],
             "q": self._q[:, :],
             "q_gripper": self._q[:, -2:],
             "eef_pos": self._eef_state[:, :3],
@@ -927,43 +927,47 @@ class FrankaCubeStack(VecTask):
                 DexNet 3.0
                 '''
                 if(self.frame_count == 30):
-                    camera_intrinsics = CameraIntrinsics(frame="camera", fx=self.camera_info.fx, fy=self.camera_info.fy, cx=self.camera_info.cx, cy=self.camera_info.cy, skew=0.0, height=self.camera_info.height, width=self.camera_info.width)
-                    
-                    segmask_dexnet = segmask.detach().clone()
-                    segmask_numpy = np.zeros_like(segmask_dexnet.cpu().numpy().astype(np.uint8))
+                    try:
+                        camera_intrinsics = CameraIntrinsics(frame="camera", fx=self.camera_info.fx, fy=self.camera_info.fy, cx=self.camera_info.cx, cy=self.camera_info.cy, skew=0.0, height=self.camera_info.height, width=self.camera_info.width)
+                        
+                        segmask_dexnet = segmask.detach().clone()
+                        segmask_numpy = np.zeros_like(segmask_dexnet.cpu().numpy().astype(np.uint8))
 
-                    segmask_numpy_temp = np.zeros_like(segmask_dexnet.cpu().numpy().astype(np.uint8))
-                    segmask_numpy_temp[segmask_dexnet.cpu().numpy().astype(np.uint8) == object_id.cpu().numpy()] = 1
+                        segmask_numpy_temp = np.zeros_like(segmask_dexnet.cpu().numpy().astype(np.uint8))
+                        segmask_numpy_temp[segmask_dexnet.cpu().numpy().astype(np.uint8) == object_id.cpu().numpy()] = 1
 
-                    segmask_numpy[segmask_dexnet.cpu().numpy().astype(np.uint8) == object_id.cpu().numpy()] = 255
-                    segmask_dexnet = BinaryImage(segmask_numpy, frame=camera_intrinsics.frame)
-                    
-                    depth_image_dexnet = depth_image.detach().clone()
-                    depth_image_dexnet -= 0.5
-                    noise_image = torch.normal(0, 0.0009, size=depth_image_dexnet.size()).to(self.device)
-                    depth_image_dexnet = depth_image_dexnet + noise_image
-                    
-                    depth_numpy = depth_image_dexnet.cpu().numpy()
-                    depth_numpy_temp = depth_numpy*segmask_numpy_temp
-                    depth_numpy_temp[depth_numpy_temp == 0] = 0.75
-                    
-                    depth_img_dexnet = DepthImage(depth_numpy_temp, frame=camera_intrinsics.frame)
+                        segmask_numpy[segmask_dexnet.cpu().numpy().astype(np.uint8) == object_id.cpu().numpy()] = 255
+                        segmask_dexnet = BinaryImage(segmask_numpy, frame=camera_intrinsics.frame)
+                        
+                        depth_image_dexnet = depth_image.detach().clone()
+                        depth_image_dexnet -= 0.5
+                        noise_image = torch.normal(0, 0.0009, size=depth_image_dexnet.size()).to(self.device)
+                        depth_image_dexnet = depth_image_dexnet + noise_image
+                        
+                        depth_numpy = depth_image_dexnet.cpu().numpy()
+                        depth_numpy_temp = depth_numpy*segmask_numpy_temp
+                        depth_numpy_temp[depth_numpy_temp == 0] = 0.75
+                        
+                        depth_img_dexnet = DepthImage(depth_numpy_temp, frame=camera_intrinsics.frame)
 
-                    dexnet_object = dexnet3(depth_img_dexnet, segmask_dexnet, None, camera_intrinsics)
-                    action, grasps_and_predictions = dexnet_object.inference()
+                        dexnet_object = dexnet3(depth_img_dexnet, segmask_dexnet, None, camera_intrinsics)
+                        action, grasps_and_predictions = dexnet_object.inference()
 
-                    print(f"Quality is {action.q_value} grasp location is {action.grasp.center.x}, {action.grasp.center.y}")
-                    '''
-                    Suction Cup Deformation
-                    '''
-                    depth_image_suction = depth_image.detach().clone()
-                    suction_score_object = calcualte_suction_score(depth_image_suction, segmask, rgb_image_copy, self.camera_info, grasps_and_predictions, object_id, action)
-                    score, xyz_point = suction_score_object.calculator()
-                    self.object_coordiante_camera = xyz_point.clone()
-                    # print("eef pos and object coordiante", self.states["eef_pos"], object_coordiante)
-                    force_object = calcualte_force(score)
-                    force = force_object.regression()
-                    print(f"suction deforamtion score --> {score}, Force along z axis --> {force}")
+                        print(f"Quality is {action.q_value} grasp location is {action.grasp.center.x}, {action.grasp.center.y}")
+                        '''
+                        Suction Cup Deformation
+                        '''
+                        depth_image_suction = depth_image.detach().clone()
+                        suction_score_object = calcualte_suction_score(depth_image_suction, segmask, rgb_image_copy, self.camera_info, grasps_and_predictions, object_id, action)
+                        score, xyz_point = suction_score_object.calculator()
+                        self.object_coordiante_camera = xyz_point.clone()
+                        # print("eef pos and object coordiante", self.states["eef_pos"], object_coordiante)
+                        force_object = calcualte_force(score)
+                        force = force_object.regression()
+                        print(f"suction deforamtion score --> {score}, Force along z axis --> {force}")
+                    except:
+                        self.frame_count -= 1
+                        pass
             # -0.54, 0.05, 0.6
             # 0.2719, 0.1220, 1.0947
             '''
@@ -978,30 +982,42 @@ class FrankaCubeStack(VecTask):
         Commands to the arm for eef control
         '''
         # print(torch.tensor([-object_coordiante_camera[0]+0.54, -object_coordiante_camera[1]+0.05, -object_coordiante_camera[2]+0.6]), object_coordiante_camera)
-        object_coordiante = torch.tensor([self.object_coordiante_camera[0]-0.54-0.25, self.object_coordiante_camera[1]-0.05, self.object_coordiante_camera[2]-0.6-0.01])
+        object_coordiante = torch.tensor([self.object_coordiante_camera[0]-0.54-0.25, self.object_coordiante_camera[1]-0.05, self.object_coordiante_camera[2]-0.6])
         # base_coordinates = torch.tensor([2.3136, -0.1312,  1.6062])
 
-        eef_pos_local = -self.states["base_link"][0] + self.states["eef_pos"][0]
+        eef_pos_local = -self.states["base_link"][0][:3] + self.states["eef_pos"][0]
+    
+        r_base_link = R.from_quat(self.states["base_link"][0][3:7].detach().cpu().numpy())
+        r_OA = r_base_link.as_matrix()
+        r_eef_link = R.from_quat(self.states["wrist_3_link"][0][3:7].detach().cpu().numpy())
+        r_OB = r_eef_link.as_matrix()
+        r_AB = np.matmul(r_OA.T,r_OB)
+        r_converter = R.from_matrix(r_AB).as_euler('XYZ').astype(np.float32)
+        r_converter = torch.tensor(r_converter)
+        print(r_converter)
+
         # print("eef pose local ", eef_pos_local)
         # print("object ", object_coordiante)
-        # print("eef angle ", self.states["eef_quat"])
+        print("eef angle ", self.states["eef_quat"])
         # print("base link ", self.states["base_link"][0])
-
         # print("eef angle in euler", euler_from_quaternion(self.states["eef_quat"][0][0], self.states["eef_quat"][0][1], self.states["eef_quat"][0][2], self.states["eef_quat"][0][3]))
         euler_angle_eef = euler_from_quaternion(self.states["eef_quat"][0][0], self.states["eef_quat"][0][1], self.states["eef_quat"][0][2], self.states["eef_quat"][0][3])
         # 0.3826834, 0, 0, 0.9238795
         error_angle = torch.tensor([-1.57, 0.3, -1.57]) - torch.tensor([euler_angle_eef[0], euler_angle_eef[1], euler_angle_eef[2]])
         # print("eef angle error ", error_angle)
         # error_angle = torch.tensor([0,0,0])
-        actions = torch.tensor(self.num_envs * [[(object_coordiante[0]-eef_pos_local[0]), (object_coordiante[1]-eef_pos_local[1]), (object_coordiante[2]-eef_pos_local[2]), 0.1*error_angle[0], 0.1*error_angle[1], 0.1*error_angle[2], 1]])  
+        print(error_angle[0].dtype)
+        if(self.action_contrib == 1):
+            actions = torch.tensor(self.num_envs * [[(object_coordiante[0]-eef_pos_local[0]), (object_coordiante[1]-eef_pos_local[1]), (object_coordiante[2]-eef_pos_local[2]), 0.1*r_converter[0], 0.1*r_converter[1], 0.1*r_converter[2], 1]])  
         # print("action ", actions[0][:6])
         # print("max ", torch.max(actions[0][:6]))
         if(self.frame_count >= 30):
-            if(torch.max(actions[0][:6]) <= 0.1):
+            if((torch.max(torch.abs(actions[0][:6]))) <= 0.001):
                 self.action_contrib = 0
                 actions = torch.tensor(self.num_envs*[[0.1, 0, 0, 0, 0, 0, 1]])
-        # print("action ", actions[0][:6])
-        # print()
+        print("action ", actions[0][:6])
+        print("sub", torch.max(torch.abs(actions[0][:6])))
+        print()
         self.actions = actions.clone().to(self.device)
         # Split arm and gripper command
         u_arm, u_gripper = self.actions[:, :-1], self.actions[:, -1]
@@ -1031,7 +1047,7 @@ class FrankaCubeStack(VecTask):
         try:
             _fsdata = self.gym.acquire_force_sensor_tensor(self.sim)
             fsdata = gymtorch.wrap_tensor(_fsdata)
-            print("forces", fsdata)
+            # print("forces", fsdata)
         except:
             pass
         # num_sensors = self.gym.get_actor_force_sensor_count(self.env, self._force_sensor_actor_handle)
