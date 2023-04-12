@@ -874,6 +874,23 @@ class FrankaCubeStack(VecTask):
 
         return u
 
+    def _compute_ik(self, dpose):
+        damping = 0.05
+        j_eef_T = torch.transpose(self._j_eef, 1, 2)
+        lmbda = torch.eye(6, device=self.device) * (damping ** 2)
+        u = (j_eef_T @ torch.inverse(self.j_eef @ j_eef_T + lmbda) @ dpose).view(self.num_envs, 7)
+        return u
+
+    def orientation_error(self, desired, current):
+        '''
+        input: desired orientation - quaterion, current orientation - quaterion
+        output: orientation err - euler
+        '''
+        cc = quat_conjugate(current)
+        q_r = quat_mul(desired, cc)
+        return q_r[:3] * torch.sign(q_r[3]).unsqueeze(-1)
+        # return q_r[:, 0:3] * torch.sign(q_r[:, 3]).unsqueeze(-1)
+
     def pre_physics_step(self, actions):
         
         '''
@@ -920,7 +937,7 @@ class FrankaCubeStack(VecTask):
             '''
             Here the function is called which will calculate the conical spring score for each object which is denoted by item_id
             ''' 
-            object_id = torch.tensor(2).to(self.device)
+            object_id = torch.tensor(4).to(self.device)
             total_objects = 3+len(self.object_models)
             if(len(torch.unique(segmask)) == total_objects+1):
                 '''
@@ -991,14 +1008,34 @@ class FrankaCubeStack(VecTask):
         r_OA = r_base_link.as_matrix()
         r_eef_link = R.from_quat(self.states["wrist_3_link"][0][3:7].detach().cpu().numpy())
         r_OB = r_eef_link.as_matrix()
-        r_AB = np.matmul(r_OA.T,r_OB)
+        r_AB = np.dot(r_OA.T,r_OB)
         r_converter = R.from_matrix(r_AB).as_euler('XYZ').astype(np.float32)
         r_converter = torch.tensor(r_converter)
-        print(r_converter)
+        
+        
+        
+        r_converter_initial = self.orientation_error(self.states["base_link"][0][3:7], self.states["wrist_3_link"][0][3:7])
+        # r_base_link_error = R.from_euler('xyz', r_converter_initial.detach().cpu().numpy())
+        # r_wrist_3_link_error = R.from_euler('y', -1.57)
+        # print(r_wrist_3_link_error.as_matrix())
+        # r_rot_error = np.dot(r_base_link_error.as_matrix().T, r_wrist_3_link_error.as_matrix())
+        # r_rot_error_R = R.from_matrix(r_rot_error)
+        # r_converter = r_rot_error_R.as_euler('xyz').astype(np.float32)
+        # r_converter = torch.tensor(r_converter)
 
+        r_base_link = R.from_quat(self.states["base_link"][0][3:7].detach().cpu().numpy())
+        r_wrist_3_link_error = R.from_euler('xyz', [0, 90, 0], degrees=True)
+        r_rot_error = np.dot(r_base_link.as_matrix().T, r_wrist_3_link_error.as_matrix())
+        r_rot_error_R = R.from_matrix(r_rot_error)
+        r_base_quat_transformed = r_rot_error_R.as_quat().astype(np.float32)
+        r_base_quat_transformed = torch.tensor(r_base_quat_transformed).to(self.device)
+        r_converter = self.orientation_error(r_base_quat_transformed, self.states["wrist_3_link"][0][3:7])
+
+        # r_converter = torch.tensor(r_converter_initial)
+        print("error in angle between base link and ee link ", r_converter)
         # print("eef pose local ", eef_pos_local)
         # print("object ", object_coordiante)
-        print("eef angle ", self.states["eef_quat"])
+        # print("eef angle ", self.states["eef_quat"])
         # print("base link ", self.states["base_link"][0])
         # print("eef angle in euler", euler_from_quaternion(self.states["eef_quat"][0][0], self.states["eef_quat"][0][1], self.states["eef_quat"][0][2], self.states["eef_quat"][0][3]))
         euler_angle_eef = euler_from_quaternion(self.states["eef_quat"][0][0], self.states["eef_quat"][0][1], self.states["eef_quat"][0][2], self.states["eef_quat"][0][3])
