@@ -2,17 +2,30 @@ from isaacgym import gymapi
 import torch
 import numpy as np
 
+DEFAULT_DIST = 0.01
 
 class Primitives():
-    def __init__(self, init_pose):
+    def __init__(self, num_envs, init_pose):
         self.target_pose = init_pose
         self.current_pose = init_pose
-        self.min_distance_to_goal = 0.01
-    def move(self, action, current_pose):
-        # if action != "done" and np.linalg.norm(self.target_pose - np.ravel([self.current_pose[0], self.current_pose[0], self.current_pose[0]])) > self.min_distance_to_goal:
+        self.min_distance_to_goal = 0.1
+        self.num_envs = num_envs
 
-        if action == "right":
-            return self.move_right(current_pose)
+    def move(self, action):
+        if torch.linalg.norm(self.target_pose - self.current_pose) > self.min_distance_to_goal:
+            pose_diff = torch.clone(self.target_pose - self.current_pose)
+            if action == "right":
+                print(action, torch.sum(pose_diff))
+                return self.move_right(pose_diff), "right"
+            elif action == "left":
+                print(action, torch.sum(pose_diff))
+                return self.move_left(pose_diff), "left"
+            elif action == "up":
+                return self.move_up(pose_diff), "up"
+            elif action == "down":
+                return self.move_down(pose_diff), "down"
+            
+        return torch.tensor(10 * [[0., 0., 0.]]), "done"
 
     def set_target_pose(self, target_pose):
         self.target_pose = target_pose
@@ -32,12 +45,12 @@ class Primitives():
         else:
             return pose, "done"
 
-    def get_cartesian_move(self, current_pose: torch.Tensor, x: float, y: float, z: float) -> torch.Tensor:
-        current_pose[:,[0]] = current_pose[:,[0]] + x
-        current_pose[:,[1]] = current_pose[:,[1]] + y
-        current_pose[:,[2]] = current_pose[:,[2]] + z
-        return current_pose
-
+    def get_cartesian_move(self, x: float, y: float, z: float) -> torch.Tensor:
+        # current_pose[:,[0]] = current_pose[:,[0]] + x
+        # current_pose[:,[1]] = current_pose[:,[1]] + y
+        # current_pose[:,[2]] = current_pose[:,[2]] + z
+        # return current_pose
+        return torch.cat((x, y, z), 1)
 
     def rotate(self, pose: gymapi.Transform, x: float, y: float, z: float)->gymapi.Transform:
         euler = pose.r.to_euler_zyx()
@@ -47,29 +60,33 @@ class Primitives():
         pose.r = pose.r.from_euler_zyx(x, y, z)
         return pose
 
-    def move_right(self, pose: torch.Tensor, distance=0.01) -> torch.Tensor:
-        return torch.tensor(10 * [[0.01, 0., 0.]])
-        # return self.get_cartesian_move(pose, distance, 0, 0)
+    def move_right(self, pose_diff, distance = -DEFAULT_DIST) -> torch.Tensor:
+        movement = torch.zeros_like(pose_diff[:, [1]]) + distance
+        return self.get_cartesian_move(pose_diff[:,[0]], movement, pose_diff[:,[2]])
     
-    def move_left(self, pose: gymapi.Transform, distance=-0001)->gymapi.Transform:
-        return self.get_cartesian_move(pose, distance, 0, 0)
+    def move_left(self, pose_diff, distance= DEFAULT_DIST) -> torch.Tensor:
+        movement = torch.zeros_like(pose_diff[:, [1]]) + distance
+        return self.get_cartesian_move(pose_diff[:,[0]], movement, pose_diff[:,[2]])
 
-    def move_up(self, pose: gymapi.Transform, distance=0.01)->gymapi.Transform:
+    def move_up(self, pose_diff, distance=DEFAULT_DIST)-> torch.Tensor:
         return self.get_cartesian_move(pose, 0, distance, 0)
 
-    def move_down(self, pose: gymapi.Transform, distance=-0001)->gymapi.Transform:
-        return self.get_cartesian_move(pose, 0, distance, 0)
+    def move_down(self, pose_diff, distance=-DEFAULT_DIST)-> torch.Tensor:
+        movement = torch.zeros_like(pose_diff[:, [2]]) + distance
+        return self.get_cartesian_move(pose_diff[:,[0]], pose_diff[:,[1]], movement)
 
-    def move_forward(self, pose: gymapi.Transform, distance=-0.0001)->gymapi.Transform:
-        return self.get_cartesian_move(pose, 0, 0, distance)
+    def move_forward(self, pose_diff, distance=-DEFAULT_DIST)-> torch.Tensor:
+        movement = torch.zeros_like(pose_diff[:, [0]]) + distance
+        return self.get_cartesian_move(movement, pose_diff[:,[1]], pose_diff[:,[2]])
 
-    def move_back(self, pose: gymapi.Transform, distance=0.0001)->gymapi.Transform:
-        return self.get_cartesian_move(pose, 0, 0, distance)
+    def move_back(self, pose_diff, distance=DEFAULT_DIST)-> torch.Tensor:
+        movement = torch.zeros_like(pose_diff[:, [0]]) - distance
+        return self.get_cartesian_move(movement, pose_diff[:,[1]], pose_diff[:,[2]])
 
-    def push(self, pose: gymapi.Transform, distance=-0.2)->gymapi.Transform:
+    def push(self, pose_diff, distance=-0.2)-> torch.Tensor:
         return self.move_forward(pose, distance)
 
-    def shake(self, pose: gymapi.Transform, distance=-0.1)->gymapi.Transform:
+    def shake(self, pose_diff, distance=-0.1)-> torch.Tensor:
         pass
 
     def move_in():

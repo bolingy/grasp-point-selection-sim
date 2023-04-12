@@ -176,7 +176,9 @@ class FrankaCubeStack(VecTask):
         self._refresh()
 
         # Primitives
-        self.primitives = Primitives(self.states['eef_pos'])
+        self.primitives = Primitives(self.num_envs, self.states['eef_pos'])
+        self.counter = 0
+        self.action = "down"
 
     def create_sim(self):
         self.sim_params.up_axis = gymapi.UP_AXIS_Z
@@ -711,6 +713,8 @@ class FrankaCubeStack(VecTask):
         return u
 
     def pre_physics_step(self, actions):
+        self.counter += 1
+
         self.actions = actions.clone().to(self.device)
 
         # Split arm and gripper command
@@ -724,16 +728,22 @@ class FrankaCubeStack(VecTask):
         if self.control_type == "osc":
             u_arm = self._compute_osc_torques(dpose=u_arm)
         elif self.control_type == "osc_primitives":
-            self.primitives.current_pose = self.states["eef_pos"]
-            action = "right"
-            u_arm[:,0:3] = self.primitives.move(action, self.states["eef_pos"])
-            print('-------------------->', u_arm)
-            print(type(u_arm))
+            if self.counter == 10:
+                self.primitives.current_pose = self.states["eef_pos"]
+                #############
+                self.target_pose = torch.clone(self.states['eef_pos'])
+                self.target_pose[:, [1]] = self.target_pose[:, [1]] - 0.1
+                self.primitives.set_target_pose(self.target_pose)
+                #############
+            elif self.counter > 10:
+                u_arm[:, 0:3], self.action = self.primitives.move(self.action)
+
             # for i in range(len(self.envs)):
             #     goal = self.primitives.get_gymapi_transform([u_arm[i][0], u_arm[i][1], u_arm[i][2], 0, 0, 0, 1])
             #     self.draw_sphere(self.envs[i], goal, 0.05, 12, (0, 0, 1))
             u_arm = self._compute_osc_torques_primitives(dpose=u_arm)
         self._arm_control[:, :] = u_arm
+
 
         
         # Debugging controller

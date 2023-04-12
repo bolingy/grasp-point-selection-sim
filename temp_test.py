@@ -2,7 +2,7 @@ import isaacgym
 import isaacgymenvs
 import torch
 
-ne = 100
+ne = 10
 
 envs = isaacgymenvs.make(
 	seed=0,
@@ -15,9 +15,9 @@ envs = isaacgymenvs.make(
 print("Observation space is", envs.observation_space)
 print("Action space is", envs.action_space)
 obs = envs.reset()
+
 while True:
-	
-	action = torch.tensor(ne * [[0., 0., 0., 0., 0., 0., 1.]])
+	action = torch.tensor(ne * [[0.0001, 0., 0., 0., 0., 0., 1.]])
 	obs, reward, done, info = envs.step(
 		#torch.rand((ne,)+envs.action_space.shape, device="cuda:0")
 		action
