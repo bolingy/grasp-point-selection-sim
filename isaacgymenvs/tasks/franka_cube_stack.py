@@ -412,6 +412,11 @@ class FrankaCubeStack(VecTask):
         sensor_pose = gymapi.Transform()
         self.gym.create_asset_force_sensor(franka_asset, body_idx, sensor_pose)
 
+        self.multi_body_idx = {
+            "base_link": self.gym.find_asset_rigid_body_index(franka_asset, "base_link"),
+            "wrist_3_link": self.gym.find_asset_rigid_body_index(franka_asset, "wrist_3_link"),
+            "ee_link": self.gym.find_asset_rigid_body_index(franka_asset, "ee_link"),
+        }
 
         # Create environments
         for i in range(self.num_envs):
@@ -937,7 +942,7 @@ class FrankaCubeStack(VecTask):
             '''
             Here the function is called which will calculate the conical spring score for each object which is denoted by item_id
             ''' 
-            object_id = torch.tensor(4).to(self.device)
+            object_id = torch.tensor(1).to(self.device)
             total_objects = 3+len(self.object_models)
             if(len(torch.unique(segmask)) == total_objects+1):
                 '''
@@ -1001,7 +1006,8 @@ class FrankaCubeStack(VecTask):
         # print(torch.tensor([-object_coordiante_camera[0]+0.54, -object_coordiante_camera[1]+0.05, -object_coordiante_camera[2]+0.6]), object_coordiante_camera)
         object_coordiante = torch.tensor([self.object_coordiante_camera[0]-0.54-0.25, self.object_coordiante_camera[1]-0.05, self.object_coordiante_camera[2]-0.6])
         # base_coordinates = torch.tensor([2.3136, -0.1312,  1.6062])
-
+        poses_tensor = self.gym.acquire_rigid_body_state_tensor(self.sim)
+        poses = gymtorch.wrap_tensor(poses_tensor).view(self.num_envs, -1, 13)
         eef_pos_local = -self.states["base_link"][0][:3] + self.states["eef_pos"][0]
     
         r_base_link = R.from_quat(self.states["base_link"][0][3:7].detach().cpu().numpy())
@@ -1012,7 +1018,9 @@ class FrankaCubeStack(VecTask):
         r_converter = R.from_matrix(r_AB).as_euler('XYZ').astype(np.float32)
         r_converter = torch.tensor(r_converter)
         
-        
+
+        print(poses[0][self.multi_body_idx["wrist_3_link"]])
+        # print(self.multi_body_idx["wrist_3_link"])
         
         r_converter_initial = self.orientation_error(self.states["base_link"][0][3:7], self.states["wrist_3_link"][0][3:7])
         # r_base_link_error = R.from_euler('xyz', r_converter_initial.detach().cpu().numpy())
@@ -1026,7 +1034,10 @@ class FrankaCubeStack(VecTask):
         r_base_link = R.from_quat(self.states["base_link"][0][3:7].detach().cpu().numpy())
         r_wrist_3_link_error = R.from_euler('xyz', [0, 90, 0], degrees=True)
         r_rot_error = np.dot(r_base_link.as_matrix().T, r_wrist_3_link_error.as_matrix())
+        r_wrist_3_link_error = R.from_euler('xyz', [0, 0, 90], degrees=True)
+        r_rot_error = np.dot(r_rot_error.T, r_wrist_3_link_error.as_matrix())
         r_rot_error_R = R.from_matrix(r_rot_error)
+
         r_base_quat_transformed = r_rot_error_R.as_quat().astype(np.float32)
         r_base_quat_transformed = torch.tensor(r_base_quat_transformed).to(self.device)
         r_converter = self.orientation_error(r_base_quat_transformed, self.states["wrist_3_link"][0][3:7])
@@ -1049,7 +1060,7 @@ class FrankaCubeStack(VecTask):
         # print("action ", actions[0][:6])
         # print("max ", torch.max(actions[0][:6]))
         if(self.frame_count >= 30):
-            if((torch.max(torch.abs(actions[0][:6]))) <= 0.001):
+            if((torch.max(torch.abs(actions[0][:6]))) <= 0.002):
                 self.action_contrib = 0
                 actions = torch.tensor(self.num_envs*[[0.1, 0, 0, 0, 0, 0, 1]])
         print("action ", actions[0][:6])
