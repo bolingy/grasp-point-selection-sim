@@ -982,12 +982,14 @@ class FrankaCubeStack(VecTask):
                         depth_image_suction = depth_image.detach().clone()
                         suction_score_object = calcualte_suction_score(depth_image_suction, segmask, rgb_image_copy, self.camera_info, grasps_and_predictions, object_id, action)
                         score, xyz_point = suction_score_object.calculator()
+                        print('!!!!!!!! xyz_point', xyz_point)
                         self.object_coordiante_camera = xyz_point.clone()
                         # print("eef pos and object coordiante", self.states["eef_pos"], object_coordiante)
                         force_object = calcualte_force(score)
                         force = force_object.regression()
                         print(f"suction deforamtion score --> {score}, Force along z axis --> {force}")
                     except:
+                        print('exception!!!!!!!!!!!!!!')
                         self.frame_count -= 1
                         pass
             # -0.54, 0.05, 0.6
@@ -1019,7 +1021,7 @@ class FrankaCubeStack(VecTask):
         r_converter = torch.tensor(r_converter)
         
 
-        print(poses[0][self.multi_body_idx["wrist_3_link"]])
+        #print(poses[0][self.multi_body_idx["wrist_3_link"]])
         # print(self.multi_body_idx["wrist_3_link"])
         
         r_converter_initial = self.orientation_error(self.states["base_link"][0][3:7], self.states["wrist_3_link"][0][3:7])
@@ -1043,9 +1045,9 @@ class FrankaCubeStack(VecTask):
         r_converter = self.orientation_error(r_base_quat_transformed, self.states["wrist_3_link"][0][3:7])
 
         # r_converter = torch.tensor(r_converter_initial)
-        print("error in angle between base link and ee link ", r_converter)
+        #print("error in angle between base link and ee link ", r_converter)
         # print("eef pose local ", eef_pos_local)
-        # print("object ", object_coordiante)
+        #print("object ", object_coordiante)
         # print("eef angle ", self.states["eef_quat"])
         # print("base link ", self.states["base_link"][0])
         # print("eef angle in euler", euler_from_quaternion(self.states["eef_quat"][0][0], self.states["eef_quat"][0][1], self.states["eef_quat"][0][2], self.states["eef_quat"][0][3]))
@@ -1054,7 +1056,7 @@ class FrankaCubeStack(VecTask):
         error_angle = torch.tensor([-1.57, 0.3, -1.57]) - torch.tensor([euler_angle_eef[0], euler_angle_eef[1], euler_angle_eef[2]])
         # print("eef angle error ", error_angle)
         # error_angle = torch.tensor([0,0,0])
-        print(error_angle[0].dtype)
+        #print(error_angle[0].dtype)
         if(self.action_contrib == 1):
             actions = torch.tensor(self.num_envs * [[(object_coordiante[0]-eef_pos_local[0]), (object_coordiante[1]-eef_pos_local[1]), (object_coordiante[2]-eef_pos_local[2]), 0.1*r_converter[0], 0.1*r_converter[1], 0.1*r_converter[2], 1]])  
         # print("action ", actions[0][:6])
@@ -1063,9 +1065,7 @@ class FrankaCubeStack(VecTask):
             if((torch.max(torch.abs(actions[0][:6]))) <= 0.002):
                 self.action_contrib = 0
                 actions = torch.tensor(self.num_envs*[[0.1, 0, 0, 0, 0, 0, 1]])
-        print("action ", actions[0][:6])
-        print("sub", torch.max(torch.abs(actions[0][:6])))
-        print()
+
         self.actions = actions.clone().to(self.device)
         # Split arm and gripper command
         u_arm, u_gripper = self.actions[:, :-1], self.actions[:, -1]

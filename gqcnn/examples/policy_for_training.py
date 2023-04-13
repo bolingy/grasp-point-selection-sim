@@ -25,8 +25,8 @@ class dexnet3():
         self.segmask = segmask
         self.rgb_im_filename = rgb_img
         self.camera_intr = cam_intr
-        self.config_filename = "/home/soofiyan_ws/Documents/Issac_gym_ws/grasp-point-selection-sim/gqcnn/cfg/examples/gqcnn_suction.yaml"
-        self.model_dir = "/home/soofiyan_ws/Documents/Issac_gym_ws/grasp-point-selection-sim/gqcnn/models"
+        self.config_filename = cur_path + '/../cfg/examples/gqcnn_suction.yaml' #"/home/soofiyan_ws/Documents/Issac_gym_ws/grasp-point-selection-sim/gqcnn/cfg/examples/gqcnn_suction.yaml"
+        self.model_dir = cur_path + '/../models' #"/home/soofiyan_ws/Documents/Issac_gym_ws/grasp-point-selection-sim/gqcnn/models"
         self.model_name = "GQCNN-3.0"
 
         self.logger = Logger.get_logger("/home/soofiyan_ws/Documents/Issac_gym_ws/grasp-point-selection-sim/gqcnn/examples/policy_for_training.py")
