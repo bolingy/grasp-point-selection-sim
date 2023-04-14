@@ -281,7 +281,7 @@ class FrankaCubeStack(VecTask):
         franka_asset = self.gym.load_asset(self.sim, asset_root, franka_asset_file, asset_options)
 
         franka_dof_stiffness = to_torch([0, 0, 0, 0, 0, 0], dtype=torch.float, device=self.device)
-        franka_dof_damping = to_torch([0.1, 0.1, 0.1, 0.1, 0.1, 0.1], dtype=torch.float, device=self.device)
+        franka_dof_damping = to_torch([0., 0., 0., 0., 0., 0.], dtype=torch.float, device=self.device)
 
         # Create table asset
         table_pos = [0.0, 0.0, 1.0]
@@ -441,6 +441,7 @@ class FrankaCubeStack(VecTask):
                 franka_start_pose.r = gymapi.Quat(*new_quat)'''
 
             self.franka_actor = self.gym.create_actor(env_ptr, franka_asset, franka_start_pose, "franka", i, 0, 0)
+            self.gym.set_actor_dof_properties(env_ptr, self.franka_actor, franka_dof_props)
             self.gym.enable_actor_dof_force_sensors(env_ptr, self.franka_actor)
 
             if self.aggregate_mode == 2:
@@ -712,7 +713,6 @@ class FrankaCubeStack(VecTask):
         pos[:, -2:] = self.franka_default_dof_pos[-2:]
 
         # Reset the internal obs accordingly
-        print('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!', self._q[env_ids, :].shape)
         self._q[env_ids, :] = pos
         self._qd[env_ids, :] = torch.zeros_like(self._qd[env_ids])
 
@@ -883,8 +883,18 @@ class FrankaCubeStack(VecTask):
         damping = 0.05
         j_eef_T = torch.transpose(self._j_eef, 1, 2)
         lmbda = torch.eye(6, device=self.device) * (damping ** 2)
-        u = (j_eef_T @ torch.inverse(self.j_eef @ j_eef_T + lmbda) @ dpose).view(self.num_envs, 7)
+        u = (j_eef_T @ torch.inverse(self._j_eef @ j_eef_T + lmbda) @ dpose).view(self.num_envs, 6)
         return u
+
+    def to_pose_ik(self, dpose):
+        '''print('state pose shape', self.states["wrist_3_link"].shape)
+        pos_err = goal_pose - self.states["wrist_3_link"][:, :3]
+        orn_err = self.orientation_error(goal_orientation)'''
+        dpose = dpose.unsqueeze(-1)
+        u = self._compute_ik(dpose)
+        self._q += u
+        self._qd = torch.zeros_like(self._qd)
+
 
     def orientation_error(self, desired, current):
         '''
@@ -982,14 +992,13 @@ class FrankaCubeStack(VecTask):
                         depth_image_suction = depth_image.detach().clone()
                         suction_score_object = calcualte_suction_score(depth_image_suction, segmask, rgb_image_copy, self.camera_info, grasps_and_predictions, object_id, action)
                         score, xyz_point = suction_score_object.calculator()
-                        print('!!!!!!!! xyz_point', xyz_point)
                         self.object_coordiante_camera = xyz_point.clone()
                         # print("eef pos and object coordiante", self.states["eef_pos"], object_coordiante)
                         force_object = calcualte_force(score)
                         force = force_object.regression()
                         print(f"suction deforamtion score --> {score}, Force along z axis --> {force}")
                     except:
-                        print('exception!!!!!!!!!!!!!!')
+                        print('DEX net exception')
                         self.frame_count -= 1
                         pass
             # -0.54, 0.05, 0.6
@@ -1059,8 +1068,12 @@ class FrankaCubeStack(VecTask):
         #print(error_angle[0].dtype)
         if(self.action_contrib == 1):
             actions = torch.tensor(self.num_envs * [[(object_coordiante[0]-eef_pos_local[0]), (object_coordiante[1]-eef_pos_local[1]), (object_coordiante[2]-eef_pos_local[2]), 0.1*r_converter[0], 0.1*r_converter[1], 0.1*r_converter[2], 1]])  
-        # print("action ", actions[0][:6])
-        # print("max ", torch.max(actions[0][:6]))
+            '''
+            parallelized ik control
+            '''
+            #a_ik = actions[:,:-1].clone().to(self.device)
+            #self.to_pose_ik(a_ik)
+
         if(self.frame_count >= 30):
             if((torch.max(torch.abs(actions[0][:6]))) <= 0.002):
                 self.action_contrib = 0
@@ -1073,7 +1086,7 @@ class FrankaCubeStack(VecTask):
         # Control arm (scale value first)
         u_arm = u_arm * self.cmd_limit / self.action_scale
         if self.control_type == "osc":
-            u_arm = self._compute_osc_torques(dpose=u_arm)
+            u_arm = torch.clip(self._compute_osc_torques(dpose=u_arm), min=-10, max=10)
         self._arm_control[:, :] = u_arm
 
         # Control gripper
