@@ -870,6 +870,16 @@ class FrankaCubeStack(VecTask):
         u = (j_eef_T @ torch.inverse(self._j_eef @ j_eef_T + lmbda) @ dpose).view(self.num_envs, 6)
         return u
 
+    def to_pose_ik(self, dpose):
+        '''print('state pose shape', self.states["wrist_3_link"].shape)
+        pos_err = goal_pose - self.states["wrist_3_link"][:, :3]
+        orn_err = self.orientation_error(goal_orientation)'''
+        dpose = dpose.unsqueeze(-1)
+        u = self._compute_ik(dpose)
+        self._q += u
+        self._qd = torch.zeros_like(self._qd)
+
+
     def orientation_error(self, desired, current):
         '''
         input: desired orientation - quaterion, current orientation - quaterion
@@ -967,7 +977,7 @@ class FrankaCubeStack(VecTask):
                         force_object = calcualte_force(score)
                         force = force_object.regression()
                         print(f"suction deforamtion score --> {score}, Force along z axis --> {force}")
-                    except Exception as e:                        
+                    except:
                         print('DEX net exception')
                         self.frame_count -= 1
             '''
@@ -1066,6 +1076,7 @@ class FrankaCubeStack(VecTask):
         if(self.frame_count >= 30):
             if((torch.max(torch.abs(actions[0][:6]))) <= 0.003):
                 self.action_contrib = 0
+        
         self.actions = actions.clone().to(self.device)
         # Split arm and gripper command
         u_arm, u_gripper = self.actions[:, :-1], self.actions[:, -1]
