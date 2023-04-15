@@ -62,6 +62,8 @@ from autolab_core import (YamlConfig, Logger, BinaryImage, CameraIntrinsics, Col
 import assets.urdf_models.models_data as md
 
 from scipy.spatial.transform import Rotation as R
+
+from homogeneous_trasnformation_and_conversion.rotation_conversions import *
 # This function is used to convert axis angle to quartenions
 @torch.jit.script
 def axisangle2quat(vec, eps=1e-6):
@@ -281,14 +283,13 @@ class FrankaCubeStack(VecTask):
         franka_asset = self.gym.load_asset(self.sim, asset_root, franka_asset_file, asset_options)
 
         franka_dof_stiffness = to_torch([0, 0, 0, 0, 0, 0], dtype=torch.float, device=self.device)
-        franka_dof_damping = to_torch([0.1, 0.1, 0.1, 0.1, 0.1, 0.1], dtype=torch.float, device=self.device)
+        franka_dof_damping = to_torch([0., 0., 0., 0., 0., 0.], dtype=torch.float, device=self.device)
 
         # Create table asset
         table_pos = [0.0, 0.0, 1.0]
         table_thickness = 0.05
         table_opts = gymapi.AssetOptions()
         table_opts.fix_base_link = True
-        table_asset = self.gym.create_box(self.sim, *[1.2, 1.2, table_thickness], table_opts)
 
         # Create table stand asset
         '''table_stand_height = 0.1
@@ -368,7 +369,7 @@ class FrankaCubeStack(VecTask):
         franka_start_pose = gymapi.Transform()
         franka_start_pose.p = gymapi.Vec3(0, 0, 2.020) #gymapi.Vec3(-0.45, 0.0, 1.0 + table_thickness / 2 + table_stand_height)
         from scipy.spatial.transform import Rotation as R
-        r = R.from_euler('zyx', [0, 0, 180], degrees=True).as_quat()
+        r = R.from_euler('xyz', [180, 0, 0], degrees=True).as_quat()
         franka_start_pose.r = gymapi.Quat(r[0], r[1], r[2], r[3])#gymapi.Quat(0.0, 0.0, 0.0, 1.0)
 
         # Define start pose for table
@@ -405,18 +406,15 @@ class FrankaCubeStack(VecTask):
         self.frankas = []
         self.envs = []
 
-        # force sensor
-        body_idx = self.gym.find_asset_rigid_body_index(franka_asset, "wrist_3_link")
-        # body_names = [self.gym.get_asset_rigid_body_name(franka_asset, i) for i in range(8)]
-        # print(body_names)
-        sensor_pose = gymapi.Transform()
-        self.gym.create_asset_force_sensor(franka_asset, body_idx, sensor_pose)
-
         self.multi_body_idx = {
             "base_link": self.gym.find_asset_rigid_body_index(franka_asset, "base_link"),
             "wrist_3_link": self.gym.find_asset_rigid_body_index(franka_asset, "wrist_3_link"),
             "ee_link": self.gym.find_asset_rigid_body_index(franka_asset, "ee_link"),
         }
+        
+        # force sensor
+        sensor_pose = gymapi.Transform()
+        self.gym.create_asset_force_sensor(franka_asset, self.multi_body_idx["wrist_3_link"], sensor_pose)
 
         # Create environments
         for i in range(self.num_envs):
@@ -441,6 +439,7 @@ class FrankaCubeStack(VecTask):
                 franka_start_pose.r = gymapi.Quat(*new_quat)'''
 
             self.franka_actor = self.gym.create_actor(env_ptr, franka_asset, franka_start_pose, "franka", i, 0, 0)
+            self.gym.set_actor_dof_properties(env_ptr, self.franka_actor, franka_dof_props)
             self.gym.enable_actor_dof_force_sensors(env_ptr, self.franka_actor)
 
             if self.aggregate_mode == 2:
@@ -498,17 +497,15 @@ class FrankaCubeStack(VecTask):
             self.camera_properties.width = 640
             self.camera_properties.height = 480
             camera_handle = self.gym.create_camera_sensor(env_ptr, self.camera_properties)
+            self.camera_base_link_translation = torch.tensor([-0.54, 0.05, 0.6]).to(self.device)
             local_transform = gymapi.Transform()
-            local_transform.p = gymapi.Vec3(-0.54, 0.05, 0.6)
+            local_transform.p = gymapi.Vec3(self.camera_base_link_translation[0], self.camera_base_link_translation[1], self.camera_base_link_translation[2])
             camera_rotation_x = gymapi.Quat.from_axis_angle(gymapi.Vec3(1, 0, 0), np.deg2rad(180))
             local_transform.r = camera_rotation_x
 
-            camera_actor_handle = self.gym.get_actor_handle(env_ptr, 0)
-            camera_body_handle = self.gym.get_actor_rigid_body_handle(env_ptr, camera_actor_handle, 0)
             franka_base_link_handle = self.gym.find_actor_rigid_body_handle(env_ptr, 0, self.franka_base)
             self.gym.attach_camera_to_body(camera_handle, env_ptr, franka_base_link_handle, local_transform, gymapi.FOLLOW_TRANSFORM)
             self.camera_handles[i].append(camera_handle)
-            self.body_states.append(self.gym.get_env_rigid_body_states(env_ptr, gymapi.STATE_ALL)['pose'])
 
             l_color = gymapi.Vec3(1, 1, 1)
             l_ambient = gymapi.Vec3(0.2, 0.2, 0.2)
@@ -525,10 +522,6 @@ class FrankaCubeStack(VecTask):
         self._init_object_model_state = []
         for counter in range(len(self.object_models)):
             self._init_object_model_state.append(torch.zeros(self.num_envs, 13, device=self.device))
-
-        self.extremities_index = self.gym.find_actor_rigid_body_handle(env_ptr, self.franka_actor, "wrist_3_link")
-        # self._force_sensor_actor_handle = self.gym.create_actor(env_ptr, franka_asset, "wrist_3_link")
-
 
         # Setup data
         self.init_data()
@@ -574,8 +567,6 @@ class FrankaCubeStack(VecTask):
             "cubeA_body_handle": self.gym.find_actor_rigid_body_handle(self.envs[0], self._cubeA_id, "box"),
             "cubeB_body_handle": self.gym.find_actor_rigid_body_handle(self.envs[0], self._cubeB_id, "box"),
             "cylinder_body_handle": self.gym.find_actor_rigid_body_handle(self.envs[0], self._cylinder_id, "cylinder"),
-            # Camera
-            "camera0": self.gym.find_actor_rigid_body_handle(self.envs[0], self._cubeA_id, "camera0"),
         }
 
         for counter in range(len(self.object_models)):
@@ -596,8 +587,6 @@ class FrankaCubeStack(VecTask):
         self._eef_state = self._rigid_body_state[:, self.handles["hand"], :]
         self._base_link = self._rigid_body_state[:, self.handles["base_link"], :]
         self._wrist_3_link = self._rigid_body_state[:, self.handles["wrist_3_link"], :]
-        #self._eef_lf_state = self._rigid_body_state[:, self.handles["leftfinger_tip"], :]
-        #self._eef_rf_state = self._rigid_body_state[:, self.handles["rightfinger_tip"], :]
         _jacobian = self.gym.acquire_jacobian_tensor(self.sim, "franka")
         jacobian = gymtorch.wrap_tensor(_jacobian)
         hand_joint_index = self.gym.get_actor_joint_dict(env_ptr, franka_handle)['ee_fixed_joint']
@@ -624,14 +613,12 @@ class FrankaCubeStack(VecTask):
         self._effort_control = torch.zeros_like(self._pos_control)
         # Initialize control
         self._arm_control = self._effort_control[:, :]
-        #self._gripper_control = self._pos_control[:, 7:9]
 
         # Initialize indices    ------ > self.num_envs * num of actors
         self._global_indices = torch.arange(self.num_envs * (3 + 28 + len(self.object_models)), dtype=torch.int32,
                                            device=self.device).view(self.num_envs, -1)
 
     def _update_states(self):
-        #print("cubeA_pos", self._cubeA_state[:, :3], "cubeB_pos", self._cubeB_state[:, :3])
         self.states.update({
             # Franka
             "base_link": self._base_link[:, :7],
@@ -641,8 +628,6 @@ class FrankaCubeStack(VecTask):
             "eef_pos": self._eef_state[:, :3],
             "eef_quat": self._eef_state[:, 3:7],
             "eef_vel": self._eef_state[:, 7:],
-            #"eef_lf_pos": self._eef_lf_state[:, :3],
-            #"eef_rf_pos": self._eef_rf_state[:, :3],
             # Cubes
             "cubeA_quat": self._cubeA_state[:, 3:7],
             "cubeA_pos": self._cubeA_state[:, :3],
@@ -712,7 +697,6 @@ class FrankaCubeStack(VecTask):
         pos[:, -2:] = self.franka_default_dof_pos[-2:]
 
         # Reset the internal obs accordingly
-        print('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!', self._q[env_ids, :].shape)
         self._q[env_ids, :] = pos
         self._qd[env_ids, :] = torch.zeros_like(self._qd[env_ids])
 
@@ -766,40 +750,31 @@ class FrankaCubeStack(VecTask):
 
         # Initialize buffer to hold sampled values
         num_resets = len(env_ids)
-        sampled_cube_state = torch.zeros(num_resets, 13, device=self.device)
+        sampled_object_state = torch.zeros(num_resets, 13, device=self.device)
 
         # Get correct references depending on which one was selected
         if object.lower()[:4] == 'cube':
             if(object.lower()[4] == 'a'):
                 this_object_state_all = self._init_cubeA_state
-                # other_cube_state = self._init_cubeB_state[env_ids, :]
-                # cube_heights = self.states["cubeA_size"]
             elif(object.lower()[4] == 'b'):
                 this_object_state_all = self._init_cubeB_state
-                # other_cube_state = self._init_cubeA_state[env_ids, :]
-                # cube_heights = self.states["cubeB_size"]
         elif object.lower() == 'cylinder':
             this_object_state_all = self._init_cylinder_state
-            # other_cube_state = self._init_cubeB_state[env_ids, :]
-            # cylinder_heights = self.states["cubeA_size"]
         elif object == self.object_models[0]:
             this_object_state_all = self._init_object_model_state[0]
         else:
             raise ValueError(f"Invalid cube specified, options are 'A' and 'B'; got: {object}")
 
         # Sampling is "centered" around middle of table
-        centered_cube_xy_state = torch.tensor(np.array([0.6, 0.0]), device=self.device, dtype=torch.float32)
-        
-        # Set z value, which is fixed height
-        # sampled_cube_state[:, 2] = self._table_surface_pos[2] + cube_heights.squeeze(-1)[env_ids] / 2
+        centered_object_xy_state = torch.tensor(np.array([0.6, 0.0]), device=self.device, dtype=torch.float32)
         
         # For variable height
-        # firs row H 1.7, second row G 1.5, third row F 1.35, ourth row 1.2
+        # firs row H 1.7, second row G 1.5, third row F 1.35, fourth row E 1.2
         # sampling height at which the cube will be dropped
-        sampled_cube_state[:, 2] = torch.tensor(np.array([1.35]), device=self.device, dtype=torch.float32)
+        sampled_object_state[:, 2] = torch.tensor(np.array([1.35]), device=self.device, dtype=torch.float32)
 
         # Initialize rotation, which is no rotation (quat w = 1)
-        sampled_cube_state[:, 6] = 1.0
+        sampled_object_state[:, 6] = 1.0
 
         # If we're verifying valid sampling, we need to check and re-sample if any are not collision-free
         # We use a simple heuristic of checking based on cubes' radius to determine if a collision would occur
@@ -813,7 +788,7 @@ class FrankaCubeStack(VecTask):
             # retrying for 100 times
             for i in range(10000):
                 # Sample x y values
-                sampled_cube_state[active_idx, :2] = centered_cube_xy_state
+                sampled_object_state[active_idx, :2] = centered_object_xy_state
                 # Setting the X axis value for the object
                 # Set the offset for cube A on both the environment
                 offset_xy = torch.zeros(1, 2).to(self.device)
@@ -823,7 +798,7 @@ class FrankaCubeStack(VecTask):
                 if(active_idx.size()<torch.Size([num_resets])):
                     continue
                 else:
-                    sampled_cube_state[active_idx, :2] += offset_x_axis
+                    sampled_object_state[active_idx, :2] += offset_x_axis
                     break
                         
                 '''
@@ -837,7 +812,7 @@ class FrankaCubeStack(VecTask):
             # assert success, "Sampling cube locations was unsuccessful! ):"
         else:
             # We just directly sample if check_valid variable is False
-            sampled_cube_state[:, :2] = centered_cube_xy_state.unsqueeze(0) + \
+            sampled_object_state[:, :2] = centered_object_xy_state.unsqueeze(0) + \
                                               2.0 * self.start_position_noise * (
                                                       torch.rand(num_resets, 2, device=self.device) - 0.5)
 
@@ -849,7 +824,7 @@ class FrankaCubeStack(VecTask):
 
         # Lastly, set these sampled values as the new init state
         # print('env id', env_ids, 'pose', sampled_cube_state)
-        this_object_state_all[env_ids, :] = sampled_cube_state
+        this_object_state_all[env_ids, :] = sampled_object_state
 
     def _compute_osc_torques(self, dpose):
         # Solve for Operational Space Control # Paper: khatib.stanford.edu/publications/pdfs/Khatib_1987_RA.pdf
@@ -878,12 +853,21 @@ class FrankaCubeStack(VecTask):
                          -self._franka_effort_limits[:7].unsqueeze(0), self._franka_effort_limits[:7].unsqueeze(0))
 
         return u
+    
+    def to_pose_ik(self, dpose):
+        '''print('state pose shape', self.states["wrist_3_link"].shape)
+        pos_err = goal_pose - self.states["wrist_3_link"][:, :3]
+        orn_err = self.orientation_error(goal_orientation)'''
+        dpose = dpose.unsqueeze(-1)
+        u = self._compute_ik(dpose)
+        self._q += u
+        self._qd = torch.zeros_like(self._qd)
 
     def _compute_ik(self, dpose):
         damping = 0.05
         j_eef_T = torch.transpose(self._j_eef, 1, 2)
         lmbda = torch.eye(6, device=self.device) * (damping ** 2)
-        u = (j_eef_T @ torch.inverse(self.j_eef @ j_eef_T + lmbda) @ dpose).view(self.num_envs, 7)
+        u = (j_eef_T @ torch.inverse(self._j_eef @ j_eef_T + lmbda) @ dpose).view(self.num_envs, 6)
         return u
 
     def orientation_error(self, desired, current):
@@ -894,7 +878,6 @@ class FrankaCubeStack(VecTask):
         cc = quat_conjugate(current)
         q_r = quat_mul(desired, cc)
         return q_r[:3] * torch.sign(q_r[3]).unsqueeze(-1)
-        # return q_r[:, 0:3] * torch.sign(q_r[:, 3]).unsqueeze(-1)
 
     def pre_physics_step(self, actions):
         
@@ -905,8 +888,6 @@ class FrankaCubeStack(VecTask):
         self.gym.step_graphics(self.sim)
         # render the camera sensors
         self.gym.render_all_camera_sensors(self.sim)
-        
-        points = []
 
         # for i in range(0, self.num_envs):
         for i in range(self.num_envs):
@@ -942,7 +923,7 @@ class FrankaCubeStack(VecTask):
             '''
             Here the function is called which will calculate the conical spring score for each object which is denoted by item_id
             ''' 
-            object_id = torch.tensor(1).to(self.device)
+            object_id = torch.tensor(2).to(self.device)
             total_objects = 3+len(self.object_models)
             if(len(torch.unique(segmask)) == total_objects+1):
                 '''
@@ -983,15 +964,12 @@ class FrankaCubeStack(VecTask):
                         suction_score_object = calcualte_suction_score(depth_image_suction, segmask, rgb_image_copy, self.camera_info, grasps_and_predictions, object_id, action)
                         score, xyz_point = suction_score_object.calculator()
                         self.object_coordiante_camera = xyz_point.clone()
-                        # print("eef pos and object coordiante", self.states["eef_pos"], object_coordiante)
                         force_object = calcualte_force(score)
                         force = force_object.regression()
                         print(f"suction deforamtion score --> {score}, Force along z axis --> {force}")
-                    except:
+                    except Exception as e:                        
+                        print('DEX net exception')
                         self.frame_count -= 1
-                        pass
-            # -0.54, 0.05, 0.6
-            # 0.2719, 0.1220, 1.0947
             '''
             To save rgb image, depth image and segmentation mask (comment this section if you do not want to visualize as it slows down the processing)
             '''
@@ -1003,69 +981,91 @@ class FrankaCubeStack(VecTask):
         '''
         Commands to the arm for eef control
         '''
-        # print(torch.tensor([-object_coordiante_camera[0]+0.54, -object_coordiante_camera[1]+0.05, -object_coordiante_camera[2]+0.6]), object_coordiante_camera)
-        object_coordiante = torch.tensor([self.object_coordiante_camera[0]-0.54-0.25, self.object_coordiante_camera[1]-0.05, self.object_coordiante_camera[2]-0.6])
-        # base_coordinates = torch.tensor([2.3136, -0.1312,  1.6062])
         poses_tensor = self.gym.acquire_rigid_body_state_tensor(self.sim)
         poses = gymtorch.wrap_tensor(poses_tensor).view(self.num_envs, -1, 13)
-        eef_pos_local = -self.states["base_link"][0][:3] + self.states["eef_pos"][0]
-    
-        r_base_link = R.from_quat(self.states["base_link"][0][3:7].detach().cpu().numpy())
-        r_OA = r_base_link.as_matrix()
-        r_eef_link = R.from_quat(self.states["wrist_3_link"][0][3:7].detach().cpu().numpy())
-        r_OB = r_eef_link.as_matrix()
-        r_AB = np.dot(r_OA.T,r_OB)
-        r_converter = R.from_matrix(r_AB).as_euler('XYZ').astype(np.float32)
-        r_converter = torch.tensor(r_converter)
         
+        # Transformation of base_link from world coordiante frame (wb)
+        rotation_matrix_base_link = euler_angles_to_matrix(torch.tensor([180, 0, 0]).to(self.device), "XYZ", degrees=True)
+        translation_base_link = torch.tensor([0, 0, 2.020]).to(self.device)
+        T_base_link = transformation_matrix(rotation_matrix_base_link, translation_base_link)
 
-        print(poses[0][self.multi_body_idx["wrist_3_link"]])
-        # print(self.multi_body_idx["wrist_3_link"])
+        # Transformation for camera (wc --> wb*bc)
+        rotation_matrix_camera_offset = euler_angles_to_matrix(torch.tensor([180, 0, 0]).to(self.device), "XYZ", degrees=True)
+        T_base_link_to_camera = transformation_matrix(rotation_matrix_camera_offset, self.camera_base_link_translation)
+
+        T_world_to_camera_link = torch.matmul(T_base_link, T_base_link_to_camera)
+
+        # Transformation for object from camera (wo --> wc*co)
+        rotation_matrix_camera_to_object = euler_angles_to_matrix(torch.tensor([0, 0, 0]).to(self.device), "XYZ", degrees=True)
+        T_camera_to_object = transformation_matrix(rotation_matrix_camera_to_object, self.object_coordiante_camera)
         
-        r_converter_initial = self.orientation_error(self.states["base_link"][0][3:7], self.states["wrist_3_link"][0][3:7])
-        # r_base_link_error = R.from_euler('xyz', r_converter_initial.detach().cpu().numpy())
-        # r_wrist_3_link_error = R.from_euler('y', -1.57)
-        # print(r_wrist_3_link_error.as_matrix())
-        # r_rot_error = np.dot(r_base_link_error.as_matrix().T, r_wrist_3_link_error.as_matrix())
-        # r_rot_error_R = R.from_matrix(r_rot_error)
-        # r_converter = r_rot_error_R.as_euler('xyz').astype(np.float32)
-        # r_converter = torch.tensor(r_converter)
+        # Transformation from base link to object
+        T_world_to_object = torch.matmul(T_world_to_camera_link, T_camera_to_object)
 
-        r_base_link = R.from_quat(self.states["base_link"][0][3:7].detach().cpu().numpy())
-        r_wrist_3_link_error = R.from_euler('xyz', [0, 90, 0], degrees=True)
-        r_rot_error = np.dot(r_base_link.as_matrix().T, r_wrist_3_link_error.as_matrix())
-        r_wrist_3_link_error = R.from_euler('xyz', [0, 0, 90], degrees=True)
-        r_rot_error = np.dot(r_rot_error.T, r_wrist_3_link_error.as_matrix())
-        r_rot_error_R = R.from_matrix(r_rot_error)
+        # Transformation for pre grasp pose (wp --> wo*op)
+        rotation_matrix_pre_grasp_pose = euler_angles_to_matrix(torch.tensor([0, 0, 0]).to(self.device), "XYZ", degrees=True)
+        translation_pre_grasp_pose = torch.tensor([-0.25, 0, 0]).to(self.device)
+        T_pre_grasp_pose = transformation_matrix(rotation_matrix_pre_grasp_pose, translation_pre_grasp_pose)
 
-        r_base_quat_transformed = r_rot_error_R.as_quat().astype(np.float32)
-        r_base_quat_transformed = torch.tensor(r_base_quat_transformed).to(self.device)
-        r_converter = self.orientation_error(r_base_quat_transformed, self.states["wrist_3_link"][0][3:7])
+        # Transformation of object with base link to pre grasp pose
+        T_world_to_pre_grasp_pose = torch.matmul(T_world_to_object, T_pre_grasp_pose)
 
-        # r_converter = torch.tensor(r_converter_initial)
-        print("error in angle between base link and ee link ", r_converter)
-        # print("eef pose local ", eef_pos_local)
-        # print("object ", object_coordiante)
-        # print("eef angle ", self.states["eef_quat"])
-        # print("base link ", self.states["base_link"][0])
-        # print("eef angle in euler", euler_from_quaternion(self.states["eef_quat"][0][0], self.states["eef_quat"][0][1], self.states["eef_quat"][0][2], self.states["eef_quat"][0][3]))
-        euler_angle_eef = euler_from_quaternion(self.states["eef_quat"][0][0], self.states["eef_quat"][0][1], self.states["eef_quat"][0][2], self.states["eef_quat"][0][3])
-        # 0.3826834, 0, 0, 0.9238795
-        error_angle = torch.tensor([-1.57, 0.3, -1.57]) - torch.tensor([euler_angle_eef[0], euler_angle_eef[1], euler_angle_eef[2]])
-        # print("eef angle error ", error_angle)
-        # error_angle = torch.tensor([0,0,0])
-        print(error_angle[0].dtype)
+        # Transformation for pre grasp pose (pe --> inv(we)*wp --> ew*wp)
+        rotation_matrix_ee_pose = quaternion_to_matrix(poses[0][self.multi_body_idx['ee_link']][3:7])
+        translation_ee_pose = poses[0][self.multi_body_idx['ee_link']][:3]
+        T_world_to_ee_pose = transformation_matrix(rotation_matrix_ee_pose, translation_ee_pose)
+        
+        T_ee_pose_to_pre_grasp_pose = torch.matmul(torch.inverse(T_world_to_ee_pose), T_world_to_pre_grasp_pose)
+        
+        # Orientation error
+        action_orientation = matrix_to_euler_angles(T_ee_pose_to_pre_grasp_pose[:3, :3], "XYZ")
+        
+        # # Visualization
+        '''
+        use visulization only to view the trasnformations otherwise keep it disable as it is creating issue for segmentation of object
+        '''
+        # self.gym.clear_lines(self.viewer)
+        # axes_geom = gymutil.AxesGeometry(0.4)
+        # # Create a wireframe sphere
+        # sphere_rot = gymapi.Quat.from_euler_zyx(0.5 * math.pi, 0, 0)
+        # sphere_pose = gymapi.Transform(r=sphere_rot)
+        # sphere_geom = gymutil.WireframeSphereGeometry(0.02, 12, 12, sphere_pose, color=(1, 1, 0))
+
+        # top_drawer_grasp = gymapi.Transform()
+        # camera_trans = T_world_to_pre_grasp_pose[:3, 3].detach().cpu().numpy()
+        # top_drawer_grasp.p = gymapi.Vec3(camera_trans[0], camera_trans[1], camera_trans[2])
+        # top_drawer_rot = R.from_matrix(T_world_to_pre_grasp_pose[:3, :3].detach().cpu().numpy())
+        # top_drawer_quat = top_drawer_rot.as_quat()
+        # top_drawer_grasp.r = gymapi.Quat(top_drawer_quat[0], top_drawer_quat[1], top_drawer_quat[2], top_drawer_quat[3])
+        # # camera_rotation_x = gymapi.Quat.from_axis_angle(gymapi.Vec3(1, 0, 0), np.deg2rad(180))
+        # gymutil.draw_lines(axes_geom, self.gym, self.viewer, self.envs[0], top_drawer_grasp)
+        # gymutil.draw_lines(sphere_geom, self.gym, self.viewer, self.envs[0], top_drawer_grasp)
+
+        # top_drawer_grasp = gymapi.Transform()
+        # camera_trans = T_ee_pose_to_pre_grasp_pose[:3, 3]
+        # top_drawer_grasp.p = gymapi.Vec3(camera_trans[0], camera_trans[1], camera_trans[2])
+        # top_drawer_rot = R.from_matrix(T_ee_pose_to_pre_grasp_pose[:3, :3])
+        # top_drawer_quat = top_drawer_rot.as_quat()
+        # top_drawer_grasp.r = gymapi.Quat(top_drawer_quat[0], top_drawer_quat[1], top_drawer_quat[2], top_drawer_quat[3])
+        # # camera_rotation_x = gymapi.Quat.from_axis_angle(gymapi.Vec3(1, 0, 0), np.deg2rad(180))
+        # gymutil.draw_lines(axes_geom, self.gym, self.viewer, self.envs[0], top_drawer_grasp)
+        # gymutil.draw_lines(sphere_geom, self.gym, self.viewer, self.envs[0], top_drawer_grasp)
+
+        # top_drawer_grasp = gymapi.Transform()
+        # top_drawer_grasp.p = gymapi.Vec3(0, 0, 0)
+        # top_drawer_grasp.r = gymapi.Quat(0, 0, 0, 1)
+        # # camera_rotation_x = gymapi.Quat.from_axis_angle(gymapi.Vec3(1, 0, 0), np.deg2rad(180))
+        # gymutil.draw_lines(axes_geom, self.gym, self.viewer, self.envs[0], top_drawer_grasp)
+        # gymutil.draw_lines(sphere_geom, self.gym, self.viewer, self.envs[0], top_drawer_grasp)
+
         if(self.action_contrib == 1):
-            actions = torch.tensor(self.num_envs * [[(object_coordiante[0]-eef_pos_local[0]), (object_coordiante[1]-eef_pos_local[1]), (object_coordiante[2]-eef_pos_local[2]), 0.1*r_converter[0], 0.1*r_converter[1], 0.1*r_converter[2], 1]])  
-        # print("action ", actions[0][:6])
-        # print("max ", torch.max(actions[0][:6]))
+            actions = torch.tensor(self.num_envs * [[T_ee_pose_to_pre_grasp_pose[0][3], T_ee_pose_to_pre_grasp_pose[1][3], T_ee_pose_to_pre_grasp_pose[2][3], 0.1*action_orientation[0], 0.1*action_orientation[1], 0.1*action_orientation[2], 1]], dtype=torch.float)
+        else:
+            actions = torch.tensor(self.num_envs * [[0.1, T_ee_pose_to_pre_grasp_pose[1][3], T_ee_pose_to_pre_grasp_pose[2][3], 0.1*action_orientation[0], 0.1*action_orientation[1], 0.1*action_orientation[2], 1]], dtype=torch.float)
+        
         if(self.frame_count >= 30):
-            if((torch.max(torch.abs(actions[0][:6]))) <= 0.002):
+            if((torch.max(torch.abs(actions[0][:6]))) <= 0.003):
                 self.action_contrib = 0
-                actions = torch.tensor(self.num_envs*[[0.1, 0, 0, 0, 0, 0, 1]])
-        print("action ", actions[0][:6])
-        print("sub", torch.max(torch.abs(actions[0][:6])))
-        print()
         self.actions = actions.clone().to(self.device)
         # Split arm and gripper command
         u_arm, u_gripper = self.actions[:, :-1], self.actions[:, -1]
@@ -1073,7 +1073,7 @@ class FrankaCubeStack(VecTask):
         # Control arm (scale value first)
         u_arm = u_arm * self.cmd_limit / self.action_scale
         if self.control_type == "osc":
-            u_arm = self._compute_osc_torques(dpose=u_arm)
+            u_arm = torch.clip(self._compute_osc_torques(dpose=u_arm), min=-10, max=10)
         self._arm_control[:, :] = u_arm
 
         # Control gripper
@@ -1095,28 +1095,9 @@ class FrankaCubeStack(VecTask):
         try:
             _fsdata = self.gym.acquire_force_sensor_tensor(self.sim)
             fsdata = gymtorch.wrap_tensor(_fsdata)
-            # print("forces", fsdata)
+            print("force along z axis: ", fsdata[0][2])
         except:
             pass
-        # num_sensors = self.gym.get_actor_force_sensor_count(self.env, self._force_sensor_actor_handle)
-        # for i in range(num_sensors):
-        #     sensor = self.gym.get_actor_force_sensor(self.env, self._force_sensor_actor_handle, i)
-        #     print("sensor values ", sensor)
-
-
-        # self.gym.refresh_dof_force_tensor(self.sim)
-        # for i in range(self.num_envs):
-        #     _forces = self.gym.acquire_dof_force_tensor(self.sim)
-        #     forces = gymtorch.wrap_tensor(_forces)
-        #     # forces = self.gym.get_actor_dof_forces(self.envs[i], self.franka_actor)
-        #     print("forces", forces)
-
-        # num_sensors = self.gym.get_actor_force_sensor_count(self.envs[0], self._force_sensor_actor_handle)
-        # for i in range(num_sensors):
-        #     sensor = self.gym.get_actor_force_sensor(self.envs[0], self._force_sensor_actor_handle, i)
-        # sensor_data = sensor.get_forces()
-        # print(sensor_data.force)   # force as Vec3
-        # print(sensor_data.torque)  # torque as Vec3
 
         self.progress_buf += 1
 
