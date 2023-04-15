@@ -368,9 +368,9 @@ class FrankaCubeStack(VecTask):
         # Define start pose for franka
         franka_start_pose = gymapi.Transform()
         franka_start_pose.p = gymapi.Vec3(0, 0, 2.020) #gymapi.Vec3(-0.45, 0.0, 1.0 + table_thickness / 2 + table_stand_height)
-        from scipy.spatial.transform import Rotation as R
-        r = R.from_euler('xyz', [180, 0, 0], degrees=True).as_quat()
-        franka_start_pose.r = gymapi.Quat(r[0], r[1], r[2], r[3])#gymapi.Quat(0.0, 0.0, 0.0, 1.0)
+        
+        quat = euler_angles_to_quaternion(torch.tensor([180, 0, 0]).to(self.device), "XYZ", degrees=True)
+        franka_start_pose.r = gymapi.Quat(quat[0], quat[1], quat[2], quat[3])
 
         # Define start pose for table
         table_start_pose = gymapi.Transform()
