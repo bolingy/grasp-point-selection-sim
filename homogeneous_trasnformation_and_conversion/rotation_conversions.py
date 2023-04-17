@@ -10,6 +10,39 @@ def transformation_matrix(rotation_matrix: torch.Tensor, translation_vector: tor
     T[3, :] = torch.tensor([0, 0, 0, 1]).to(device)
     return T.to(device)
 
+def axisangle2quat(vec: torch.Tensor, eps=1e-6) -> torch.Tensor:
+    """
+    Converts scaled axis-angle to quat.
+    Args:
+        vec (tensor): (..., 3) tensor where final dim is (ax,ay,az) axis-angle exponential coordinates
+        eps (float): Stability value below which small values will be mapped to 0
+
+    Returns:
+        tensor: (..., 4) tensor where final dim is (x,y,z,w) vec4 float quaternion
+    """
+    # type: (Tensor, float) -> Tensor
+    # store input shape and reshape
+    input_shape = vec.shape[:-1]
+    vec = vec.reshape(-1, 3)
+
+    # Grab angle
+    angle = torch.norm(vec, dim=-1, keepdim=True)
+
+    # Create return array
+    quat = torch.zeros(torch.prod(torch.tensor(input_shape)), 4, device=vec.device)
+    quat[:, 3] = 1.0
+
+    # Grab indexes where angle is not zero an convert the input to its quaternion form
+    idx = angle.reshape(-1) > eps
+    quat[idx, :] = torch.cat([
+        vec[idx, :] * torch.sin(angle[idx, :] / 2.0) / angle[idx, :],
+        torch.cos(angle[idx, :] / 2.0)
+    ], dim=-1)
+
+    # Reshape and return output
+    quat = quat.reshape(list(input_shape) + [4, ])
+    return quat.to(device)
+
 def _sqrt_positive_part(x: torch.Tensor) -> torch.Tensor:
     """
     Returns torch.sqrt(torch.max(0, x))

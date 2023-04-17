@@ -53,74 +53,16 @@ from suction_cup_modelling.suction_score_calcualtor import calcualte_suction_sco
 from suction_cup_modelling.force_calculator import calcualte_force
 from suction_cup_modelling.suction_score_calcualtor import CameraInfo
 
-# import sys
-# sys.path.insert(0, '/home/soofiyan_ws/Documents/Issac_gym_ws/grasp-point-selection-sim/')
-
 from gqcnn.examples.policy_for_training import dexnet3
 
 from autolab_core import (YamlConfig, Logger, BinaryImage, CameraIntrinsics, ColorImage, DepthImage, RgbdImage)
 import assets.urdf_models.models_data as md
 
-from scipy.spatial.transform import Rotation as R
-
 from homogeneous_trasnformation_and_conversion.rotation_conversions import *
-# This function is used to convert axis angle to quartenions
-@torch.jit.script
-def axisangle2quat(vec, eps=1e-6):
-    """
-    Converts scaled axis-angle to quat.
-    Args:
-        vec (tensor): (..., 3) tensor where final dim is (ax,ay,az) axis-angle exponential coordinates
-        eps (float): Stability value below which small values will be mapped to 0
 
-    Returns:
-        tensor: (..., 4) tensor where final dim is (x,y,z,w) vec4 float quaternion
-    """
-    # type: (Tensor, float) -> Tensor
-    # store input shape and reshape
-    input_shape = vec.shape[:-1]
-    vec = vec.reshape(-1, 3)
-
-    # Grab angle
-    angle = torch.norm(vec, dim=-1, keepdim=True)
-
-    # Create return array
-    quat = torch.zeros(torch.prod(torch.tensor(input_shape)), 4, device=vec.device)
-    quat[:, 3] = 1.0
-
-    # Grab indexes where angle is not zero an convert the input to its quaternion form
-    idx = angle.reshape(-1) > eps
-    quat[idx, :] = torch.cat([
-        vec[idx, :] * torch.sin(angle[idx, :] / 2.0) / angle[idx, :],
-        torch.cos(angle[idx, :] / 2.0)
-    ], dim=-1)
-
-    # Reshape and return output
-    quat = quat.reshape(list(input_shape) + [4, ])
-    return quat
-
-def euler_from_quaternion(x, y, z, w):
-    """
-    Convert a quaternion into euler angles (roll, pitch, yaw)
-    roll is rotation around x in radians (counterclockwise)
-    pitch is rotation around y in radians (counterclockwise)
-    yaw is rotation around z in radians (counterclockwise)
-    """
-    t0 = +2.0 * (w * x + y * z)
-    t1 = +1.0 - 2.0 * (x * x + y * y)
-    roll_x = math.atan2(t0, t1)
-
-    t2 = +2.0 * (w * y - z * x)
-    t2 = +1.0 if t2 > +1.0 else t2
-    t2 = -1.0 if t2 < -1.0 else t2
-    pitch_y = math.asin(t2)
-
-    t3 = +2.0 * (w * z + x * y)
-    t4 = +1.0 - 2.0 * (y * y + z * z)
-    yaw_z = math.atan2(t3, t4)
-
-    return roll_x, pitch_y, yaw_z # in radians
-
+import time
+from pathlib import Path
+import pandas as pd
 
 class FrankaCubeStack(VecTask):
 
@@ -208,6 +150,20 @@ class FrankaCubeStack(VecTask):
 
         self.action_contrib = 1
 
+        self.object_coordiante_camera = torch.tensor([0, 0, 0])
+        
+        # System IDentification data results
+        self.cur_path = str(Path(__file__).parent.absolute())
+        self.force_list = np.array([])
+        self.frame_count = 0
+        self.rgb_camera_visualization = None
+        self.dexnet_coordinates = np.array([])
+
+        #dexnet results
+        self.score = 0.0
+        self.force_SI = 0.0
+
+
         with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../configs")+'/collision_primitives_3d.yml') as file:
             self.world_params = yaml.load(file, Loader=yaml.FullLoader)
 
@@ -238,12 +194,9 @@ class FrankaCubeStack(VecTask):
         # Refresh tensors
         self._refresh()
 
-        self.frame_count = 0
         self.fig = plt.figure()
 
         self.current_directory = os.getcwd()
-
-        self.object_coordiante_camera = torch.tensor([0, 0, 0])
 
     def create_sim(self):
         self.sim_params.up_axis = gymapi.UP_AXIS_Z
@@ -663,9 +616,6 @@ class FrankaCubeStack(VecTask):
         return self.obs_buf
 
     def reset_idx(self, env_ids):
-        # resetting the count for saving the iamges
-        self.frame_count = 0
-
         env_ids_int32 = env_ids.to(dtype=torch.int32)
 
         # Reset cubes, sampling cube B first, then A
@@ -730,6 +680,19 @@ class FrankaCubeStack(VecTask):
         self.reset_buf[env_ids] = 0
 
         self.action_contrib = 1
+
+        if(self.frame_count != 0):
+            save_input = input("save it or not? any_key:save 0:dont save --> ")
+            if(save_input != str(0)):
+                seconds = time.time()
+                # self.local_time = time.ctime(seconds)
+                df_SI_paramters = pd.concat([pd.DataFrame(self.force_list), pd.DataFrame(self.dexnet_coordinates), pd.DataFrame(np.array([self.score.detach().cpu()])), pd.DataFrame(np.array([self.force_SI.detach().cpu()]))], axis=1)
+                df_SI_paramters.set_axis(['Force', 'Dexnet coordiantes', 'score', 'force from dexnet point'], axis=1, inplace=True)
+                df_SI_paramters.to_csv(self.cur_path+"/../../../System_Identification_Data/CSV-Force/SI-parameters-"+str(seconds)+".csv", header=True, index=True)
+                cv2.imwrite(self.cur_path+"/../../../System_Identification_Data/CSV-Force/Dexnet-output-"+str(seconds)+".png", cv2.cvtColor(self.rgb_camera_visualization, cv2.COLOR_BGR2RGB))
+        self.force_list = np.array([])
+        # resetting the count for saving the images
+        self.frame_count = 0
 
     def _reset_init_object_state(self, object, env_ids, offset, check_valid=True):
         """
@@ -966,19 +929,28 @@ class FrankaCubeStack(VecTask):
                         dexnet_object = dexnet3(depth_img_dexnet, segmask_dexnet, None, camera_intrinsics)
                         action, grasps_and_predictions = dexnet_object.inference()
 
+                        '''
+                        For visualization marking the coordinates of the grasping point selected by DEXNET
+                        '''
+                        self.rgb_camera_visualization = rgb_image_copy.detach().cpu().numpy()
+                        cv2.circle(self.rgb_camera_visualization, (action.grasp.center.x, action.grasp.center.y), 3, (255, 0, 0), -1)
+
                         print(f"Quality is {action.q_value} grasp location is {action.grasp.center.x}, {action.grasp.center.y}")
                         '''
                         Suction Cup Deformation
                         '''
                         depth_image_suction = depth_image.detach().clone()
                         suction_score_object = calcualte_suction_score(depth_image_suction, segmask, rgb_image_copy, self.camera_info, grasps_and_predictions, object_id, action)
-                        score, xyz_point = suction_score_object.calculator()
+                        self.score, xyz_point = suction_score_object.calculator()
+
                         self.object_coordiante_camera = xyz_point.clone()
-                        force_object = calcualte_force(score)
-                        force = force_object.regression()
-                        print(f"suction deforamtion score --> {score}, Force along z axis --> {force}")
+                        force_object = calcualte_force(self.score)
+
+                        self.force_SI = force_object.regression()
+                        self.dexnet_coordinates = np.array([action.grasp.center.x, action.grasp.center.y])
+                        print(f"suction deforamtion score --> {self.score}, Force along z axis --> {self.force_SI}")
                     except:
-                        print('DEX net exception')
+                        print('DEXNET exception')
                         self.frame_count -= 1
             '''
             To save rgb image, depth image and segmentation mask (comment this section if you do not want to visualize as it slows down the processing)
@@ -1106,9 +1078,11 @@ class FrankaCubeStack(VecTask):
         try:
             _fsdata = self.gym.acquire_force_sensor_tensor(self.sim)
             fsdata = gymtorch.wrap_tensor(_fsdata)
-            print("force along z axis: ", fsdata[0][2])
+            print("force along z axisl: ", fsdata[0][2])
+            if(self.frame_count >= 30):
+                self.force_list = np.append(self.force_list, fsdata[0][2].detach().cpu().numpy())
         except:
-            pass
+            print("error in force sensor")
 
         self.progress_buf += 1
 
