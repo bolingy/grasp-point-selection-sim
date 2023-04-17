@@ -7,7 +7,7 @@ physics_engine: ${..physics_engine}
 env:
   numEnvs: ${resolve_default:8192,${...num_envs}}
   envSpacing: 1.5
-  episodeLength: 300
+  episodeLength: 10000
   enableDebugVis: False
 
   clipObservations: 5.0
@@ -27,7 +27,7 @@ env:
   alignRewardScale: 2.0
   stackRewardScale: 16.0
 
-  controlType: osc  # options are {joint_tor, osc}
+  controlType: osc_primitives  # options are {joint_tor, osc, osc_primitives}
 
   asset:
     assetRoot: "../../assets"

@@ -10,8 +10,14 @@ class Primitives():
         self.current_pose = init_pose
         self.min_distance_to_goal = 0.1
         self.num_envs = num_envs
+        self.state = False
 
-    def move(self, action):
+    def move(self, action, current_pose, target_pose):
+        self.current_pose = current_pose 
+        if self.state == False:
+            self.target_pose = torch.clone(current_pose)
+            self.target_pose[:, [1]] = self.target_pose[:, [1]] - 0.1
+
         if torch.linalg.norm(self.target_pose - self.current_pose) > self.min_distance_to_goal:
             pose_diff = torch.clone(self.target_pose - self.current_pose)
             if action == "right":
