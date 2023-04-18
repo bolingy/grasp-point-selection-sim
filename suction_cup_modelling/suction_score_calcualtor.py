@@ -29,7 +29,7 @@ class calcualte_suction_score():
         '''
         Store the base coordiantes of the suction cup points
         '''
-        base_coordinate = torch.tensor([0.015, 0, 0]).to(self.device)
+        base_coordinate = torch.tensor([0.02, 0, 0]).to(self.device)
         self.suction_coordinates = base_coordinate.view(1, 3)
         for angle in range(45, 360, 45):
             x = base_coordinate[0]*math.cos(angle*math.pi/180) - \
