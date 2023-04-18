@@ -8,20 +8,30 @@ class Primitives():
     def __init__(self, num_envs, init_pose):
         self.target_pose = init_pose
         self.current_pose = init_pose
-        self.min_distance_to_goal = 0.1
+        self.min_distance_to_goal = 0.01
         self.num_envs = num_envs
-        self.state = False
+        self.move = {"right": torch.Tensor(num_envs * [[-DEFAULT_DIST, 0, 0]])}
 
     def move(self, action, current_pose, target_pose):
-        self.current_pose = current_pose 
-        if self.state == False:
-            self.target_pose = torch.clone(current_pose)
-            self.target_pose[:, [1]] = self.target_pose[:, [1]] - 0.1
+        self.current_pose = current_pose
+        # Check done comparison
+        pose_diff = torch.clone(self.target_pose - self.current_pose)
+        # Zero out if less than level
+        #pose_diff[pose_diff < self.min_distance_to_goal] = 0
+        # Get new tensor
+        tmp = torch.clone(self.move[action])
+        tmp[tmp == 0] mask[(torch.arange(X.shape[0]), ind)] = 1
+        c=(mask==0).nonzero()
+        mask[(c[:,:1],c[:,1:2])]=k[(c[:,:1],c[:,1:2])]
 
+        if action != "done" and self.action == False:
+            self.action = True
+            self.target_pose = torch.clone(current_pose)
+            self.target_pose[:, [2]] = self.target_pose[:, [2]] - 0.3
+        
         if torch.linalg.norm(self.target_pose - self.current_pose) > self.min_distance_to_goal:
             pose_diff = torch.clone(self.target_pose - self.current_pose)
             if action == "right":
-                print(action, torch.sum(pose_diff))
                 return self.move_right(pose_diff), "right"
             elif action == "left":
                 print(action, torch.sum(pose_diff))
@@ -30,7 +40,8 @@ class Primitives():
                 return self.move_up(pose_diff), "up"
             elif action == "down":
                 return self.move_down(pose_diff), "down"
-            
+        
+        self.action == False
         return torch.tensor(10 * [[0., 0., 0.]]), "done"
 
     def set_target_pose(self, target_pose):

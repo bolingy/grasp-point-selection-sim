@@ -742,6 +742,7 @@ class FrankaCubeStack(VecTask):
             #     goal = self.primitives.get_gymapi_transform([u_arm[i][0], u_arm[i][1], u_arm[i][2], 0, 0, 0, 1])
             #     self.draw_sphere(self.envs[i], goal, 0.05, 12, (0, 0, 1))
             u_arm = self._compute_osc_torques_primitives(dpose=u_arm)
+
         self._arm_control[:, :] = u_arm
 
 
