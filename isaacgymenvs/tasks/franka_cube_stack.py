@@ -149,6 +149,7 @@ class FrankaCubeStack(VecTask):
         self.franka_base = "base_link"
 
         self.action_contrib = 1
+        self.force_encounter = 0
 
         self.object_coordiante_camera = torch.tensor([0, 0, 0])
         
@@ -162,7 +163,6 @@ class FrankaCubeStack(VecTask):
         #dexnet results
         self.score = 0.0
         self.force_SI = 0.0
-
 
         with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../configs")+'/collision_primitives_3d.yml') as file:
             self.world_params = yaml.load(file, Loader=yaml.FullLoader)
@@ -363,11 +363,13 @@ class FrankaCubeStack(VecTask):
             "base_link": self.gym.find_asset_rigid_body_index(franka_asset, "base_link"),
             "wrist_3_link": self.gym.find_asset_rigid_body_index(franka_asset, "wrist_3_link"),
             "ee_link": self.gym.find_asset_rigid_body_index(franka_asset, "ee_link"),
+            "epick_end_effector": self.gym.find_asset_rigid_body_index(franka_asset, "epick_end_effector"),
         }
         
         # force sensor
         sensor_pose = gymapi.Transform()
         self.gym.create_asset_force_sensor(franka_asset, self.multi_body_idx["wrist_3_link"], sensor_pose)
+        
 
         # Create environments
         for i in range(self.num_envs):
@@ -475,6 +477,11 @@ class FrankaCubeStack(VecTask):
         self._init_object_model_state = []
         for counter in range(len(self.object_models)):
             self._init_object_model_state.append(torch.zeros(self.num_envs, 13, device=self.device))
+
+
+        contact_force_tensor = self.gym.acquire_net_contact_force_tensor(self.sim)
+        self.gym.refresh_net_contact_force_tensor(self.sim)
+        self._contact_forces = gymtorch.wrap_tensor(contact_force_tensor).view(self.num_envs, -1, 3)
 
         # Setup data
         self.init_data()
@@ -596,6 +603,8 @@ class FrankaCubeStack(VecTask):
         self.gym.refresh_rigid_body_state_tensor(self.sim)
         self.gym.refresh_jacobian_tensors(self.sim)
         self.gym.refresh_mass_matrix_tensors(self.sim)
+        self.gym.refresh_net_contact_force_tensor(self.sim)
+        self.gym.refresh_force_sensor_tensor(self.sim)
 
         # Refresh states
         self._update_states()
@@ -611,6 +620,9 @@ class FrankaCubeStack(VecTask):
         obs += ["q_gripper"] if self.control_type == "osc" else ["q"]
         self.obs_buf = torch.cat([self.states[ob] for ob in obs], dim=-1)
 
+        net_contact_forces = self.gym.acquire_net_contact_force_tensor(self.sim)
+        self._contact_forces = gymtorch.wrap_tensor(net_contact_forces).view(self.num_envs, -1, 3)
+        print("contact forces: ", self._contact_forces)
         maxs = {ob: torch.max(self.states[ob]).item() for ob in obs}
 
         return self.obs_buf
@@ -680,6 +692,7 @@ class FrankaCubeStack(VecTask):
         self.reset_buf[env_ids] = 0
 
         self.action_contrib = 1
+        self.force_encounter = 0
 
         if(self.frame_count != 0):
             save_input = input("save it or not? any_key:save 0:dont save --> ")
@@ -913,6 +926,7 @@ class FrankaCubeStack(VecTask):
                         segmask_numpy_temp[segmask_dexnet.cpu().numpy().astype(np.uint8) == object_id.cpu().numpy()] = 1
 
                         segmask_numpy[segmask_dexnet.cpu().numpy().astype(np.uint8) == object_id.cpu().numpy()] = 255
+                        cv2.imwrite(self.cur_path+"/../../../System_Identification_Data/CSV-Force/segmask.png", segmask_numpy)
                         segmask_dexnet = BinaryImage(segmask_numpy, frame=camera_intrinsics.frame)
                         
                         depth_image_dexnet = depth_image.detach().clone()
@@ -923,7 +937,7 @@ class FrankaCubeStack(VecTask):
                         depth_numpy = depth_image_dexnet.cpu().numpy()
                         depth_numpy_temp = depth_numpy*segmask_numpy_temp
                         depth_numpy_temp[depth_numpy_temp == 0] = 0.75
-                        
+                        np.save(self.cur_path+"/../../../System_Identification_Data/CSV-Force/depth.npy", depth_numpy_temp)
                         depth_img_dexnet = DepthImage(depth_numpy_temp, frame=camera_intrinsics.frame)
 
                         dexnet_object = dexnet3(depth_img_dexnet, segmask_dexnet, None, camera_intrinsics)
@@ -963,6 +977,12 @@ class FrankaCubeStack(VecTask):
         '''
         Commands to the arm for eef control
         '''
+        # self.gym.refresh_net_contact_force_tensor(self.sim)
+        # contact_tensor = self.gym.acquire_net_contact_force_tensor(self.sim)
+        # net_cf = gymtorch.wrap_tensor(contact_tensor)
+        # print("contact info: ", net_cf)
+
+
         poses_tensor = self.gym.acquire_rigid_body_state_tensor(self.sim)
         poses = gymtorch.wrap_tensor(poses_tensor).view(self.num_envs, -1, 13)
         
@@ -1044,10 +1064,14 @@ class FrankaCubeStack(VecTask):
             actions = torch.tensor(self.num_envs * [[T_ee_pose_to_pre_grasp_pose[0][3], T_ee_pose_to_pre_grasp_pose[1][3], T_ee_pose_to_pre_grasp_pose[2][3], 0.1*action_orientation[0], 0.1*action_orientation[1], 0.1*action_orientation[2], 1]], dtype=torch.float)
         else:
             actions = torch.tensor(self.num_envs * [[0.1, T_ee_pose_to_pre_grasp_pose[1][3], T_ee_pose_to_pre_grasp_pose[2][3], 0.1*action_orientation[0], 0.1*action_orientation[1], 0.1*action_orientation[2], 1]], dtype=torch.float)
-        
+
         if(self.frame_count >= 30):
             if((torch.max(torch.abs(actions[0][:6]))) <= 0.003):
                 self.action_contrib = 0
+            if(self.force_pre_physics > self.force_SI):
+                self.force_encounter = 1
+        if(self.force_encounter == 1):
+            actions = torch.tensor(self.num_envs * [[0.1, T_ee_pose_to_pre_grasp_pose[1][3], T_ee_pose_to_pre_grasp_pose[2][3], 0.1*action_orientation[0], 0.1*action_orientation[1], 0.1*action_orientation[2], 1]], dtype=torch.float)
         
         self.actions = actions.clone().to(self.device)
         # Split arm and gripper command
@@ -1075,10 +1099,13 @@ class FrankaCubeStack(VecTask):
     def post_physics_step(self):
 
         self.gym.refresh_force_sensor_tensor(self.sim)
+        self.gym.refresh_net_contact_force_tensor(self.sim)
         try:
+
             _fsdata = self.gym.acquire_force_sensor_tensor(self.sim)
             fsdata = gymtorch.wrap_tensor(_fsdata)
-            print("force along z axisl: ", fsdata[0][2])
+            # print("force along z axisl: ", self.fsdata[0][2])
+            self.force_pre_physics = -fsdata[0][2].detach().cpu().numpy()
             if(self.frame_count >= 30):
                 self.force_list = np.append(self.force_list, fsdata[0][2].detach().cpu().numpy())
         except:
