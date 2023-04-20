@@ -338,14 +338,12 @@ class FrankaCubeStack(VecTask):
                     count += 1
                     dims = cube[obj]['dims']
                     pose = cube[obj]['pose']
-                    self.add_table(dims, pose, franka_start_pose, env_ptr, color=[0.6, 0.6, 0.6])
-            #print('|!!!!!!!!!!!!!!!!!!pod actor count:', count)
+                    self.add_table(dims, pose, franka_start_pose, env_ptr, i, color=[0.6, 0.6, 0.6])
 
             if self.aggregate_mode == 1:
                 self.gym.begin_aggregate(env_ptr, max_agg_bodies, max_agg_shapes, True)
 
             # Create cubes
-            print('create cube!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
             self._cubeA_id = self.gym.create_actor(env_ptr, cubeA_asset, cubeA_start_pose, "cubeA", i, 2, 0)
             self._cubeB_id = self.gym.create_actor(env_ptr, cubeB_asset, cubeB_start_pose, "cubeB", i, 4, 0)
             # Set colors
@@ -366,7 +364,7 @@ class FrankaCubeStack(VecTask):
         # Setup data
         self.init_data()
 
-    def add_table(self, table_dims, table_pose, robot_pose, env_ptr, color=[1.0,0.0,0.0]):
+    def add_table(self, table_dims, table_pose, robot_pose, env_ptr, env_id, color=[1.0,0.0,0.0]):
 
         table_dims = gymapi.Vec3(table_dims[0], table_dims[1], table_dims[2])
 
@@ -382,7 +380,7 @@ class FrankaCubeStack(VecTask):
                                           asset_options)
 
         table_pose = robot_pose * pose
-        table_handle = self.gym.create_actor(env_ptr, table_asset, table_pose, 'table', 1, 0)
+        table_handle = self.gym.create_actor(env_ptr, table_asset, table_pose, 'table', env_id, 0)
         self.gym.set_rigid_body_color(env_ptr, table_handle, 0, gymapi.MESH_VISUAL_AND_COLLISION, obj_color)
 
         # props = self.gym.get_actor_dof_properties(self.env_ptr, table_handle)
@@ -393,7 +391,6 @@ class FrankaCubeStack(VecTask):
         # self.gym.set_actor_dof_properties(self.env_ptr, table_handle, props)
 
         #self.table_handles.append(table_handle)
-
 
 
     def init_data(self):
