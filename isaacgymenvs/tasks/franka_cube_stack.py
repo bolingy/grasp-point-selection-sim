@@ -167,7 +167,7 @@ class FrankaCubeStack(VecTask):
         #dexnet results
         self.suction_deformation_score = 0.0
         self.force_SI = 0.0
-
+        self.last_pos = None
 
         with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../configs")+'/collision_primitives_3d.yml') as file:
             self.world_params = yaml.load(file, Loader=yaml.FullLoader)
@@ -670,16 +670,12 @@ class FrankaCubeStack(VecTask):
     
     def reset_init_arm_pose(self, env_ids):
 
-        # pos = torch.tensor(np.random.uniform(low=-6.2832, high=6.2832, size=(6,))).to(self.device).type(torch.float)
-        # pos[3] = torch.tensor(np.random.uniform(-3.1416, 3.1416))
-
-        # joint_poses_list = torch.load(f"{cur_path}/../../misc/joint_poses.pt")
-        # pos = joint_poses_list[torch.randint(0, len(joint_poses_list), (1,))[0]].to(self.device)
-        pos = tensor_clamp(self.franka_default_dof_pos.unsqueeze(0), self.franka_dof_lower_limits.unsqueeze(0), self.franka_dof_upper_limits)
+        pos = torch.tensor(np.random.uniform(low=-6.2832, high=6.2832, size=(6,))).to(self.device).type(torch.float)
+        pos = tensor_clamp(pos.unsqueeze(0), self.franka_dof_lower_limits.unsqueeze(0), self.franka_dof_upper_limits)
+        # pos = tensor_clamp(self.franka_default_dof_pos.unsqueeze(0), self.franka_dof_lower_limits.unsqueeze(0), self.franka_dof_upper_limits)
         
         # Overwrite gripper init pos (no noise since these are always position controlled)
-        pos[:, -2:] = self.franka_default_dof_pos[-2:]
-        self.final_pos = pos
+        # pos[:, -2:] = self.franka_default_dof_pos[-2:]
         # Reset the internal obs accordingly
         self._q[env_ids, :] = pos
         self._qd[env_ids, :] = torch.zeros_like(self._qd[env_ids])
@@ -712,9 +708,11 @@ class FrankaCubeStack(VecTask):
 
         self.progress_buf[env_ids] = 0
         self.reset_buf[env_ids] = 0
-        # input_user = input("save?")
-        # if(input_user != str(0)):
-        #     print(self.final_pos)
+
+        input_user = input("save?")
+        if(input_user != str(0)):
+            print(self.last_pos)
+        self.last_pos = pos
         
     def reset_object_pose(self, env_ids):
         self._reset_init_object_state(object='cubeA', env_ids=env_ids, offset=[0, -0.1], check_valid=True)
@@ -920,16 +918,6 @@ class FrankaCubeStack(VecTask):
         u = (j_eef_T @ torch.inverse(self._j_eef @ j_eef_T + lmbda) @ dpose).view(self.num_envs, 6)
         return u
 
-    def to_pose_ik(self, dpose):
-        '''print('state pose shape', self.states["wrist_3_link"].shape)
-        pos_err = goal_pose - self.states["wrist_3_link"][:, :3]
-        orn_err = self.orientation_error(goal_orientation)'''
-        dpose = dpose.unsqueeze(-1)
-        u = self._compute_ik(dpose)
-        self._q += u
-        self._qd = torch.zeros_like(self._qd)
-
-
     def orientation_error(self, desired, current):
         '''
         input: desired orientation - quaterion, current orientation - quaterion
@@ -942,6 +930,7 @@ class FrankaCubeStack(VecTask):
     def reset_pre_grasp_pose(self, env_ids):
         joint_poses_list = torch.load(f"{cur_path}/../../misc/joint_poses.pt")
         pos = joint_poses_list[torch.randint(0, len(joint_poses_list), (1,))[0]].to(self.device)
+        
         pos = tensor_clamp(pos.unsqueeze(0), self.franka_dof_lower_limits.unsqueeze(0), self.franka_dof_upper_limits)
         
         # Reset the internal obs accordingly
@@ -1026,7 +1015,7 @@ class FrankaCubeStack(VecTask):
                 '''
                 DexNet 3.0
                 '''
-                if(self.frame_count == 30):
+                if(self.frame_count == -30):
                     # try:
                     camera_intrinsics = CameraIntrinsics(frame="camera", fx=self.fx_back_cam, fy=self.fy_back_cam, cx=self.cx_back_cam, cy=self.cy_back_cam, skew=0.0, height=self.height_back_cam, width=self.width_back_cam)
                     
@@ -1216,7 +1205,6 @@ class FrankaCubeStack(VecTask):
             actions = torch.tensor(self.num_envs * [[0, 0, 0, 0, 0, 0, 1]], dtype=torch.float)
         # if(self.force_encounter == 1):
         #     actions = torch.tensor(self.num_envs * [[-0.1, T_ee_pose_to_pre_grasp_pose[1][3], T_ee_pose_to_pre_grasp_pose[2][3], 0.1*action_orientation[0], 0.1*action_orientation[1], 0.1*action_orientation[2], 1]], dtype=torch.float)
-
         self.actions = actions.clone().detach().to(self.device)
         # Split arm and gripper command
         u_arm, u_gripper = self.actions[:, :-1], self.actions[:, -1]
