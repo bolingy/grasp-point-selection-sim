@@ -96,13 +96,15 @@ class dexnet3():
 
         action, grasps, q_values = policy(state)
         num_grasps = len(grasps)
-        grasps_and_predictions = zip(np.arange(num_grasps), grasps, q_values)
+        grasps_and_predictions = zip(grasps, q_values)
         grasps_and_predictions = sorted(grasps_and_predictions,
-                                        key=lambda x: x[2],
+                                        key=lambda x: x[1],
                                         reverse=True)
         # std_dev_np = np.array([])
-        for i in range(num_grasps):
-            print(f"action coordinates --> ({grasps_and_predictions[i][1].center.x}, {grasps_and_predictions[i][1].center.y}) score --> {grasps_and_predictions[i][2]}")
+        
+        # for i in range(num_grasps):
+        #     print(f"action coordinates --> ({grasps_and_predictions[i][0].center.x}, {grasps_and_predictions[i][0].center.y}) score --> {grasps_and_predictions[i][1]}")
+        #     print(f"action angle: {grasps_and_predictions[i][0].axis*180/np.pi}")
             # std_dev_np = np.append(std_dev_np, grasps_and_predictions[i][2])
 
         # print("std_dev: ", np.std(std_dev_np))
