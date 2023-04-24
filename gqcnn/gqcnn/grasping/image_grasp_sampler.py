@@ -974,6 +974,7 @@ class DepthImageSuctionPointGridSampler(ImageGraspSampler):
         cloud_start = time()
         point_cloud_im = camera_intr.deproject_to_image(depth_im_mask)
         normal_cloud_im = point_cloud_im.normal_cloud_im()
+        
         nonzero_px = depth_im_mask.nonzero_pixels()
         num_nonzero_px = nonzero_px.shape[0]
 

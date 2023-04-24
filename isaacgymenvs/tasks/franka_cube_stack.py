@@ -51,7 +51,6 @@ import cv2
 
 from suction_cup_modelling.suction_score_calcualtor import calcualte_suction_score
 from suction_cup_modelling.force_calculator import calcualte_force
-from suction_cup_modelling.suction_score_calcualtor import CameraInfo
 
 from gqcnn.examples.policy_for_training import dexnet3
 
@@ -64,6 +63,9 @@ from homogeneous_trasnformation_and_conversion.rotation_conversions import *
 import time
 from pathlib import Path
 import pandas as pd
+
+from pathlib import Path
+cur_path = str(Path(__file__).parent.absolute())
 
 class FrankaCubeStack(VecTask):
 
@@ -160,9 +162,10 @@ class FrankaCubeStack(VecTask):
         self.frame_count = 0
         self.rgb_camera_visualization = None
         self.dexnet_coordinates = np.array([])
+        self.grasp_angle = torch.tensor([0, 0, 0])
 
         #dexnet results
-        self.score = 0.0
+        self.suction_deformation_score = 0.0
         self.force_SI = 0.0
 
 
@@ -176,7 +179,7 @@ class FrankaCubeStack(VecTask):
         #     [0.06, -2.5, 2.53, 0.58, 1.67, 1.74], device=self.device
         # )
         self.franka_default_dof_pos = to_torch(
-            [0.06, -2.5, 2.53, 0, 1.57, 0], device=self.device
+            [-1.57, 0, 0, 0, 0, 0], device=self.device
         )
 
         # OSC Gains
@@ -370,7 +373,7 @@ class FrankaCubeStack(VecTask):
         
         # force sensor
         sensor_pose = gymapi.Transform()
-        self.gym.create_asset_force_sensor(franka_asset, self.multi_body_idx["epick_end_effector"], sensor_pose)
+        self.gym.create_asset_force_sensor(franka_asset, self.multi_body_idx["wrist_3_link"], sensor_pose)
 
         # Create environments
         for i in range(self.num_envs):
@@ -447,12 +450,12 @@ class FrankaCubeStack(VecTask):
             # Camera environment setup
             self.camera_handles.append([])
             self.body_states = []
-            self.camera_properties = gymapi.CameraProperties()
-            self.camera_properties.enable_tensors = True
-            self.camera_properties.horizontal_fov = 54.0
-            self.camera_properties.width = 640
-            self.camera_properties.height = 480
-            camera_handle = self.gym.create_camera_sensor(env_ptr, self.camera_properties)
+            self.camera_properties_back_cam = gymapi.CameraProperties()
+            self.camera_properties_back_cam.enable_tensors = True
+            self.camera_properties_back_cam.horizontal_fov = 54.0
+            self.camera_properties_back_cam.width = 640
+            self.camera_properties_back_cam.height = 480
+            camera_handle = self.gym.create_camera_sensor(env_ptr, self.camera_properties_back_cam)
             self.camera_base_link_translation = torch.tensor([-0.54, 0.05, 0.6]).to(self.device)
             local_transform = gymapi.Transform()
             local_transform.p = gymapi.Vec3(self.camera_base_link_translation[0], self.camera_base_link_translation[1], self.camera_base_link_translation[2])
@@ -475,21 +478,26 @@ class FrankaCubeStack(VecTask):
                 '''
                 self.suction_coordinates = torch.cat((self.suction_coordinates, torch.tensor([[0, y, z]]).to(self.device)), dim=0)
             # print(self.suction_coordinates)
+            
+            franka_hand_link_handle = self.gym.find_actor_rigid_body_handle(env_ptr, 0, "ee_link")
             self.camera_gripper_link_translation = []
-            for camera_point in range(len(self.suction_coordinates)):
-                self.camera_properties = gymapi.CameraProperties()
-                self.camera_properties.enable_tensors = True
-                self.camera_properties.horizontal_fov = 1.0
-                self.camera_properties.width = 1
-                self.camera_properties.height = 1
-                camera_handle = self.gym.create_camera_sensor(env_ptr, self.camera_properties)
-                self.camera_gripper_link_translation.append(torch.tensor([0.005, self.suction_coordinates[camera_point][1], self.suction_coordinates[camera_point][2]]).to(self.device))
+            self.camera_properties_gripper = gymapi.CameraProperties()
+            self.camera_properties_gripper.enable_tensors = True
+            self.camera_properties_gripper.horizontal_fov = 150.0
+            self.camera_properties_gripper.width = 640
+            self.camera_properties_gripper.height = 480
+
+            # for camera_point in range(len(self.suction_coordinates)):
+            for camera_point in range(1):
+                camera_handle_gripper = self.gym.create_camera_sensor(env_ptr, self.camera_properties_gripper)
+                self.camera_gripper_link_translation.append(torch.tensor([0.0, 0, 0]).to(self.device))
                 local_transform = gymapi.Transform()
                 local_transform.p = gymapi.Vec3(self.camera_gripper_link_translation[camera_point][0], self.camera_gripper_link_translation[camera_point][1], self.camera_gripper_link_translation[camera_point][2])
+                # camera_rotation_y = gymapi.Quat.from_axis_angle(gymapi.Vec3(0, 0, 1), np.deg2rad(90))
+                # local_transform.r = camera_rotation_y
 
-                franka_hand_link_handle = self.gym.find_actor_rigid_body_handle(env_ptr, 0, self.franka_hand)
-                self.gym.attach_camera_to_body(camera_handle, env_ptr, franka_hand_link_handle, local_transform, gymapi.FOLLOW_TRANSFORM)
-                self.camera_handles[i].append(camera_handle)
+                self.gym.attach_camera_to_body(camera_handle_gripper, env_ptr, franka_hand_link_handle, local_transform, gymapi.FOLLOW_TRANSFORM)
+                self.camera_handles[i].append(camera_handle_gripper)
 
             l_color = gymapi.Vec3(1, 1, 1)
             l_ambient = gymapi.Vec3(0.2, 0.2, 0.2)
@@ -528,15 +536,6 @@ class FrankaCubeStack(VecTask):
         table_pose = robot_pose * pose
         table_handle = self.gym.create_actor(env_ptr, table_asset, table_pose, 'table', env_id, 0)
         self.gym.set_rigid_body_color(env_ptr, table_handle, 0, gymapi.MESH_VISUAL_AND_COLLISION, obj_color)
-
-        # props = self.gym.get_actor_dof_properties(self.env_ptr, table_handle)
-        # props["driveMode"].fill(gymapi.DOF_MODE_NONE)
-        # props["stiffness"].fill(0.0)
-        # props["damping"].fill(0.0)
-        # props["friction"].fill(1.0)
-        # self.gym.set_actor_dof_properties(self.env_ptr, table_handle, props)
-
-        #self.table_handles.append(table_handle)
 
     def init_data(self):
         # Setup sim handles
@@ -601,6 +600,28 @@ class FrankaCubeStack(VecTask):
         # Initialize indices    ------ > self.num_envs * num of actors
         self._global_indices = torch.arange(self.num_envs * (3 + 28 + len(self.object_models)), dtype=torch.int32,
                                            device=self.device).view(self.num_envs, -1)
+        
+        '''
+        camera intrinsics for back cam and gripper cam
+        '''
+        # cam_vinv_back_cam = torch.inverse((torch.tensor(self.gym.get_camera_view_matrix(self.sim, self.envs[i], self.camera_handles[i][0])))).to(self.device)
+        cam_proj_back_cam = torch.tensor(self.gym.get_camera_proj_matrix(self.sim, self.envs[0], self.camera_handles[0][0]), device=self.device)
+        self.width_back_cam = self.camera_properties_back_cam.width
+        self.height_back_cam = self.camera_properties_back_cam.height
+        self.fx_back_cam = self.width_back_cam/(2/cam_proj_back_cam[0, 0])
+        self.fy_back_cam = self.height_back_cam/(2/cam_proj_back_cam[1, 1])
+        self.cx_back_cam = self.width_back_cam/2
+        self.cy_back_cam = self.height_back_cam/2
+
+        # cam_vinv_gripper = torch.inverse((torch.tensor(self.gym.get_camera_view_matrix(self.sim, self.envs[i], self.camera_handles[i][0])))).to(self.device)
+        cam_proj_gripper = torch.tensor(self.gym.get_camera_proj_matrix(self.sim, self.envs[0], self.camera_handles[0][1]), device=self.device)
+        self.width_gripper = self.camera_properties_gripper.width
+        self.height_gripper = self.camera_properties_gripper.height
+        self.fx_gripper = self.width_gripper/(2/cam_proj_gripper[0, 0])
+        self.fy_gripper = self.height_gripper/(2/cam_proj_gripper[1, 1])
+        self.cx_gripper = self.width_gripper/2
+        self.cy_gripper = self.height_gripper/2
+
 
     def _update_states(self):
         self.states.update({
@@ -627,6 +648,7 @@ class FrankaCubeStack(VecTask):
         self.gym.refresh_rigid_body_state_tensor(self.sim)
         self.gym.refresh_jacobian_tensors(self.sim)
         self.gym.refresh_mass_matrix_tensors(self.sim)
+        self.gym.refresh_force_sensor_tensor(self.sim)
 
         # Refresh states
         self._update_states()
@@ -645,38 +667,19 @@ class FrankaCubeStack(VecTask):
         maxs = {ob: torch.max(self.states[ob]).item() for ob in obs}
 
         return self.obs_buf
+    
+    def reset_init_arm_pose(self, env_ids):
 
-    def reset_idx(self, env_ids):
-        env_ids_int32 = env_ids.to(dtype=torch.int32)
+        # pos = torch.tensor(np.random.uniform(low=-6.2832, high=6.2832, size=(6,))).to(self.device).type(torch.float)
+        # pos[3] = torch.tensor(np.random.uniform(-3.1416, 3.1416))
 
-        # Reset cubes, sampling cube B first, then A
-        # Used offset to set the cubes in the particular location for each environment
-        self._reset_init_object_state(object='cubeA', env_ids=env_ids, offset=[0, -0.1], check_valid=True)
-        self._reset_init_object_state(object='cubeB', env_ids=env_ids, offset=[0, -0.175], check_valid=True)
-        self._reset_init_object_state(object='cylinder', env_ids=env_ids, offset=[0, -0.3], check_valid=True)
-
-        for counter in range(len(self.object_models)):
-            self._reset_init_object_state(object=self.object_models[counter], env_ids=env_ids, offset=[0, 0.1], check_valid=True)
-
-        # Write these new init states to the sim states
-        self._cubeA_state[env_ids] = self._init_cubeA_state[env_ids]
-        self._cubeB_state[env_ids] = self._init_cubeB_state[env_ids]
-        self._cylinder_state[env_ids] = self._init_cylinder_state[env_ids]
-
-        for counter in range(len(self.object_models)):
-            self._object_model_state[counter][env_ids] = self._init_object_model_state[counter][env_ids]
-
-        # Reset agent
-        reset_noise = torch.rand((len(env_ids), self.num_franka_dofs), device=self.device)
-        pos = tensor_clamp(
-            self.franka_default_dof_pos.unsqueeze(0) +
-            self.franka_dof_noise * 2.0 * (reset_noise - 0.5),
-            self.franka_dof_lower_limits.unsqueeze(0), self.franka_dof_upper_limits)
-            # self.franka_dof_noise * 2.0 * (reset_noise - 0.5),
-
+        # joint_poses_list = torch.load(f"{cur_path}/../../misc/joint_poses.pt")
+        # pos = joint_poses_list[torch.randint(0, len(joint_poses_list), (1,))[0]].to(self.device)
+        pos = tensor_clamp(self.franka_default_dof_pos.unsqueeze(0), self.franka_dof_lower_limits.unsqueeze(0), self.franka_dof_upper_limits)
+        
         # Overwrite gripper init pos (no noise since these are always position controlled)
         pos[:, -2:] = self.franka_default_dof_pos[-2:]
-
+        self.final_pos = pos
         # Reset the internal obs accordingly
         self._q[env_ids, :] = pos
         self._qd[env_ids, :] = torch.zeros_like(self._qd[env_ids])
@@ -700,31 +703,73 @@ class FrankaCubeStack(VecTask):
                                               gymtorch.unwrap_tensor(self._dof_state),
                                               gymtorch.unwrap_tensor(multi_env_ids_int32),
                                               len(multi_env_ids_int32))
+        
+        self.action_contrib = 1
+        self.force_encounter = 0
+        self.force_list = np.array([])
+        # resetting the count for saving the images
+        self.frame_count = 0
 
-        # Update cube states
+        self.progress_buf[env_ids] = 0
+        self.reset_buf[env_ids] = 0
+        # input_user = input("save?")
+        # if(input_user != str(0)):
+        #     print(self.final_pos)
+        
+    def reset_object_pose(self, env_ids):
+        self._reset_init_object_state(object='cubeA', env_ids=env_ids, offset=[0, -0.1], check_valid=True)
+        self._reset_init_object_state(object='cubeB', env_ids=env_ids, offset=[0, -0.175], check_valid=True)
+        self._reset_init_object_state(object='cylinder', env_ids=env_ids, offset=[0, -0.4], check_valid=True)
+
+        for counter in range(len(self.object_models)):
+            self._reset_init_object_state(object=self.object_models[counter], env_ids=env_ids, offset=[0, 0.1], check_valid=True)
+
+        # Write these new init states to the sim states
+        self._cubeA_state[env_ids] = self._init_cubeA_state[env_ids]
+        self._cubeB_state[env_ids] = self._init_cubeB_state[env_ids]
+        self._cylinder_state[env_ids] = self._init_cylinder_state[env_ids]
+
+        for counter in range(len(self.object_models)):
+            self._object_model_state[counter][env_ids] = self._init_object_model_state[counter][env_ids]
+        
         multi_env_ids_cubes_int32 = self._global_indices[env_ids, -3-len(self.object_models):].flatten()
         self.gym.set_actor_root_state_tensor_indexed(
             self.sim, gymtorch.unwrap_tensor(self._root_state),
             gymtorch.unwrap_tensor(multi_env_ids_cubes_int32), len(multi_env_ids_cubes_int32))
-
+        
         self.progress_buf[env_ids] = 0
         self.reset_buf[env_ids] = 0
 
-        self.action_contrib = 1
-        self.force_encounter = 0
+    def reset_idx(self, env_ids):
+        '''
+        Reset agent with noise with respect to frank default pos
+        '''
+        # reset_noise = torch.rand((len(env_ids), self.num_franka_dofs), device=self.device)
+        # pos = tensor_clamp(
+        #     self.franka_default_dof_pos.unsqueeze(0) +
+        #     self.franka_dof_noise * 2.0 * (reset_noise - 0.5),
+        #     self.franka_dof_lower_limits.unsqueeze(0), self.franka_dof_upper_limits)
+        
+        '''
+        Reset without noise
+        '''
+        # pos = torch.tensor(np.random.uniform(low=-6.2832, high=6.2832, size=(6,))).to(self.device)
+        # pos[3] = torch.tensor(np.random.uniform(-3.1416, 3.1416))
+        
+        self.reset_init_arm_pose(env_ids)
+
+        # Update cube states
+        self.reset_object_pose(env_ids)
 
         if(self.frame_count != 0):
             save_input = input("save it or not? any_key:save 0:dont save --> ")
             if(save_input != str(0)):
                 seconds = time.time()
                 # self.local_time = time.ctime(seconds)
-                df_SI_paramters = pd.concat([pd.DataFrame(self.force_list), pd.DataFrame(self.dexnet_coordinates), pd.DataFrame(np.array([self.score.detach().cpu()])), pd.DataFrame(np.array([self.force_SI.detach().cpu()]))], axis=1)
+                df_SI_paramters = pd.concat([pd.DataFrame(self.force_list), pd.DataFrame(self.dexnet_coordinates), pd.DataFrame(np.array([self.suction_deformation_score.detach().cpu()])), pd.DataFrame(np.array([self.force_SI.detach().cpu()]))], axis=1)
                 df_SI_paramters.set_axis(['Force', 'Dexnet coordiantes', 'score', 'force from dexnet point'], axis=1, inplace=True)
                 df_SI_paramters.to_csv(self.cur_path+"/../../../System_Identification_Data/CSV-Force/SI-parameters-"+str(seconds)+".csv", header=True, index=True)
                 cv2.imwrite(self.cur_path+"/../../../System_Identification_Data/CSV-Force/Dexnet-output-"+str(seconds)+".png", cv2.cvtColor(self.rgb_camera_visualization, cv2.COLOR_BGR2RGB))
-        self.force_list = np.array([])
-        # resetting the count for saving the images
-        self.frame_count = 0
 
     def _reset_init_object_state(self, object, env_ids, offset, check_valid=True):
         """
@@ -761,7 +806,7 @@ class FrankaCubeStack(VecTask):
             raise ValueError(f"Invalid cube specified, options are 'A' and 'B'; got: {object}")
 
         # Sampling is "centered" around middle of table
-        centered_object_xy_state = torch.tensor(np.array([0.6, 0.0]), device=self.device, dtype=torch.float32)
+        centered_object_xy_state = torch.tensor(np.array([0.59, 0.0]), device=self.device, dtype=torch.float32)
         
         # For variable height
         # firs row H 1.7, second row G 1.5, third row F 1.35, fourth row E 1.2
@@ -769,7 +814,17 @@ class FrankaCubeStack(VecTask):
         sampled_object_state[:, 2] = torch.tensor(np.array([1.35]), device=self.device, dtype=torch.float32)
 
         # Initialize rotation, which is no rotation (quat w = 1)
-        sampled_object_state[:, 6] = 1.0
+        # sampled_object_state[:, 6] = 1.0
+
+        '''
+        Sampling the cube 20 degrees in z axis and 15 degrees in Y axis
+        '''
+        sampled_object_state[:, 6] = 0.9763826
+        sampled_object_state[:, 5] = 0.1721626
+        sampled_object_state[:, 4] = 0.1285432
+        sampled_object_state[:, 3] = 0.0226656
+
+        
 
         # If we're verifying valid sampling, we need to check and re-sample if any are not collision-free
         # We use a simple heuristic of checking based on cubes' radius to determine if a collision would occur
@@ -883,6 +938,35 @@ class FrankaCubeStack(VecTask):
         cc = quat_conjugate(current)
         q_r = quat_mul(desired, cc)
         return q_r[:3] * torch.sign(q_r[3]).unsqueeze(-1)
+    
+    def reset_pre_grasp_pose(self, env_ids):
+        joint_poses_list = torch.load(f"{cur_path}/../../misc/joint_poses.pt")
+        pos = joint_poses_list[torch.randint(0, len(joint_poses_list), (1,))[0]].to(self.device)
+        pos = tensor_clamp(pos.unsqueeze(0), self.franka_dof_lower_limits.unsqueeze(0), self.franka_dof_upper_limits)
+        
+        # Reset the internal obs accordingly
+        self._q[env_ids, :] = pos
+        self._qd[env_ids, :] = torch.zeros_like(self._qd[env_ids])
+
+        # Set any position control to the current position, and any vel / effort control to be 0
+        # NOTE: Task takes care of actually propagating these controls in sim using the SimActions API
+        self._pos_control[env_ids, :] = pos
+        self._effort_control[env_ids, :] = torch.zeros_like(pos)
+
+        # Deploy updates
+        multi_env_ids_int32 = self._global_indices[env_ids, 0].flatten()
+        self.gym.set_dof_position_target_tensor_indexed(self.sim,
+                                                        gymtorch.unwrap_tensor(self._pos_control),
+                                                        gymtorch.unwrap_tensor(multi_env_ids_int32),
+                                                        len(multi_env_ids_int32))
+        self.gym.set_dof_actuation_force_tensor_indexed(self.sim,
+                                                        gymtorch.unwrap_tensor(self._effort_control),
+                                                        gymtorch.unwrap_tensor(multi_env_ids_int32),
+                                                        len(multi_env_ids_int32))
+        self.gym.set_dof_state_tensor_indexed(self.sim,
+                                              gymtorch.unwrap_tensor(self._dof_state),
+                                              gymtorch.unwrap_tensor(multi_env_ids_int32),
+                                              len(multi_env_ids_int32))
 
     def pre_physics_step(self, actions):
         
@@ -893,17 +977,31 @@ class FrankaCubeStack(VecTask):
         self.gym.step_graphics(self.sim)
         # render the camera sensors
         self.gym.render_all_camera_sensors(self.sim)
-
+        depth_numpy_gripper = None
+        rgb_image_copy_gripper = None
+        segmask_gripper = None
         # for i in range(0, self.num_envs):
-        for i in range(self.num_envs):
+        for i in range(1):
             # retrieving rgb iamge
-            # for j in range(1,9):
-            #     rgb_camera_tensor = self.gym.get_camera_image_gpu_tensor(self.sim, self.envs[i], self.camera_handles[i][j], gymapi.IMAGE_COLOR)
-            #     torch_rgb_tensor = gymtorch.wrap_tensor(rgb_camera_tensor)
-            #     rgb_image = torch_rgb_tensor.to(self.device)
-            #     rgb_image_copy = torch.reshape(rgb_image, (rgb_image.shape[0], -1, 4))[..., :3]
-            #     cv2.imshow("rgb camera"+str(j), rgb_image_copy.detach().cpu().numpy())
-            #     cv2.waitKey(1)
+            for j in range(1,2):
+                rgb_camera_tensor = self.gym.get_camera_image_gpu_tensor(self.sim, self.envs[i], self.camera_handles[i][j], gymapi.IMAGE_COLOR)
+                torch_rgb_tensor = gymtorch.wrap_tensor(rgb_camera_tensor)
+                rgb_image = torch_rgb_tensor.to(self.device)
+                rgb_image_copy_gripper = torch.reshape(rgb_image, (rgb_image.shape[0], -1, 4))[..., :3]
+                rgb_image_copy_gripper = rgb_image_copy_gripper.clone().detach()
+                
+                mask_camera_tensor = self.gym.get_camera_image_gpu_tensor(self.sim, self.envs[i], self.camera_handles[i][j], gymapi.IMAGE_SEGMENTATION)
+                torch_mask_tensor = gymtorch.wrap_tensor(mask_camera_tensor)
+                segmask_gripper = torch_mask_tensor.to(self.device)
+                segmask_gripper = segmask_gripper.clone().detach()
+
+                depth_camera_tensor = self.gym.get_camera_image_gpu_tensor(self.sim, self.envs[i], self.camera_handles[i][j], gymapi.IMAGE_DEPTH)
+                torch_depth_tensor = gymtorch.wrap_tensor(depth_camera_tensor)
+                depth_image = torch_depth_tensor.to(self.device)
+                depth_image = -depth_image
+                depth_numpy_gripper = depth_image.clone().detach()
+                # cv2.imshow("rgb gripper", rgb_image_copy_gripper.cpu().numpy())
+                # cv2.waitKey(1)
 
             rgb_camera_tensor = self.gym.get_camera_image_gpu_tensor(self.sim, self.envs[i], self.camera_handles[i][0], gymapi.IMAGE_COLOR)
             torch_rgb_tensor = gymtorch.wrap_tensor(rgb_camera_tensor)
@@ -920,20 +1018,6 @@ class FrankaCubeStack(VecTask):
             segmask = torch_mask_tensor.to(self.device)
             
             '''
-            Point cloud with tensor
-            '''
-            # cam_vinv = torch.inverse((torch.tensor(self.gym.get_camera_view_matrix(self.sim, self.envs[i], self.camera_handles[i][0])))).to(self.device)
-            cam_proj = torch.tensor(self.gym.get_camera_proj_matrix(self.sim, self.envs[i], self.camera_handles[i][0]), device=self.device)
-
-            width = self.camera_properties.width
-            height = self.camera_properties.height
-            fx = width/(2/cam_proj[0, 0])
-            fy = height/(2/cam_proj[1, 1])
-            cx = width/2
-            cy = height/2
-            self.camera_info = CameraInfo(width, height, fx, fy, cx, cy)
-            
-            '''
             Here the function is called which will calculate the conical spring score for each object which is denoted by item_id
             ''' 
             object_id = torch.tensor(2).to(self.device)
@@ -943,56 +1027,58 @@ class FrankaCubeStack(VecTask):
                 DexNet 3.0
                 '''
                 if(self.frame_count == 30):
-                    try:
-                        camera_intrinsics = CameraIntrinsics(frame="camera", fx=self.camera_info.fx, fy=self.camera_info.fy, cx=self.camera_info.cx, cy=self.camera_info.cy, skew=0.0, height=self.camera_info.height, width=self.camera_info.width)
-                        
-                        segmask_dexnet = segmask.detach().clone()
-                        segmask_numpy = np.zeros_like(segmask_dexnet.cpu().numpy().astype(np.uint8))
+                    # try:
+                    camera_intrinsics = CameraIntrinsics(frame="camera", fx=self.fx_back_cam, fy=self.fy_back_cam, cx=self.cx_back_cam, cy=self.cy_back_cam, skew=0.0, height=self.height_back_cam, width=self.width_back_cam)
+                    
+                    segmask_dexnet = segmask.clone().detach()
+                    segmask_numpy = np.zeros_like(segmask_dexnet.cpu().numpy().astype(np.uint8))
 
-                        segmask_numpy_temp = np.zeros_like(segmask_dexnet.cpu().numpy().astype(np.uint8))
-                        segmask_numpy_temp[segmask_dexnet.cpu().numpy().astype(np.uint8) == object_id.cpu().numpy()] = 1
+                    segmask_numpy_temp = np.zeros_like(segmask_dexnet.cpu().numpy().astype(np.uint8))
+                    segmask_numpy_temp[segmask_dexnet.cpu().numpy().astype(np.uint8) == object_id.cpu().numpy()] = 1
 
-                        segmask_numpy[segmask_dexnet.cpu().numpy().astype(np.uint8) == object_id.cpu().numpy()] = 255
-                        cv2.imwrite(self.cur_path+"/../../../System_Identification_Data/CSV-Force/segmask.png", segmask_numpy)
-                        segmask_dexnet = BinaryImage(segmask_numpy, frame=camera_intrinsics.frame)
-                        
-                        depth_image_dexnet = depth_image.detach().clone()
-                        depth_image_dexnet -= 0.5
-                        noise_image = torch.normal(0, 0.0009, size=depth_image_dexnet.size()).to(self.device)
-                        depth_image_dexnet = depth_image_dexnet + noise_image
-                        
-                        depth_numpy = depth_image_dexnet.cpu().numpy()
-                        depth_numpy_temp = depth_numpy*segmask_numpy_temp
-                        depth_numpy_temp[depth_numpy_temp == 0] = 0.75
-                        np.save(self.cur_path+"/../../../System_Identification_Data/CSV-Force/depth.npy", depth_numpy_temp)
-                        depth_img_dexnet = DepthImage(depth_numpy_temp, frame=camera_intrinsics.frame)
+                    segmask_numpy[segmask_dexnet.cpu().numpy().astype(np.uint8) == object_id.cpu().numpy()] = 255
+                    # cv2.imwrite(self.cur_path+"/../../../System_Identification_Data/CSV-Force/segmask.png", segmask_numpy)
+                    segmask_dexnet = BinaryImage(segmask_numpy, frame=camera_intrinsics.frame)
+                    
+                    depth_image_dexnet = depth_image.clone().detach()
+                    depth_image_dexnet -= 0.5
+                    noise_image = torch.normal(0, 0.0009, size=depth_image_dexnet.size()).to(self.device)
+                    depth_image_dexnet = depth_image_dexnet + noise_image
+                    
+                    depth_numpy = depth_image_dexnet.cpu().numpy()
+                    depth_numpy_temp = depth_numpy*segmask_numpy_temp
+                    depth_numpy_temp[depth_numpy_temp == 0] = 0.75
+                    # np.save(self.cur_path+"/../../../System_Identification_Data/CSV-Force/depth.npy", depth_numpy_temp)
+                    depth_img_dexnet = DepthImage(depth_numpy_temp, frame=camera_intrinsics.frame)
 
-                        dexnet_object = dexnet3(depth_img_dexnet, segmask_dexnet, None, camera_intrinsics)
-                        action, grasps_and_predictions = dexnet_object.inference()
+                    dexnet_object = dexnet3(depth_img_dexnet, segmask_dexnet, None, camera_intrinsics)
+                    action, grasps_and_predictions = dexnet_object.inference()
+                    
+                    '''
+                    For visualization marking the coordinates of the grasping point selected by DEXNET
+                    '''
+                    # self.rgb_camera_visualization = rgb_image_copy.detach().cpu().numpy()
+                    # cv2.circle(self.rgb_camera_visualization, (action.grasp.center.x, action.grasp.center.y), 3, (255, 0, 0), -1)
 
-                        '''
-                        For visualization marking the coordinates of the grasping point selected by DEXNET
-                        '''
-                        self.rgb_camera_visualization = rgb_image_copy.detach().cpu().numpy()
-                        cv2.circle(self.rgb_camera_visualization, (action.grasp.center.x, action.grasp.center.y), 3, (255, 0, 0), -1)
-
-                        print(f"Quality is {action.q_value} grasp location is {action.grasp.center.x}, {action.grasp.center.y}")
-                        '''
-                        Suction Cup Deformation
-                        '''
-                        depth_image_suction = depth_image.detach().clone()
-                        suction_score_object = calcualte_suction_score(depth_image_suction, segmask, rgb_image_copy, self.camera_info, grasps_and_predictions, object_id, action)
-                        self.score, xyz_point = suction_score_object.calculator()
-
-                        self.object_coordiante_camera = xyz_point.clone()
-                        force_object = calcualte_force(self.score)
-
+                    print(f"Quality is {action.q_value} grasp location is {action.grasp.center.x}, {action.grasp.center.y}")
+                    '''
+                    Suction Cup Deformation
+                    '''
+                    depth_image_suction = depth_image.clone().detach()
+                    suction_score_object = calcualte_suction_score(depth_image_suction, segmask, rgb_image_copy, camera_intrinsics, grasps_and_predictions, object_id)
+                    self.suction_deformation_score, xyz_point, self.grasp_angle = suction_score_object.calculator()
+                    self.object_coordiante_camera = xyz_point.clone().detach()
+                    if(self.suction_deformation_score > 0.2):
+                        force_object = calcualte_force(self.suction_deformation_score)
                         self.force_SI = force_object.regression()
-                        self.dexnet_coordinates = np.array([action.grasp.center.x, action.grasp.center.y])
-                        print(f"suction deforamtion score --> {self.score}, Force along z axis --> {self.force_SI}")
-                    except:
-                        print('DEXNET exception')
-                        self.frame_count -= 1
+                    else:
+                        self.force_SI = 0
+                    self.dexnet_coordinates = np.array([action.grasp.center.x, action.grasp.center.y])
+                    print(f"suction deforamtion score --> {self.suction_deformation_score}, Force along z axis --> {self.force_SI}")
+                    # except:
+                    #     print('DEXNET exception')
+                    #     self.frame_count -= 1
+                    self.reset_pre_grasp_pose(0)
             '''
             To save rgb image, depth image and segmentation mask (comment this section if you do not want to visualize as it slows down the processing)
             '''
@@ -1012,8 +1098,6 @@ class FrankaCubeStack(VecTask):
         translation_base_link = torch.tensor([0, 0, 2.020]).to(self.device)
         T_base_link = transformation_matrix(rotation_matrix_base_link, translation_base_link)
 
-        
-
         # Transformation for camera (wc --> wb*bc)
         rotation_matrix_camera_offset = euler_angles_to_matrix(torch.tensor([180, 0, 0]).to(self.device), "XYZ", degrees=True)
         T_base_link_to_camera = transformation_matrix(rotation_matrix_camera_offset, self.camera_base_link_translation)
@@ -1021,7 +1105,7 @@ class FrankaCubeStack(VecTask):
         T_world_to_camera_link = torch.matmul(T_base_link, T_base_link_to_camera)
 
         # Transformation for object from camera (wo --> wc*co)
-        rotation_matrix_camera_to_object = euler_angles_to_matrix(torch.tensor([0, 0, 0]).to(self.device), "XYZ", degrees=True)
+        rotation_matrix_camera_to_object = euler_angles_to_matrix(torch.tensor([0, -self.grasp_angle[1], self.grasp_angle[0]]).to(self.device), "XYZ", degrees=False)
         T_camera_to_object = transformation_matrix(rotation_matrix_camera_to_object, self.object_coordiante_camera)
         
         # Transformation from base link to object
@@ -1044,7 +1128,6 @@ class FrankaCubeStack(VecTask):
         
         # Orientation error
         action_orientation = matrix_to_euler_angles(T_ee_pose_to_pre_grasp_pose[:3, :3], "XYZ")
-        
         # # Visualization
         '''
         use visulization only to view the trasnformations otherwise keep it disable as it is creating issue for segmentation of object
@@ -1055,7 +1138,6 @@ class FrankaCubeStack(VecTask):
         # sphere_rot = gymapi.Quat.from_euler_zyx(0.5 * math.pi, 0, 0)
         # sphere_pose = gymapi.Transform(r=sphere_rot)
         # sphere_geom = gymutil.WireframeSphereGeometry(0.015, 6, 6, sphere_pose, color=(1, 1, 0))
-
 
         '''
         point camera trasnformation
@@ -1082,12 +1164,12 @@ class FrankaCubeStack(VecTask):
         #     gymutil.draw_lines(sphere_geom, self.gym, self.viewer, self.envs[0], top_drawer_grasp)
 
         # top_drawer_grasp = gymapi.Transform()
-        # camera_trans = T_ee_pose_to_pre_grasp_pose[:3, 3]
+        # camera_trans = T_world_to_object[:3, 3].detach().cpu().numpy()
         # top_drawer_grasp.p = gymapi.Vec3(camera_trans[0], camera_trans[1], camera_trans[2])
-        # top_drawer_rot = R.from_matrix(T_ee_pose_to_pre_grasp_pose[:3, :3])
+        # top_drawer_rot = R.from_matrix(T_world_to_object[:3, :3].detach().cpu().numpy())
         # top_drawer_quat = top_drawer_rot.as_quat()
         # top_drawer_grasp.r = gymapi.Quat(top_drawer_quat[0], top_drawer_quat[1], top_drawer_quat[2], top_drawer_quat[3])
-        # # camera_rotation_x = gymapi.Quat.from_axis_angle(gymapi.Vec3(1, 0, 0), np.deg2rad(180))
+        # camera_rotation_x = gymapi.Quat.from_axis_angle(gymapi.Vec3(1, 0, 0), np.deg2rad(180))
         # gymutil.draw_lines(axes_geom, self.gym, self.viewer, self.envs[0], top_drawer_grasp)
         # gymutil.draw_lines(sphere_geom, self.gym, self.viewer, self.envs[0], top_drawer_grasp)
 
@@ -1102,16 +1184,40 @@ class FrankaCubeStack(VecTask):
             actions = torch.tensor(self.num_envs * [[T_ee_pose_to_pre_grasp_pose[0][3], T_ee_pose_to_pre_grasp_pose[1][3], T_ee_pose_to_pre_grasp_pose[2][3], 0.1*action_orientation[0], 0.1*action_orientation[1], 0.1*action_orientation[2], 1]], dtype=torch.float)
         else:
             actions = torch.tensor(self.num_envs * [[0.1, T_ee_pose_to_pre_grasp_pose[1][3], T_ee_pose_to_pre_grasp_pose[2][3], 0.1*action_orientation[0], 0.1*action_orientation[1], 0.1*action_orientation[2], 1]], dtype=torch.float)
-
-        if(self.frame_count >= 30):
-            if((torch.max(torch.abs(actions[0][:6]))) <= 0.003):
-                self.action_contrib = 0
-            if(self.force_pre_physics > self.force_SI):
-                self.force_encounter = 1
-        if(self.force_encounter == 1):
-            actions = torch.tensor(self.num_envs * [[0.1, T_ee_pose_to_pre_grasp_pose[1][3], T_ee_pose_to_pre_grasp_pose[2][3], 0.1*action_orientation[0], 0.1*action_orientation[1], 0.1*action_orientation[2], 1]], dtype=torch.float)
         
-        self.actions = actions.clone().to(self.device)
+        # force sensor update
+        self.gym.refresh_force_sensor_tensor(self.sim)
+        try:
+            _fsdata = self.gym.acquire_force_sensor_tensor(self.sim)
+            fsdata = gymtorch.wrap_tensor(_fsdata)
+            self.force_pre_physics = -fsdata[0][2].detach().cpu().numpy()
+            if(self.frame_count >= 30):
+                self.force_list = np.append(self.force_list, fsdata[0][2].detach().cpu().numpy())
+                # print("force ", fsdata[0][2].detach().cpu().numpy())
+        except:
+            print("error in force sensor")
+
+        if(self.frame_count >= 60):
+            print(self.force_pre_physics)
+            if((torch.max(torch.abs(actions[0][:6]))) <= 0.007):
+                self.action_contrib = 0
+            if(self.force_pre_physics > torch.max(torch.tensor([2, self.force_SI])) and (torch.max(torch.abs(actions[0][1:6]))) <= 0.007):
+                self.force_encounter = 1
+                camera_intrinsics = CameraIntrinsics(frame="camera", fx=self.fx_gripper, fy=self.fy_gripper, cx=self.cx_gripper, cy=self.cy_gripper, skew=0.0, height=self.height_gripper, width=self.width_gripper)
+                suction_score_object_gripper = calcualte_suction_score(depth_numpy_gripper, segmask_gripper, rgb_image_copy_gripper, camera_intrinsics, None, object_id)
+                score_gripper, _, _ = suction_score_object_gripper.calculator()
+                print("suction gripper ", score_gripper)
+                self.reset_pre_grasp_pose(0)
+            elif(abs(self.force_pre_physics) > torch.max(torch.tensor([10, self.force_SI]))):
+                self.reset_init_arm_pose(torch.tensor([0]))
+                self.reset_object_pose(torch.tensor([0]))
+            
+        else:
+            actions = torch.tensor(self.num_envs * [[0, 0, 0, 0, 0, 0, 1]], dtype=torch.float)
+        # if(self.force_encounter == 1):
+        #     actions = torch.tensor(self.num_envs * [[-0.1, T_ee_pose_to_pre_grasp_pose[1][3], T_ee_pose_to_pre_grasp_pose[2][3], 0.1*action_orientation[0], 0.1*action_orientation[1], 0.1*action_orientation[2], 1]], dtype=torch.float)
+
+        self.actions = actions.clone().detach().to(self.device)
         # Split arm and gripper command
         u_arm, u_gripper = self.actions[:, :-1], self.actions[:, -1]
 
@@ -1135,18 +1241,6 @@ class FrankaCubeStack(VecTask):
         self.gym.set_dof_actuation_force_tensor(self.sim, gymtorch.unwrap_tensor(self._effort_control))
 
     def post_physics_step(self):
-
-        self.gym.refresh_force_sensor_tensor(self.sim)
-        try:
-            _fsdata = self.gym.acquire_force_sensor_tensor(self.sim)
-            fsdata = gymtorch.wrap_tensor(_fsdata)
-            # print("force along z axisl: ", self.fsdata[0][2])
-            self.force_pre_physics = -fsdata[0][2].detach().cpu().numpy()
-            if(self.frame_count >= 30):
-                self.force_list = np.append(self.force_list, fsdata[0][2].detach().cpu().numpy())
-                print("force ", fsdata[0][2].detach().cpu().numpy())
-        except:
-            print("error in force sensor")
 
         self.progress_buf += 1
 
