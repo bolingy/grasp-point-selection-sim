@@ -165,8 +165,9 @@ class FrankaCubeStack(VecTask):
         self.grasp_angle = torch.tensor([0, 0, 0])
 
         #dexnet results
-        self.suction_deformation_score = 0.0
-        self.force_SI = 0.0
+        self.suction_deformation_score = torch.tensor(0.0)
+        self.score_gripper = 0.0
+        self.force_SI = torch.tensor(0)
         self.last_pos = None
 
         with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../configs")+'/collision_primitives_3d.yml') as file:
@@ -670,9 +671,9 @@ class FrankaCubeStack(VecTask):
     
     def reset_init_arm_pose(self, env_ids):
 
-        pos = torch.tensor(np.random.uniform(low=-6.2832, high=6.2832, size=(6,))).to(self.device).type(torch.float)
-        pos = tensor_clamp(pos.unsqueeze(0), self.franka_dof_lower_limits.unsqueeze(0), self.franka_dof_upper_limits)
-        # pos = tensor_clamp(self.franka_default_dof_pos.unsqueeze(0), self.franka_dof_lower_limits.unsqueeze(0), self.franka_dof_upper_limits)
+        # pos = torch.tensor(np.random.uniform(low=-6.2832, high=6.2832, size=(6,))).to(self.device).type(torch.float)
+        # pos = tensor_clamp(pos.unsqueeze(0), self.franka_dof_lower_limits.unsqueeze(0), self.franka_dof_upper_limits)
+        pos = tensor_clamp(self.franka_default_dof_pos.unsqueeze(0), self.franka_dof_lower_limits.unsqueeze(0), self.franka_dof_upper_limits)
         
         # Overwrite gripper init pos (no noise since these are always position controlled)
         # pos[:, -2:] = self.franka_default_dof_pos[-2:]
@@ -699,21 +700,32 @@ class FrankaCubeStack(VecTask):
                                               gymtorch.unwrap_tensor(self._dof_state),
                                               gymtorch.unwrap_tensor(multi_env_ids_int32),
                                               len(multi_env_ids_int32))
+
+        # input_user = input("save?")
+        # if(input_user != str(0)):
+        #     print(self.last_pos)
+        # self.last_pos = pos
+        save_input = input("save it or not? any_key:save 0:dont save --> ")
+        if(save_input != str(0)):
+            seconds = time.time()
+            # self.local_time = time.ctime(seconds)
+            df_SI_paramters = pd.concat([pd.DataFrame(self.force_list), pd.DataFrame(self.dexnet_coordinates), pd.DataFrame(np.array([self.suction_deformation_score.detach().cpu()])), pd.DataFrame(np.array([self.force_SI.detach().cpu()])), pd.DataFrame(np.array([self.score_gripper.detach().cpu()])), pd.DataFrame(self.grasp_angle.detach().cpu().numpy())], axis=1)
+            df_SI_paramters.set_axis(['Force', 'Dexnet coordiantes', 'score', 'force from dexnet point', 'suction score when at contact', 'normal direction of grasp'], axis=1, inplace=True)
+            df_SI_paramters.to_csv(self.cur_path+"/../../../System_Identification_Data/CSV-Force/SI-parameters-"+str(seconds)+".csv", header=True, index=True)
+            cv2.imwrite(self.cur_path+"/../../../System_Identification_Data/CSV-Force/Dexnet-output-"+str(seconds)+".png", cv2.cvtColor(self.rgb_camera_visualization, cv2.COLOR_BGR2RGB))
         
+        # reinitializing the variables
         self.action_contrib = 1
         self.force_encounter = 0
         self.force_list = np.array([])
         # resetting the count for saving the images
         self.frame_count = 0
+        self.frame_count_contact_object = 0
 
         self.progress_buf[env_ids] = 0
         self.reset_buf[env_ids] = 0
 
-        input_user = input("save?")
-        if(input_user != str(0)):
-            print(self.last_pos)
-        self.last_pos = pos
-        
+
     def reset_object_pose(self, env_ids):
         self._reset_init_object_state(object='cubeA', env_ids=env_ids, offset=[0, -0.1], check_valid=True)
         self._reset_init_object_state(object='cubeB', env_ids=env_ids, offset=[0, -0.175], check_valid=True)
@@ -737,6 +749,7 @@ class FrankaCubeStack(VecTask):
         
         self.progress_buf[env_ids] = 0
         self.reset_buf[env_ids] = 0
+        self.frame_count_contact_object = 0
 
     def reset_idx(self, env_ids):
         '''
@@ -755,19 +768,8 @@ class FrankaCubeStack(VecTask):
         # pos[3] = torch.tensor(np.random.uniform(-3.1416, 3.1416))
         
         self.reset_init_arm_pose(env_ids)
-
         # Update cube states
         self.reset_object_pose(env_ids)
-
-        if(self.frame_count != 0):
-            save_input = input("save it or not? any_key:save 0:dont save --> ")
-            if(save_input != str(0)):
-                seconds = time.time()
-                # self.local_time = time.ctime(seconds)
-                df_SI_paramters = pd.concat([pd.DataFrame(self.force_list), pd.DataFrame(self.dexnet_coordinates), pd.DataFrame(np.array([self.suction_deformation_score.detach().cpu()])), pd.DataFrame(np.array([self.force_SI.detach().cpu()]))], axis=1)
-                df_SI_paramters.set_axis(['Force', 'Dexnet coordiantes', 'score', 'force from dexnet point'], axis=1, inplace=True)
-                df_SI_paramters.to_csv(self.cur_path+"/../../../System_Identification_Data/CSV-Force/SI-parameters-"+str(seconds)+".csv", header=True, index=True)
-                cv2.imwrite(self.cur_path+"/../../../System_Identification_Data/CSV-Force/Dexnet-output-"+str(seconds)+".png", cv2.cvtColor(self.rgb_camera_visualization, cv2.COLOR_BGR2RGB))
 
     def _reset_init_object_state(self, object, env_ids, offset, check_valid=True):
         """
@@ -804,7 +806,7 @@ class FrankaCubeStack(VecTask):
             raise ValueError(f"Invalid cube specified, options are 'A' and 'B'; got: {object}")
 
         # Sampling is "centered" around middle of table
-        centered_object_xy_state = torch.tensor(np.array([0.59, 0.0]), device=self.device, dtype=torch.float32)
+        centered_object_xy_state = torch.tensor(np.array([0.52, 0.0]), device=self.device, dtype=torch.float32)
         
         # For variable height
         # firs row H 1.7, second row G 1.5, third row F 1.35, fourth row E 1.2
@@ -812,15 +814,15 @@ class FrankaCubeStack(VecTask):
         sampled_object_state[:, 2] = torch.tensor(np.array([1.35]), device=self.device, dtype=torch.float32)
 
         # Initialize rotation, which is no rotation (quat w = 1)
-        # sampled_object_state[:, 6] = 1.0
+        sampled_object_state[:, 6] = 1.0
 
         '''
         Sampling the cube 20 degrees in z axis and 15 degrees in Y axis
         '''
-        sampled_object_state[:, 6] = 0.9763826
-        sampled_object_state[:, 5] = 0.1721626
-        sampled_object_state[:, 4] = 0.1285432
-        sampled_object_state[:, 3] = 0.0226656
+        # sampled_object_state[:, 6] = 0.9763826
+        # sampled_object_state[:, 5] = 0.1721626
+        # sampled_object_state[:, 4] = 0.1285432
+        # sampled_object_state[:, 3] = 0.0226656
 
         
 
@@ -959,6 +961,16 @@ class FrankaCubeStack(VecTask):
 
     def pre_physics_step(self, actions):
         
+        # force sensor update
+        self.gym.refresh_force_sensor_tensor(self.sim)
+        try:
+            _fsdata = self.gym.acquire_force_sensor_tensor(self.sim)
+            fsdata = gymtorch.wrap_tensor(_fsdata)
+            self.force_pre_physics = -fsdata[0][2].detach().cpu().numpy()
+            print("force regular: ", self.force_pre_physics)
+                # print("force ", fsdata[0][2].detach().cpu().numpy())
+        except:
+            print("error in force sensor")
         '''
         Camera access in the pre physics step to compute the force using suction cup deformation score
         '''
@@ -1015,7 +1027,7 @@ class FrankaCubeStack(VecTask):
                 '''
                 DexNet 3.0
                 '''
-                if(self.frame_count == -30):
+                if(self.frame_count == 30):
                     # try:
                     camera_intrinsics = CameraIntrinsics(frame="camera", fx=self.fx_back_cam, fy=self.fy_back_cam, cx=self.cx_back_cam, cy=self.cy_back_cam, skew=0.0, height=self.height_back_cam, width=self.width_back_cam)
                     
@@ -1061,12 +1073,20 @@ class FrankaCubeStack(VecTask):
                         force_object = calcualte_force(self.suction_deformation_score)
                         self.force_SI = force_object.regression()
                     else:
-                        self.force_SI = 0
+                        self.force_SI = torch.tensor(0).to(self.device)
                     self.dexnet_coordinates = np.array([action.grasp.center.x, action.grasp.center.y])
+                    
+                    self.rgb_camera_visualization = rgb_image_copy.cpu().numpy()
+                    cv2.circle(self.rgb_camera_visualization, self.dexnet_coordinates, 4, (255, 255, 255), -1)
                     print(f"suction deforamtion score --> {self.suction_deformation_score}, Force along z axis --> {self.force_SI}")
                     # except:
                     #     print('DEXNET exception')
                     #     self.frame_count -= 1
+                    # if(self.suction_deformation_score == torch.tensor(0) or self.force_SI <= torch.tensor(0)):
+                    #     self.reset_init_arm_pose(torch.tensor([0]))
+                    #     self.reset_object_pose(torch.tensor([0]))
+                    # else:
+                    
                     self.reset_pre_grasp_pose(0)
             '''
             To save rgb image, depth image and segmentation mask (comment this section if you do not want to visualize as it slows down the processing)
@@ -1168,40 +1188,52 @@ class FrankaCubeStack(VecTask):
         # # camera_rotation_x = gymapi.Quat.from_axis_angle(gymapi.Vec3(1, 0, 0), np.deg2rad(180))
         # gymutil.draw_lines(axes_geom, self.gym, self.viewer, self.envs[0], top_drawer_grasp)
         # gymutil.draw_lines(sphere_geom, self.gym, self.viewer, self.envs[0], top_drawer_grasp)
-
+        self.distance = torch.tensor([1, 1, 1])
         if(self.action_contrib == 1):
-            actions = torch.tensor(self.num_envs * [[T_ee_pose_to_pre_grasp_pose[0][3], T_ee_pose_to_pre_grasp_pose[1][3], T_ee_pose_to_pre_grasp_pose[2][3], 0.1*action_orientation[0], 0.1*action_orientation[1], 0.1*action_orientation[2], 1]], dtype=torch.float)
+            actions = torch.tensor(self.num_envs * [[T_ee_pose_to_pre_grasp_pose[0][3], T_ee_pose_to_pre_grasp_pose[1][3], T_ee_pose_to_pre_grasp_pose[2][3], 0.5*action_orientation[0], 0.5*action_orientation[1], 0.5*action_orientation[2], 1]], dtype=torch.float)
         else:
-            actions = torch.tensor(self.num_envs * [[0.1, T_ee_pose_to_pre_grasp_pose[1][3], T_ee_pose_to_pre_grasp_pose[2][3], 0.1*action_orientation[0], 0.1*action_orientation[1], 0.1*action_orientation[2], 1]], dtype=torch.float)
-        
-        # force sensor update
-        self.gym.refresh_force_sensor_tensor(self.sim)
-        try:
-            _fsdata = self.gym.acquire_force_sensor_tensor(self.sim)
-            fsdata = gymtorch.wrap_tensor(_fsdata)
-            self.force_pre_physics = -fsdata[0][2].detach().cpu().numpy()
-            if(self.frame_count >= 30):
-                self.force_list = np.append(self.force_list, fsdata[0][2].detach().cpu().numpy())
-                # print("force ", fsdata[0][2].detach().cpu().numpy())
-        except:
-            print("error in force sensor")
+            # Transformation for grasp pose (wg --> wo*og)
+            rotation_matrix_grasp_pose = euler_angles_to_matrix(torch.tensor([0, -self.grasp_angle[1], self.grasp_angle[0]]).to(self.device), "XYZ", degrees=True).type(torch.float)
+            translation_grasp_pose = torch.tensor([0.3, 0, 0]).to(self.device).type(torch.float)
+            translation_grasp_pose = torch.matmul(rotation_matrix_grasp_pose, translation_grasp_pose)
+            
+            start_point = T_world_to_pre_grasp_pose[:3, 3]
+            end_point = T_world_to_object[:3, 3]
+            current_point = T_world_to_ee_pose[:3, 3]
+            v = torch.tensor([end_point[0] - start_point[0], end_point[1] - start_point[1], end_point[2] - start_point[2]])
+            # Calculate the vector connecting p1 to p
+            w = torch.tensor([current_point[0] - start_point[0], current_point[1] - start_point[1], current_point[2] - start_point[2]])
+            # Calculate the projection of w onto v
+            t = (w[0]*v[0] + w[1]*v[1] + w[2]*v[2])/(v[0]**2 + v[1]**2 + v[2]**2)
+            # Calculate the closest point on the line to p
+            q = torch.tensor([start_point[0] + t*v[0], start_point[1] + t*v[1], start_point[2] + t*v[2]]).to(self.device)
+            # Find the distance between p and q
+            self.distance = current_point - q
+            actions = torch.tensor(self.num_envs * [[translation_grasp_pose[0]-self.distance[0]*10, translation_grasp_pose[1]-self.distance[1]*10, translation_grasp_pose[2]-10*self.distance[2], 0.5*action_orientation[0], 0.5*action_orientation[1], 0.5*action_orientation[2], 1]], dtype=torch.float)
+            
+            self.force_list = np.append(self.force_list, fsdata[0][2].detach().cpu().numpy())
 
-        if(self.frame_count >= 60):
-            print(self.force_pre_physics)
-            if((torch.max(torch.abs(actions[0][:6]))) <= 0.007):
+        if(self.frame_count >= 30 and self.frame_count_contact_object == 0):
+            if((torch.max(torch.abs(actions[0][:6]))) <= 0.005):
                 self.action_contrib = 0
-            if(self.force_pre_physics > torch.max(torch.tensor([2, self.force_SI])) and (torch.max(torch.abs(actions[0][1:6]))) <= 0.007):
+            if(self.force_pre_physics > torch.max(torch.tensor([2, self.force_SI])) and self.action_contrib == 0):
                 self.force_encounter = 1
                 camera_intrinsics = CameraIntrinsics(frame="camera", fx=self.fx_gripper, fy=self.fy_gripper, cx=self.cx_gripper, cy=self.cy_gripper, skew=0.0, height=self.height_gripper, width=self.width_gripper)
                 suction_score_object_gripper = calcualte_suction_score(depth_numpy_gripper, segmask_gripper, rgb_image_copy_gripper, camera_intrinsics, None, object_id)
-                score_gripper, _, _ = suction_score_object_gripper.calculator()
-                print("suction gripper ", score_gripper)
-                self.reset_pre_grasp_pose(0)
-            elif(abs(self.force_pre_physics) > torch.max(torch.tensor([10, self.force_SI]))):
+                self.score_gripper, _, _ = suction_score_object_gripper.calculator()
+                print("force: ",self.force_pre_physics)
+                print("suction gripper ", self.score_gripper)
+                self.frame_count_contact_object = 1
+            elif(self.force_pre_physics > torch.tensor(10) and self.action_contrib == 1):
+                print("force due to collision: ", self.force_pre_physics)
                 self.reset_init_arm_pose(torch.tensor([0]))
                 self.reset_object_pose(torch.tensor([0]))
-            
-        else:
+        # elif(self.frame_count_contact_object == 1):
+        #     actions = torch.tensor(self.num_envs * [[T_ee_pose_to_pre_grasp_pose[0][3], T_ee_pose_to_pre_grasp_pose[1][3], T_ee_pose_to_pre_grasp_pose[2][3], 0.5*action_orientation[0], 0.5*action_orientation[1], 0.5*action_orientation[2], 1]], dtype=torch.float)
+        #     if((torch.max(torch.abs(actions[0][:6]))) <= 0.1):
+        #         self.reset_init_arm_pose(torch.tensor([0]))
+        #         self.reset_object_pose(torch.tensor([0]))
+        elif(self.frame_count < 30):
             actions = torch.tensor(self.num_envs * [[0, 0, 0, 0, 0, 0, 1]], dtype=torch.float)
         # if(self.force_encounter == 1):
         #     actions = torch.tensor(self.num_envs * [[-0.1, T_ee_pose_to_pre_grasp_pose[1][3], T_ee_pose_to_pre_grasp_pose[2][3], 0.1*action_orientation[0], 0.1*action_orientation[1], 0.1*action_orientation[2], 1]], dtype=torch.float)
