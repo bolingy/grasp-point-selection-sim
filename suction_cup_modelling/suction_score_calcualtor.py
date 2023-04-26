@@ -77,10 +77,10 @@ class calcualte_suction_score():
         X = xyz_point[:, 0]
         Y = xyz_point[:, 1]
         Z = xyz_point[:, 2]
-        u = X*self.camera_intrinsics.fx/Z + self.camera_intrinsics.cx
-        v = Y*self.camera_intrinsics.fy/Z + self.camera_intrinsics.cy
+        U = X*self.camera_intrinsics.fx/Z + self.camera_intrinsics.cx
+        V = Y*self.camera_intrinsics.fy/Z + self.camera_intrinsics.cy
         
-        return u, v
+        return U, V
 
     def find_nearest(self, centroid, points):
         suction_points = centroid[:2] + self.suction_coordinates[:,:2]
@@ -108,7 +108,8 @@ class calcualte_suction_score():
         if(self.grasps_and_predictions == None):
             xyz_point = self.convert_uv_point_to_xyz_point(int(self.segmask.shape[1]/2), int(self.segmask.shape[0]/2))
         else:
-            xyz_point = self.convert_uv_point_to_xyz_point(self.grasps_and_predictions[0][0].center.x, self.grasps_and_predictions[0][0].center.y)
+            xyz_point = centroid_point
+            # xyz_point = self.convert_uv_point_to_xyz_point(self.grasps_and_predictions[0][0].center.x, self.grasps_and_predictions[0][0].center.y)
         if(xyz_point[2] < 0):
             return 0, torch.tensor([0, 0, 0]), torch.tensor([centroid_angle[0], centroid_angle[1], centroid_angle[2]])
         
@@ -121,22 +122,21 @@ class calcualte_suction_score():
         '''
         Store the base coordiantes of the suction cup points
         '''
+        base_coordinate = torch.tensor([0.02, 0, 0]).to(self.device)
+        self.suction_coordinates = base_coordinate.view(1, 3)
+        # |x --y
+        for angle in range(45, 360, 45):
+            x = base_coordinate[0]*math.cos(angle*math.pi/180) - \
+                base_coordinate[1]*math.sin(angle*math.pi/180)
+            y = base_coordinate[0]*math.sin(angle*math.pi/180) + \
+                base_coordinate[1]*math.cos(angle*math.pi/180)
+            '''
+            Appending all the coordiantes in suction_cooridnates and the object_suction_coordinate is the x and y 3D cooridnate of the object suction points
+            '''
+            self.suction_coordinates = torch.cat((self.suction_coordinates, torch.tensor([[x, y, 0.]]).to(self.device)), dim=0).type(torch.float64)
         if(self.grasps_and_predictions != None):
             centroid_angle = torch.tensor(self.normal_cloud_im[int(self.grasps_and_predictions[0][0].center.y)][int(self.grasps_and_predictions[0][0].center.x)]).to(self.device)
             centroid_angle[2] = 0
-
-            base_coordinate = torch.tensor([0.02, 0, 0]).to(self.device)
-            self.suction_coordinates = base_coordinate.view(1, 3)
-            # |x --y
-            for angle in range(45, 360, 45):
-                x = base_coordinate[0]*math.cos(angle*math.pi/180) - \
-                    base_coordinate[1]*math.sin(angle*math.pi/180)
-                y = base_coordinate[0]*math.sin(angle*math.pi/180) + \
-                    base_coordinate[1]*math.cos(angle*math.pi/180)
-                '''
-                Appending all the coordiantes in suction_cooridnates and the object_suction_coordinate is the x and y 3D cooridnate of the object suction points
-                '''
-                self.suction_coordinates = torch.cat((self.suction_coordinates, torch.tensor([[x, y, 0.]]).to(self.device)), dim=0).type(torch.float64)
         
             rotation_matrix_normal = euler_angles_to_matrix(torch.tensor([0, 0, -90]).to(self.device), "XYZ", degrees=True)
             null_translation = torch.tensor([0, 0, 0]).to(self.device)
@@ -157,9 +157,14 @@ class calcualte_suction_score():
         Finding the suction points accordint to the base coordiante
         '''
         point_cloud_suction = self.find_nearest(xyz_point, points)
-        # u, v = self.convert_xyz_point_to_uv_point(point_cloud_suction)
+        U, V = self.convert_xyz_point_to_uv_point(point_cloud_suction)
+        
+        for i in range(8):
+            if(self.segmask[V[i].type(torch.int)][U[i].type(torch.int)] == 0):
+                return 0, torch.tensor([0, 0, 0]), torch.tensor([centroid_angle[0], centroid_angle[1], centroid_angle[2]])
         
         thresh = torch.sum(torch.sum(point_cloud_suction[:,:2] - (self.suction_coordinates[:, :2] + xyz_point[:2]), 1))
+        
         if(abs(thresh) > 0.005):
             return 0, torch.tensor([0, 0, 0]), torch.tensor([centroid_angle[0], centroid_angle[1], centroid_angle[2]])
 
