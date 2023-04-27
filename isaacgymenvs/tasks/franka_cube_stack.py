@@ -159,6 +159,7 @@ class FrankaCubeStack(VecTask):
         self.rgb_camera_visualization = None
         self.dexnet_coordinates = np.array([])
         self.grasp_angle = torch.tensor([0, 0, 0])
+        self.grasps_and_predictions = None
 
         #dexnet results
         self.suction_deformation_score = torch.tensor(0.0)
@@ -197,6 +198,8 @@ class FrankaCubeStack(VecTask):
         self.frame_count_contact_object = torch.zeros(self.num_envs)
         self.force_encounter = torch.zeros(self.num_envs)
         self.frame_count = torch.zeros(self.num_envs)
+        self.stack_grasp_points = []
+        self.free_envs_list = torch.arange(self.num_envs, device=self.device)
 
         # Reset all environments
         self.reset_idx(torch.arange(self.num_envs, device=self.device))
@@ -611,6 +614,7 @@ class FrankaCubeStack(VecTask):
         self.fy_back_cam = self.height_back_cam/(2/cam_proj_back_cam[1, 1])
         self.cx_back_cam = self.width_back_cam/2
         self.cy_back_cam = self.height_back_cam/2
+        self.camera_intrinsics_back_cam = CameraIntrinsics(frame="camera", fx=self.fx_back_cam, fy=self.fy_back_cam, cx=self.cx_back_cam, cy=self.cy_back_cam, skew=0.0, height=self.height_back_cam, width=self.width_back_cam)
 
         # cam_vinv_gripper = torch.inverse((torch.tensor(self.gym.get_camera_view_matrix(self.sim, self.envs[i], self.camera_handles[i][0])))).to(self.device)
         cam_proj_gripper = torch.tensor(self.gym.get_camera_proj_matrix(self.sim, self.envs[0], self.camera_handles[0][1]), device=self.device)
@@ -976,67 +980,56 @@ class FrankaCubeStack(VecTask):
         # render the camera sensors
         self.gym.render_all_camera_sensors(self.sim)
 
-        depth_numpy_gripper = None
-        rgb_image_copy_gripper = None
-        segmask_gripper = None
-
         object_id = torch.tensor(2).to(self.device)
         total_objects = 3+len(self.object_models)
-
-        if(self.init_camera_capture == 1):
-            self.init_camera_capture == 0
-
-            rgb_camera_tensor = self.gym.get_camera_image_gpu_tensor(self.sim, self.envs[0], self.camera_handles[0][0], gymapi.IMAGE_COLOR)
+        if((len(self.stack_grasp_points) == 0) and (30 in self.frame_count[self.free_envs_list])):
+            '''
+            DexNet 3.0
+            '''
+            camera_env = torch.where(self.frame_count[self.free_envs_list] == 30)[0][0]
+            # Cooldown period at the start for the simualtor to settle down
+            rgb_camera_tensor = self.gym.get_camera_image_gpu_tensor(self.sim, self.envs[camera_env], self.camera_handles[camera_env][0], gymapi.IMAGE_COLOR)
             torch_rgb_tensor = gymtorch.wrap_tensor(rgb_camera_tensor)
             rgb_image = torch_rgb_tensor.to(self.device)
             rgb_image_copy = torch.reshape(rgb_image, (rgb_image.shape[0], -1, 4))[..., :3]
 
-            depth_camera_tensor = self.gym.get_camera_image_gpu_tensor(self.sim, self.envs[0], self.camera_handles[0][0], gymapi.IMAGE_DEPTH)
+            depth_camera_tensor = self.gym.get_camera_image_gpu_tensor(self.sim, self.envs[camera_env], self.camera_handles[camera_env][0], gymapi.IMAGE_DEPTH)
             torch_depth_tensor = gymtorch.wrap_tensor(depth_camera_tensor)
             depth_image = torch_depth_tensor.to(self.device)
             depth_image = -depth_image
             
-            mask_camera_tensor = self.gym.get_camera_image_gpu_tensor(self.sim, self.envs[0], self.camera_handles[0][0], gymapi.IMAGE_SEGMENTATION)
+            mask_camera_tensor = self.gym.get_camera_image_gpu_tensor(self.sim, self.envs[camera_env], self.camera_handles[camera_env][0], gymapi.IMAGE_SEGMENTATION)
             torch_mask_tensor = gymtorch.wrap_tensor(mask_camera_tensor)
             segmask = torch_mask_tensor.to(self.device)
+            segmask_dexnet = segmask.clone().detach()
+            segmask_numpy = np.zeros_like(segmask_dexnet.cpu().numpy().astype(np.uint8))
+            segmask_numpy_temp = np.zeros_like(segmask_dexnet.cpu().numpy().astype(np.uint8))
+            segmask_numpy_temp[segmask_dexnet.cpu().numpy().astype(np.uint8) == object_id.cpu().numpy()] = 1
+            segmask_numpy[segmask_dexnet.cpu().numpy().astype(np.uint8) == object_id.cpu().numpy()] = 255
+            segmask_dexnet = BinaryImage(segmask_numpy, frame=self.camera_intrinsics_back_cam.frame)
             
-            '''
-            Here the function is called which will calculate the conical spring score for each object which is denoted by item_id
-            ''' 
-            # To check if all the objects have been settled down or not
-            if(len(torch.unique(segmask)) == total_objects+1):
-                '''
-                DexNet 3.0
-                '''
-                # Cooldown period at the start for the simualtor to settle down
-                if(self.frame_count[0] == 30):
-                    camera_intrinsics = CameraIntrinsics(frame="camera", fx=self.fx_back_cam, fy=self.fy_back_cam, cx=self.cx_back_cam, cy=self.cy_back_cam, skew=0.0, height=self.height_back_cam, width=self.width_back_cam)
-                    
-                    segmask_dexnet = segmask.clone().detach()
-                    segmask_numpy = np.zeros_like(segmask_dexnet.cpu().numpy().astype(np.uint8))
-                    segmask_numpy_temp = np.zeros_like(segmask_dexnet.cpu().numpy().astype(np.uint8))
-                    segmask_numpy_temp[segmask_dexnet.cpu().numpy().astype(np.uint8) == object_id.cpu().numpy()] = 1
-                    segmask_numpy[segmask_dexnet.cpu().numpy().astype(np.uint8) == object_id.cpu().numpy()] = 255
-                    segmask_dexnet = BinaryImage(segmask_numpy, frame=camera_intrinsics.frame)
-                    
-                    depth_image_dexnet = depth_image.clone().detach()
-                    depth_image_dexnet -= 0.5
-                    noise_image = torch.normal(0, 0.0009, size=depth_image_dexnet.size()).to(self.device)
-                    depth_image_dexnet = depth_image_dexnet + noise_image
-                    depth_numpy = depth_image_dexnet.cpu().numpy()
-                    depth_numpy_temp = depth_numpy*segmask_numpy_temp
-                    depth_numpy_temp[depth_numpy_temp == 0] = 0.75
-                    depth_img_dexnet = DepthImage(depth_numpy_temp, frame=camera_intrinsics.frame)
+            depth_image_dexnet = depth_image.clone().detach()
+            depth_image_dexnet -= 0.5
+            noise_image = torch.normal(0, 0.0009, size=depth_image_dexnet.size()).to(self.device)
+            depth_image_dexnet = depth_image_dexnet + noise_image
+            depth_numpy = depth_image_dexnet.cpu().numpy()
+            depth_numpy_temp = depth_numpy*segmask_numpy_temp
+            depth_numpy_temp[depth_numpy_temp == 0] = 0.75
+            depth_img_dexnet = DepthImage(depth_numpy_temp, frame=self.camera_intrinsics_back_cam.frame)
 
-                    dexnet_object = dexnet3(depth_img_dexnet, segmask_dexnet, None, camera_intrinsics)
-                    grasp_data, grasps_and_predictions = dexnet_object.inference()
-                    print(f"Quality is {grasp_data.q_value} grasp location is {grasp_data.grasp.center.x}, {grasp_data.grasp.center.y}")
+            dexnet_object = dexnet3(depth_img_dexnet, segmask_dexnet, None, self.camera_intrinsics_back_cam)
+            grasp_data, self.grasps_and_predictions = dexnet_object.inference()
+            for i in range(25):
+                self.stack_grasp_points.append(self.grasps_and_predictions[i])
+            print(f"Quality is {grasp_data.q_value} grasp location is {grasp_data.grasp.center.x}, {grasp_data.grasp.center.y}")
 
+            for avail_env in self.free_envs_list:
+                if(self.frame_count[avail_env] == 30):
                     '''
                     Suction Cup Deformation
                     '''
                     depth_image_suction = depth_image.clone().detach()
-                    suction_score_object = calcualte_suction_score(depth_image_suction, segmask, rgb_image_copy, camera_intrinsics, grasps_and_predictions, object_id)
+                    suction_score_object = calcualte_suction_score(depth_image_suction, segmask, rgb_image_copy, self.camera_intrinsics_back_cam, self.grasps_and_predictions, object_id)
                     self.suction_deformation_score, xyz_point, self.grasp_angle = suction_score_object.calculator()
                     self.object_coordiante_camera = xyz_point.clone().detach()
                     if(self.suction_deformation_score > 0.2):
@@ -1055,6 +1048,7 @@ class FrankaCubeStack(VecTask):
                     else:
                         self.reset_pre_grasp_pose(torch.arange(self.num_envs, device=self.device, dtype=torch.long))
 
+        
         '''
         Commands to the arm for eef control
         '''
