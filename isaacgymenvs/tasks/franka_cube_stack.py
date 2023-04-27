@@ -682,15 +682,15 @@ class FrankaCubeStack(VecTask):
         return self.obs_buf
     
     def reset_init_arm_pose(self, env_ids):
-
         # pos = torch.tensor(np.random.uniform(low=-6.2832, high=6.2832, size=(6,))).to(self.device).type(torch.float)
         # pos = tensor_clamp(pos.unsqueeze(0), self.franka_dof_lower_limits.unsqueeze(0), self.franka_dof_upper_limits)
         pos = tensor_clamp(self.franka_default_dof_pos.unsqueeze(0), self.franka_dof_lower_limits.unsqueeze(0), self.franka_dof_upper_limits)
         pos = pos.repeat(len(env_ids), 1)
-        print(pos)
         # Overwrite gripper init pos (no noise since these are always position controlled)
         # pos[:, -2:] = self.franka_default_dof_pos[-2:]
         # Reset the internal obs accordingly
+        if(len(env_ids) == 1):
+            pos = torch.reshape(pos, (6,))
         self._q[env_ids, :] = pos
         self._qd[env_ids, :] = torch.zeros_like(self._qd[env_ids])
 
@@ -933,12 +933,16 @@ class FrankaCubeStack(VecTask):
         return q_r[:3] * torch.sign(q_r[3]).unsqueeze(-1)
     
     def reset_pre_grasp_pose(self, env_ids):
-        joint_poses_list = torch.load(f"{cur_path}/../../misc/joint_poses.pt")
-        pos = joint_poses_list[torch.randint(0, len(joint_poses_list), (1,))[0]].to(self.device)
-        pos = pos.repeat(len(env_ids), 1)
-        print(pos)
-        # pos = tensor_clamp(pos.unsqueeze(0), self.franka_dof_lower_limits.unsqueeze(0), self.franka_dof_upper_limits)
         
+        pos = torch.zeros(0, 6).to(self.device)
+        for _ in env_ids:
+            joint_poses_list = torch.load(f"{cur_path}/../../misc/joint_poses.pt")
+            temp_pos = joint_poses_list[torch.randint(0, len(joint_poses_list), (1,))[0]].to(self.device)
+            temp_pos = torch.reshape(temp_pos, (1, len(temp_pos)))
+            pos = torch.cat([pos, temp_pos])
+        # pos = tensor_clamp(pos.unsqueeze(0), self.franka_dof_lower_limits.unsqueeze(0), self.franka_dof_upper_limits)
+        if(len(env_ids) == 1):
+            pos = torch.reshape(pos, (6,))
         # Reset the internal obs accordingly
         self._q[env_ids, :] = pos
         self._qd[env_ids, :] = torch.zeros_like(self._qd[env_ids])
@@ -1046,10 +1050,10 @@ class FrankaCubeStack(VecTask):
 
                     # For now we are resettign all the environments
                     if(self.suction_deformation_score == torch.tensor(0) or self.force_SI <= torch.tensor(0)):
-                        self.reset_init_arm_pose(torch.arange(self.num_envs, device=self.device))
-                        self.reset_object_pose(torch.arange(self.num_envs, device=self.device))
+                        self.reset_init_arm_pose(torch.arange(self.num_envs, device=self.device, dtype=torch.long))
+                        self.reset_object_pose(torch.arange(self.num_envs, device=self.device, dtype=torch.long))
                     else:
-                        self.reset_pre_grasp_pose(torch.arange(self.num_envs, device=self.device))
+                        self.reset_pre_grasp_pose(torch.arange(self.num_envs, device=self.device, dtype=torch.long))
 
         '''
         Commands to the arm for eef control
@@ -1107,7 +1111,7 @@ class FrankaCubeStack(VecTask):
                 # Find the distance between p and q
                 self.distance = current_point - q
                 action_env = torch.tensor([[translation_grasp_pose[0]-self.distance[0]*10, translation_grasp_pose[1]-self.distance[1]*10, translation_grasp_pose[2]-10*self.distance[2], 0.5*action_orientation[0], 0.5*action_orientation[1], 0.5*action_orientation[2], 1]], dtype=torch.float)
-                print("actions env ", env_count, actions)
+                
             if(self.frame_count[env_count] >= torch.tensor(30) and self.frame_count_contact_object[env_count] == torch.tensor(0)):
                 if((torch.max(torch.abs(action_env[0][:6]))) <= 0.005):
                     self.action_contrib[env_count] = 0
@@ -1151,9 +1155,9 @@ class FrankaCubeStack(VecTask):
 
             actions = torch.cat([actions, action_env])
             self.frame_count[env_count] += torch.tensor(1)
-        if(env_list_reset.any() == torch.tensor(1)):
-            self.reset_init_arm_pose(env_list_reset.to(self.device))
-            self.reset_object_pose(env_list_reset.to(self.device))
+        if(len(env_list_reset) != 0):
+            self.reset_init_arm_pose(env_list_reset.to(self.device).type(torch.long))
+            self.reset_object_pose(env_list_reset.to(self.device).type(torch.long))
 
         # if(self.force_encounter == 1):
         #     actions = torch.tensor(self.num_envs * [[-0.1, T_ee_pose_to_pre_grasp_pose[1][3], T_ee_pose_to_pre_grasp_pose[2][3], 0.1*action_orientation[0], 0.1*action_orientation[1], 0.1*action_orientation[2], 1]], dtype=torch.float)
