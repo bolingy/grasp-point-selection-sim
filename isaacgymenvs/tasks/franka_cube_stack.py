@@ -158,14 +158,14 @@ class FrankaCubeStack(VecTask):
         self.force_list = np.array([])
         self.rgb_camera_visualization = None
         self.dexnet_coordinates = np.array([])
-        self.grasp_angle = torch.tensor([0, 0, 0])
+        self.grasp_angle = torch.tensor([[0, 0, 0]])
         self.grasps_and_predictions = None
 
-        #dexnet results
-        self.suction_deformation_score = torch.tensor(0.0)
-        self.score_gripper = 0.0
-        self.force_SI = torch.tensor(0)
-        self.last_pos = None
+        # #dexnet results
+        # self.suction_deformation_score = torch.tensor(0.0)
+        # self.score_gripper = 0.0
+        # self.force_SI = torch.tensor(0)
+        # self.last_pos = None
 
         # Parallelization
         self.init_camera_capture = 1
@@ -198,9 +198,30 @@ class FrankaCubeStack(VecTask):
         self.frame_count_contact_object = torch.zeros(self.num_envs)
         self.force_encounter = torch.zeros(self.num_envs)
         self.frame_count = torch.zeros(self.num_envs)
-        self.stack_grasp_points = []
-        self.free_envs_list = torch.arange(self.num_envs, device=self.device)
+        # self.stack_grasp_points = [[]]*self.num_envs
+        self.free_envs_list = torch.Tensor()
+        print("No. of environments: ", self.num_envs)
+        for i in range(self.num_envs):
+            self.free_envs_list = torch.cat((self.free_envs_list, torch.tensor([i]))).type(torch.int)
 
+        self.suction_deformation_score_temp = torch.Tensor()
+        self.xyz_point_temp = torch.Tensor([])
+        self.grasp_angle_temp = torch.Tensor([])
+        self.force_SI_temp = torch.Tensor()
+
+        self.suction_deformation_score_env = {}
+        self.xyz_point_env = {}
+        self.grasp_angle_env = {}
+        self.force_SI_env = {}
+
+        self.suction_deformation_score = {}
+        self.xyz_point = {}
+        self.grasp_angle = {}
+        self.force_SI = {}
+
+        self.env_reset_id_env = torch.ones(self.num_envs)
+        
+        
         # Reset all environments
         self.reset_idx(torch.arange(self.num_envs, device=self.device))
 
@@ -724,6 +745,7 @@ class FrankaCubeStack(VecTask):
             self.force_encounter[env_id] = 0
             self.frame_count_contact_object[env_id] = 0
             self.frame_count[env_id] = 0
+            self.free_envs_list = torch.cat((self.free_envs_list, torch.tensor([env_id])))
         
         self.progress_buf[env_ids] = 0
         self.reset_buf[env_ids] = 0
@@ -757,6 +779,7 @@ class FrankaCubeStack(VecTask):
             self.action_contrib[env_id] = 1
             self.force_encounter[env_id] = 0
             self.frame_count_contact_object[env_id] = 0
+            self.env_reset_id_env[env_id] = 1
 
     def reset_idx(self, env_ids):
         '''
@@ -982,180 +1005,224 @@ class FrankaCubeStack(VecTask):
 
         object_id = torch.tensor(2).to(self.device)
         total_objects = 3+len(self.object_models)
-        if((len(self.stack_grasp_points) == 0) and (30 in self.frame_count[self.free_envs_list])):
-            '''
-            DexNet 3.0
-            '''
-            camera_env = torch.where(self.frame_count[self.free_envs_list] == 30)[0][0]
-            # Cooldown period at the start for the simualtor to settle down
-            rgb_camera_tensor = self.gym.get_camera_image_gpu_tensor(self.sim, self.envs[camera_env], self.camera_handles[camera_env][0], gymapi.IMAGE_COLOR)
-            torch_rgb_tensor = gymtorch.wrap_tensor(rgb_camera_tensor)
-            rgb_image = torch_rgb_tensor.to(self.device)
-            rgb_image_copy = torch.reshape(rgb_image, (rgb_image.shape[0], -1, 4))[..., :3]
-
-            depth_camera_tensor = self.gym.get_camera_image_gpu_tensor(self.sim, self.envs[camera_env], self.camera_handles[camera_env][0], gymapi.IMAGE_DEPTH)
-            torch_depth_tensor = gymtorch.wrap_tensor(depth_camera_tensor)
-            depth_image = torch_depth_tensor.to(self.device)
-            depth_image = -depth_image
-            
-            mask_camera_tensor = self.gym.get_camera_image_gpu_tensor(self.sim, self.envs[camera_env], self.camera_handles[camera_env][0], gymapi.IMAGE_SEGMENTATION)
-            torch_mask_tensor = gymtorch.wrap_tensor(mask_camera_tensor)
-            segmask = torch_mask_tensor.to(self.device)
-            segmask_dexnet = segmask.clone().detach()
-            segmask_numpy = np.zeros_like(segmask_dexnet.cpu().numpy().astype(np.uint8))
-            segmask_numpy_temp = np.zeros_like(segmask_dexnet.cpu().numpy().astype(np.uint8))
-            segmask_numpy_temp[segmask_dexnet.cpu().numpy().astype(np.uint8) == object_id.cpu().numpy()] = 1
-            segmask_numpy[segmask_dexnet.cpu().numpy().astype(np.uint8) == object_id.cpu().numpy()] = 255
-            segmask_dexnet = BinaryImage(segmask_numpy, frame=self.camera_intrinsics_back_cam.frame)
-            
-            depth_image_dexnet = depth_image.clone().detach()
-            depth_image_dexnet -= 0.5
-            noise_image = torch.normal(0, 0.0009, size=depth_image_dexnet.size()).to(self.device)
-            depth_image_dexnet = depth_image_dexnet + noise_image
-            depth_numpy = depth_image_dexnet.cpu().numpy()
-            depth_numpy_temp = depth_numpy*segmask_numpy_temp
-            depth_numpy_temp[depth_numpy_temp == 0] = 0.75
-            depth_img_dexnet = DepthImage(depth_numpy_temp, frame=self.camera_intrinsics_back_cam.frame)
-
-            dexnet_object = dexnet3(depth_img_dexnet, segmask_dexnet, None, self.camera_intrinsics_back_cam)
-            grasp_data, self.grasps_and_predictions = dexnet_object.inference()
-            for i in range(25):
-                self.stack_grasp_points.append(self.grasps_and_predictions[i])
-            print(f"Quality is {grasp_data.q_value} grasp location is {grasp_data.grasp.center.x}, {grasp_data.grasp.center.y}")
-
-            for avail_env in self.free_envs_list:
-                if(self.frame_count[avail_env] == 30):
-                    '''
-                    Suction Cup Deformation
-                    '''
-                    depth_image_suction = depth_image.clone().detach()
-                    suction_score_object = calcualte_suction_score(depth_image_suction, segmask, rgb_image_copy, self.camera_intrinsics_back_cam, self.grasps_and_predictions, object_id)
-                    self.suction_deformation_score, xyz_point, self.grasp_angle = suction_score_object.calculator()
-                    self.object_coordiante_camera = xyz_point.clone().detach()
-                    if(self.suction_deformation_score > 0.2):
-                        force_object = calcualte_force(self.suction_deformation_score)
-                        self.force_SI = force_object.regression()
-                    else:
-                        self.force_SI = torch.tensor(0).to(self.device)
-                    self.dexnet_coordinates = np.array([grasp_data.grasp.center.x, grasp_data.grasp.center.y])
-                    
-                    print(f"suction deforamtion score --> {self.suction_deformation_score}, Force along z axis --> {self.force_SI}")
-
-                    # For now we are resettign all the environments
-                    if(self.suction_deformation_score == torch.tensor(0) or self.force_SI <= torch.tensor(0)):
-                        self.reset_init_arm_pose(torch.arange(self.num_envs, device=self.device, dtype=torch.long))
-                        self.reset_object_pose(torch.arange(self.num_envs, device=self.device, dtype=torch.long))
-                    else:
-                        self.reset_pre_grasp_pose(torch.arange(self.num_envs, device=self.device, dtype=torch.long))
-
-        
         '''
         Commands to the arm for eef control
         '''
-        # Transformation for object from camera (wo --> wc*co)
-        rotation_matrix_camera_to_object = euler_angles_to_matrix(torch.tensor([0, -self.grasp_angle[1], self.grasp_angle[0]]).to(self.device), "XYZ", degrees=False)
-        T_camera_to_object = transformation_matrix(rotation_matrix_camera_to_object, self.object_coordiante_camera)
-        # Transformation from base link to object
-        T_world_to_object = torch.matmul(self.T_world_to_camera_link, T_camera_to_object)
-        # Transformation for pre grasp pose (wp --> wo*op)
-        rotation_matrix_pre_grasp_pose = euler_angles_to_matrix(torch.tensor([0, 0, 0]).to(self.device), "XYZ", degrees=True)
-        translation_pre_grasp_pose = torch.tensor([-0.25, 0, 0]).to(self.device)
-        T_pre_grasp_pose = transformation_matrix(rotation_matrix_pre_grasp_pose, translation_pre_grasp_pose)
-        # Transformation of object with base link to pre grasp pose
-        T_world_to_pre_grasp_pose = torch.matmul(T_world_to_object, T_pre_grasp_pose)
         
-        actions = torch.zeros(0, 7)
+        self.actions = torch.zeros(0, 7)
         env_list_reset = torch.tensor([])
         for env_count in range(self.num_envs):
-            # force sensor update
-            self.gym.refresh_force_sensor_tensor(self.sim)
-            try:
-                _fsdata = self.gym.acquire_force_sensor_tensor(self.sim)
-                fsdata = gymtorch.wrap_tensor(_fsdata)
-                self.force_pre_physics = -fsdata[0][2].detach().cpu().numpy()
-            except:
-                print("error in force sensor")
-            # Transformation for pre grasp pose (pe --> inv(we)*wp --> ew*wp)
-            rotation_matrix_ee_pose = quaternion_to_matrix(self.curr_poses[env_count][self.multi_body_idx['ee_link']][3:7])
-            translation_ee_pose = self.curr_poses[env_count][self.multi_body_idx['ee_link']][:3]
-            T_world_to_ee_pose = transformation_matrix(rotation_matrix_ee_pose, translation_ee_pose)
-            T_ee_pose_to_pre_grasp_pose = torch.matmul(torch.inverse(T_world_to_ee_pose), T_world_to_pre_grasp_pose)
-            # Orientation error
-            action_orientation = matrix_to_euler_angles(T_ee_pose_to_pre_grasp_pose[:3, :3], "XYZ")
-        
-            self.distance = torch.tensor([1, 1, 1])
-            if(self.action_contrib[env_count] == torch.tensor(1)):
-                action_env = torch.tensor([[T_ee_pose_to_pre_grasp_pose[0][3], T_ee_pose_to_pre_grasp_pose[1][3], T_ee_pose_to_pre_grasp_pose[2][3], 0.5*action_orientation[0], 0.5*action_orientation[1], 0.5*action_orientation[2], 1]], dtype=torch.float)
-            else:
-                # Transformation for grasp pose (wg --> wo*og)
-                rotation_matrix_grasp_pose = euler_angles_to_matrix(torch.tensor([0, -self.grasp_angle[1], self.grasp_angle[0]]).to(self.device), "XYZ", degrees=True).type(torch.float)
-                translation_grasp_pose = torch.tensor([0.3, 0, 0]).to(self.device).type(torch.float)
-                translation_grasp_pose = torch.matmul(rotation_matrix_grasp_pose, translation_grasp_pose)
+            if((env_count in self.free_envs_list) and self.frame_count[env_count] == 30):
+                '''
+                DexNet 3.0
+                '''
+                camera_env = env_count
+                # Cooldown period at the start for the simualtor to settle down
+                rgb_camera_tensor = self.gym.get_camera_image_gpu_tensor(self.sim, self.envs[camera_env], self.camera_handles[camera_env][0], gymapi.IMAGE_COLOR)
+                torch_rgb_tensor = gymtorch.wrap_tensor(rgb_camera_tensor)
+                rgb_image = torch_rgb_tensor.to(self.device)
+                rgb_image_copy = torch.reshape(rgb_image, (rgb_image.shape[0], -1, 4))[..., :3]
+
+                depth_camera_tensor = self.gym.get_camera_image_gpu_tensor(self.sim, self.envs[camera_env], self.camera_handles[camera_env][0], gymapi.IMAGE_DEPTH)
+                torch_depth_tensor = gymtorch.wrap_tensor(depth_camera_tensor)
+                depth_image = torch_depth_tensor.to(self.device)
+                depth_image = -depth_image
                 
-                start_point = T_world_to_pre_grasp_pose[:3, 3]
-                end_point = T_world_to_object[:3, 3]
-                current_point = T_world_to_ee_pose[:3, 3]
-                v = torch.tensor([end_point[0] - start_point[0], end_point[1] - start_point[1], end_point[2] - start_point[2]])
-                # Calculate the vector connecting p1 to p
-                w = torch.tensor([current_point[0] - start_point[0], current_point[1] - start_point[1], current_point[2] - start_point[2]])
-                # Calculate the projection of w onto v
-                t = (w[0]*v[0] + w[1]*v[1] + w[2]*v[2])/(v[0]**2 + v[1]**2 + v[2]**2)
-                # Calculate the closest point on the line to p
-                q = torch.tensor([start_point[0] + t*v[0], start_point[1] + t*v[1], start_point[2] + t*v[2]]).to(self.device)
-                # Find the distance between p and q
-                self.distance = current_point - q
-                action_env = torch.tensor([[translation_grasp_pose[0]-self.distance[0]*10, translation_grasp_pose[1]-self.distance[1]*10, translation_grasp_pose[2]-10*self.distance[2], 0.5*action_orientation[0], 0.5*action_orientation[1], 0.5*action_orientation[2], 1]], dtype=torch.float)
+                mask_camera_tensor = self.gym.get_camera_image_gpu_tensor(self.sim, self.envs[camera_env], self.camera_handles[camera_env][0], gymapi.IMAGE_SEGMENTATION)
+                torch_mask_tensor = gymtorch.wrap_tensor(mask_camera_tensor)
+                segmask = torch_mask_tensor.to(self.device)
+                segmask_dexnet = segmask.clone().detach()
+                segmask_numpy = np.zeros_like(segmask_dexnet.cpu().numpy().astype(np.uint8))
+                segmask_numpy_temp = np.zeros_like(segmask_dexnet.cpu().numpy().astype(np.uint8))
+                segmask_numpy_temp[segmask_dexnet.cpu().numpy().astype(np.uint8) == object_id.cpu().numpy()] = 1
+                segmask_numpy[segmask_dexnet.cpu().numpy().astype(np.uint8) == object_id.cpu().numpy()] = 255
+                segmask_dexnet = BinaryImage(segmask_numpy, frame=self.camera_intrinsics_back_cam.frame)
                 
-            if(self.frame_count[env_count] >= torch.tensor(30) and self.frame_count_contact_object[env_count] == torch.tensor(0)):
-                if((torch.max(torch.abs(action_env[0][:6]))) <= 0.005):
-                    self.action_contrib[env_count] = 0
-                if(self.force_pre_physics > torch.max(torch.tensor([2, self.force_SI])) and self.action_contrib[env_count] == 0):
-                    self.force_encounter[env_count] = 1
-                    camera_intrinsics = CameraIntrinsics(frame="camera", fx=self.fx_gripper, fy=self.fy_gripper, cx=self.cx_gripper, cy=self.cy_gripper, skew=0.0, height=self.height_gripper, width=self.width_gripper)
-                    '''
-                    Gripper camera
-                    '''
-                    rgb_camera_tensor = self.gym.get_camera_image_gpu_tensor(self.sim, self.envs[env_count], self.camera_handles[env_count][1], gymapi.IMAGE_COLOR)
-                    torch_rgb_tensor = gymtorch.wrap_tensor(rgb_camera_tensor)
-                    rgb_image = torch_rgb_tensor.to(self.device)
-                    rgb_image_copy_gripper = torch.reshape(rgb_image, (rgb_image.shape[0], -1, 4))[..., :3]
-                    rgb_image_copy_gripper = rgb_image_copy_gripper.clone().detach()
+                depth_image_dexnet = depth_image.clone().detach()
+                depth_image_dexnet -= 0.5
+                noise_image = torch.normal(0, 0.0009, size=depth_image_dexnet.size()).to(self.device)
+                depth_image_dexnet = depth_image_dexnet + noise_image
+                depth_numpy = depth_image_dexnet.cpu().numpy()
+                depth_numpy_temp = depth_numpy*segmask_numpy_temp
+                depth_numpy_temp[depth_numpy_temp == 0] = 0.75
+                depth_img_dexnet = DepthImage(depth_numpy_temp, frame=self.camera_intrinsics_back_cam.frame)
+
+                dexnet_object = dexnet3(depth_img_dexnet, segmask_dexnet, None, self.camera_intrinsics_back_cam)
+                grasp_data, self.grasps_and_predictions = dexnet_object.inference()
+                self.suction_deformation_score_temp = torch.Tensor()
+                self.xyz_point_temp = torch.Tensor([])
+                self.grasp_angle_temp = torch.Tensor([])
+                self.force_SI_temp = torch.Tensor()
+                for i in range(2):
+                    stack_grasp_points = self.grasps_and_predictions[i][0]
+                    # dexnet score
+                    # print(self.grasps_and_predictions[i][1])
+                    depth_image_suction = depth_image.clone().detach()
+                    suction_score_object = calcualte_suction_score(depth_image_suction, segmask, rgb_image_copy, self.camera_intrinsics_back_cam, stack_grasp_points, object_id)
+                    suction_deformation_score, xyz_point, grasp_angle = suction_score_object.calculator()
+                    self.suction_deformation_score_temp = torch.cat((self.suction_deformation_score_temp, torch.tensor([suction_deformation_score]))).type(torch.float)
+                    self.xyz_point_temp = torch.cat((self.xyz_point_temp, xyz_point))
+                    self.grasp_angle_temp = torch.cat((self.grasp_angle_temp, grasp_angle))
                     
-                    mask_camera_tensor = self.gym.get_camera_image_gpu_tensor(self.sim, self.envs[env_count], self.camera_handles[env_count][1], gymapi.IMAGE_SEGMENTATION)
-                    torch_mask_tensor = gymtorch.wrap_tensor(mask_camera_tensor)
-                    segmask_gripper = torch_mask_tensor.to(self.device)
-                    segmask_gripper = segmask_gripper.clone().detach()
+                    self.object_coordiante_camera = xyz_point.clone().detach()
+                    if(suction_deformation_score > 0.2):
+                        force_object = calcualte_force(suction_deformation_score)
+                        force_SI = force_object.regression()
+                    else:
+                        force_SI = torch.tensor(0).to(self.device)
+                    
+                    self.force_SI_temp = torch.cat((self.force_SI_temp, torch.tensor([force_SI])))
+                    # pixel coordinates
+                    # dexnet_coordinates = np.array([grasp_data.grasp.center.x, grasp_data.grasp.center.y])
+                    # print(f"Quality is {grasp_data.q_value} grasp location is {grasp_data.grasp.center.x}, {grasp_data.grasp.center.y}")
+                    # print(f"suction deforamtion score --> {suction_deformation_score}, Force along z axis --> {force_SI}")
+                self.suction_deformation_score_env[env_count] = self.suction_deformation_score_temp
+                self.grasp_angle_env[env_count] = self.grasp_angle_temp
+                self.force_SI_env[env_count] = self.force_SI_temp
+                self.xyz_point_env[env_count] = self.xyz_point_temp
+                self.free_envs_list = self.free_envs_list[1:]
+            '''
+            How to pop out form tensor stack
+            def pop():
+                item = self.stack[-1]  # Get the last element in the tensor
+                self.stack = self.stack[:-1]  # Remove the last element from the tensor
+                return item
+            '''
+            self.action_env = torch.tensor([[0, 0, 0, 0, 0, 0, 1]], dtype=torch.float)
+            print(self.frame_count[env_count], self.grasp_angle_env)
+            if((self.env_reset_id_env[env_count] == 1) and (self.frame_count[env_count] > 30)):
+                self.env_reset_id_env[env_count] = torch.tensor(0)
+                self.action_env = torch.tensor([[0, 0, 0, 0, 0, 0, 1]], dtype=torch.float)
+                # print(self.frame_count[env_count], self.grasp_angle_env[env_count], len(self.grasp_angle_env[env_count]))
+                if(len(self.grasp_angle_env[env_count]) != 0):
+                    self.suction_deformation_score[env_count] = self.suction_deformation_score_env[env_count][0]
+                    self.suction_deformation_score_env[env_count] = self.suction_deformation_score_env[env_count][1:]
+                    self.grasp_angle[env_count] = self.grasp_angle_env[env_count][0]
+                    self.grasp_angle_env[env_count] = self.grasp_angle_env[env_count][1:]
+                    self.xyz_point[env_count] = self.xyz_point_env[env_count][0]
+                    self.xyz_point_env[env_count] = self.xyz_point_env[env_count][1:]
+                    self.force_SI[env_count] = self.force_SI_env[env_count][0]
+                    self.force_SI_env[env_count] = self.force_SI_env[env_count][1:]
+                    # env_list_reset = torch.cat((env_list_reset, torch.tensor([env_count])), axis=0)
+                    self.reset_pre_grasp_pose(torch.tensor([env_count]).to(self.device).type(torch.long))
+                else:
+                    self.reset_init_arm_pose(torch.tensor([env_count]).to(self.device).type(torch.long))
+                    self.reset_object_pose(torch.tensor([env_count]).to(self.device).type(torch.long))
+            elif(self.env_reset_id_env[env_count] == 0 and self.frame_count[env_count] > 30):
+                # Transformation for object from camera (wo --> wc*co)
+                rotation_matrix_camera_to_object = euler_angles_to_matrix(torch.tensor([0, -self.grasp_angle[env_count][1], self.grasp_angle[env_count][0]]).to(self.device), "XYZ", degrees=False)
+                T_camera_to_object = transformation_matrix(rotation_matrix_camera_to_object, self.xyz_point[env_count])
+                # Transformation from base link to object
+                T_world_to_object = torch.matmul(self.T_world_to_camera_link, T_camera_to_object)
+                # Transformation for pre grasp pose (wp --> wo*op)
+                rotation_matrix_pre_grasp_pose = euler_angles_to_matrix(torch.tensor([0, 0, 0]).to(self.device), "XYZ", degrees=True)
+                translation_pre_grasp_pose = torch.tensor([-0.25, 0, 0]).to(self.device)
+                T_pre_grasp_pose = transformation_matrix(rotation_matrix_pre_grasp_pose, translation_pre_grasp_pose)
+                # Transformation of object with base link to pre grasp pose
+                T_world_to_pre_grasp_pose = torch.matmul(T_world_to_object, T_pre_grasp_pose)
 
-                    depth_camera_tensor = self.gym.get_camera_image_gpu_tensor(self.sim, self.envs[env_count], self.camera_handles[env_count][1], gymapi.IMAGE_DEPTH)
-                    torch_depth_tensor = gymtorch.wrap_tensor(depth_camera_tensor)
-                    depth_image = torch_depth_tensor.to(self.device)
-                    depth_image = -depth_image
-                    depth_numpy_gripper = depth_image.clone().detach()
+                # For now we are resettign all the environments
+                # if(suction_deformation_score == torch.tensor(0) or force_SI <= torch.tensor(0)):
+                #     self.reset_init_arm_pose(torch.arange(self.num_envs, device=self.device, dtype=torch.long))
+                #     self.reset_object_pose(torch.arange(self.num_envs, device=self.device, dtype=torch.long))
+                # else:
+                #     self.reset_pre_grasp_pose(torch.arange(self.num_envs, device=self.device, dtype=torch.long))
 
-                    suction_score_object_gripper = calcualte_suction_score(depth_numpy_gripper, segmask_gripper, rgb_image_copy_gripper, camera_intrinsics, None, object_id)
-                    self.score_gripper, _, _ = suction_score_object_gripper.calculator()
-                    print("force: ",self.force_pre_physics)
-                    print("suction gripper ", self.score_gripper)
-                    self.frame_count_contact_object[env_count] = 1
-                elif(self.force_pre_physics > torch.tensor(10) and self.action_contrib[env_count] == 1):
-                    print("force due to collision: ", self.force_pre_physics)
+                # force sensor update
+                self.gym.refresh_force_sensor_tensor(self.sim)
+                try:
+                    _fsdata = self.gym.acquire_force_sensor_tensor(self.sim)
+                    fsdata = gymtorch.wrap_tensor(_fsdata)
+                    self.force_pre_physics = -fsdata[env_count][2].detach().cpu().numpy()
+                except:
+                    print("error in force sensor")
+                # Transformation for pre grasp pose (pe --> inv(we)*wp --> ew*wp)
+                rotation_matrix_ee_pose = quaternion_to_matrix(self.curr_poses[env_count][self.multi_body_idx['ee_link']][3:7])
+                translation_ee_pose = self.curr_poses[env_count][self.multi_body_idx['ee_link']][:3]
+                T_world_to_ee_pose = transformation_matrix(rotation_matrix_ee_pose, translation_ee_pose)
+                T_ee_pose_to_pre_grasp_pose = torch.matmul(torch.inverse(T_world_to_ee_pose), T_world_to_pre_grasp_pose)
+                # Orientation error
+                action_orientation = matrix_to_euler_angles(T_ee_pose_to_pre_grasp_pose[:3, :3], "XYZ")
+            
+                self.distance = torch.tensor([1, 1, 1])
+                if(self.action_contrib[env_count] == torch.tensor(1)):
+                    self.action_env = torch.tensor([[T_ee_pose_to_pre_grasp_pose[0][3], T_ee_pose_to_pre_grasp_pose[1][3], T_ee_pose_to_pre_grasp_pose[2][3], 0.5*action_orientation[0], 0.5*action_orientation[1], 0.5*action_orientation[2], 1]], dtype=torch.float)
+                else:
+                    # Transformation for grasp pose (wg --> wo*og)
+                    rotation_matrix_grasp_pose = euler_angles_to_matrix(torch.tensor([0, -self.grasp_angle[env_count][1], self.grasp_angle[env_count][0]]).to(self.device), "XYZ", degrees=True).type(torch.float)
+                    translation_grasp_pose = torch.tensor([0.3, 0, 0]).to(self.device).type(torch.float)
+                    translation_grasp_pose = torch.matmul(rotation_matrix_grasp_pose, translation_grasp_pose)
+                    
+                    start_point = T_world_to_pre_grasp_pose[:3, 3]
+                    end_point = T_world_to_object[:3, 3]
+                    current_point = T_world_to_ee_pose[:3, 3]
+                    v = torch.tensor([end_point[0] - start_point[0], end_point[1] - start_point[1], end_point[2] - start_point[2]])
+                    # Calculate the vector connecting p1 to p
+                    w = torch.tensor([current_point[0] - start_point[0], current_point[1] - start_point[1], current_point[2] - start_point[2]])
+                    # Calculate the projection of w onto v
+                    t = (w[0]*v[0] + w[1]*v[1] + w[2]*v[2])/(v[0]**2 + v[1]**2 + v[2]**2)
+                    # Calculate the closest point on the line to p
+                    q = torch.tensor([start_point[0] + t*v[0], start_point[1] + t*v[1], start_point[2] + t*v[2]]).to(self.device)
+                    # Find the distance between p and q
+                    self.distance = current_point - q
+                    self.action_env = torch.tensor([[translation_grasp_pose[0]-self.distance[0]*10, translation_grasp_pose[1]-self.distance[1]*10, translation_grasp_pose[2]-10*self.distance[2], 0.5*action_orientation[0], 0.5*action_orientation[1], 0.5*action_orientation[2], 1]], dtype=torch.float)
+                    
+                if(self.frame_count[env_count] >= torch.tensor(30) and self.frame_count_contact_object[env_count] == torch.tensor(0)):
+                    if((torch.max(torch.abs(self.action_env[0][:6]))) <= 0.005):
+                        self.action_contrib[env_count] = 0
+                    if(self.force_pre_physics > torch.max(torch.tensor([2, self.force_SI[env_count]])) and self.action_contrib[env_count] == 0):
+                        self.force_encounter[env_count] = 1
+                        camera_intrinsics = CameraIntrinsics(frame="camera", fx=self.fx_gripper, fy=self.fy_gripper, cx=self.cx_gripper, cy=self.cy_gripper, skew=0.0, height=self.height_gripper, width=self.width_gripper)
+                        '''
+                        Gripper camera
+                        '''
+                        rgb_camera_tensor = self.gym.get_camera_image_gpu_tensor(self.sim, self.envs[env_count], self.camera_handles[env_count][1], gymapi.IMAGE_COLOR)
+                        torch_rgb_tensor = gymtorch.wrap_tensor(rgb_camera_tensor)
+                        rgb_image = torch_rgb_tensor.to(self.device)
+                        rgb_image_copy_gripper = torch.reshape(rgb_image, (rgb_image.shape[0], -1, 4))[..., :3]
+                        rgb_image_copy_gripper = rgb_image_copy_gripper.clone().detach()
+                        
+                        mask_camera_tensor = self.gym.get_camera_image_gpu_tensor(self.sim, self.envs[env_count], self.camera_handles[env_count][1], gymapi.IMAGE_SEGMENTATION)
+                        torch_mask_tensor = gymtorch.wrap_tensor(mask_camera_tensor)
+                        segmask_gripper = torch_mask_tensor.to(self.device)
+                        segmask_gripper = segmask_gripper.clone().detach()
+
+                        depth_camera_tensor = self.gym.get_camera_image_gpu_tensor(self.sim, self.envs[env_count], self.camera_handles[env_count][1], gymapi.IMAGE_DEPTH)
+                        torch_depth_tensor = gymtorch.wrap_tensor(depth_camera_tensor)
+                        depth_image = torch_depth_tensor.to(self.device)
+                        depth_image = -depth_image
+                        depth_numpy_gripper = depth_image.clone().detach()
+
+                        suction_score_object_gripper = calcualte_suction_score(depth_numpy_gripper, segmask_gripper, rgb_image_copy_gripper, camera_intrinsics, None, object_id)
+                        self.score_gripper, _, _ = suction_score_object_gripper.calculator()
+                        print(env_count, " force: ", self.force_pre_physics)
+                        print(env_count, " suction gripper ", self.score_gripper)
+                        self.frame_count_contact_object[env_count] = 1
+                    elif(self.force_pre_physics > torch.tensor(10) and self.action_contrib[env_count] == 1):
+                        print(env_count, " force due to collision: ", self.force_pre_physics)
+                        env_list_reset = torch.cat((env_list_reset, torch.tensor([env_count])), axis=0)
+                elif(self.frame_count_contact_object[env_count] == torch.tensor(1)):
+                    self.action_env = torch.tensor([[T_ee_pose_to_pre_grasp_pose[0][3], T_ee_pose_to_pre_grasp_pose[1][3], T_ee_pose_to_pre_grasp_pose[2][3], 0.5*action_orientation[0], 0.5*action_orientation[1], 0.5*action_orientation[2], 1]], dtype=torch.float)
+                    if((torch.max(torch.abs(self.action_env[0][:6]))) <= 0.1):
+                        env_list_reset = torch.cat((env_list_reset, torch.tensor([env_count])), axis=0)
+                elif(self.frame_count[env_count] < torch.tensor(30)):
+                    self.action_env = torch.tensor([[0, 0, 0, 0, 0, 0, 1]], dtype=torch.float)
+
+                if(torch.any(self.xyz_point[env_count]) == torch.tensor(0.)):
+                    self.action_env = torch.tensor([[0, 0, 0, 0, 0, 0, 1]], dtype=torch.float)
                     env_list_reset = torch.cat((env_list_reset, torch.tensor([env_count])), axis=0)
-            elif(self.frame_count_contact_object[env_count] == torch.tensor(1)):
-                action_env = torch.tensor([[T_ee_pose_to_pre_grasp_pose[0][3], T_ee_pose_to_pre_grasp_pose[1][3], T_ee_pose_to_pre_grasp_pose[2][3], 0.5*action_orientation[0], 0.5*action_orientation[1], 0.5*action_orientation[2], 1]], dtype=torch.float)
-                if((torch.max(torch.abs(action_env[0][:6]))) <= 0.1):
-                    env_list_reset = torch.cat((env_list_reset, torch.tensor([env_count])), axis=0)
-            elif(self.frame_count[env_count] < torch.tensor(30)):
-                action_env = torch.tensor([[0, 0, 0, 0, 0, 0, 1]], dtype=torch.float)
 
-            actions = torch.cat([actions, action_env])
+            self.actions = torch.cat([self.actions, self.action_env])
             self.frame_count[env_count] += torch.tensor(1)
+
         if(len(env_list_reset) != 0):
-            self.reset_init_arm_pose(env_list_reset.to(self.device).type(torch.long))
+            self.reset_pre_grasp_pose(env_list_reset.to(self.device).type(torch.long))
+            # self.reset_init_arm_pose(env_list_reset.to(self.device).type(torch.long))
             self.reset_object_pose(env_list_reset.to(self.device).type(torch.long))
 
         # if(self.force_encounter == 1):
         #     actions = torch.tensor(self.num_envs * [[-0.1, T_ee_pose_to_pre_grasp_pose[1][3], T_ee_pose_to_pre_grasp_pose[2][3], 0.1*action_orientation[0], 0.1*action_orientation[1], 0.1*action_orientation[2], 1]], dtype=torch.float)
-        self.actions = actions.clone().detach().to(self.device)
+        self.actions = self.actions.clone().detach().to(self.device)
         # Split arm and gripper command
         u_arm, u_gripper = self.actions[:, :-1], self.actions[:, -1]
 
