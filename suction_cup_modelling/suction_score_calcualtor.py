@@ -101,7 +101,7 @@ class calcualte_suction_score():
         points = self.convert_rgb_depth_to_point_cloud()
         centroid_point = torch.FloatTensor([torch.median(points[:, 0]), torch.median(points[:, 1]), torch.median(points[:, 2])]).to(self.device)
         if(centroid_point.any() == float('nan')):
-            return 0, torch.tensor([0, 0, 0]), torch.tensor([centroid_angle[0], centroid_angle[1], centroid_angle[2]])
+            return 0, torch.tensor([[0, 0, 0]]), torch.tensor([[centroid_angle[0], centroid_angle[1], centroid_angle[2]]])
         '''
         Given sample point convert to xyz point
         '''
@@ -109,9 +109,9 @@ class calcualte_suction_score():
             xyz_point = self.convert_uv_point_to_xyz_point(int(self.segmask.shape[1]/2), int(self.segmask.shape[0]/2))
         else:
             xyz_point = centroid_point
-            # xyz_point = self.convert_uv_point_to_xyz_point(self.grasps_and_predictions[0][0].center.x, self.grasps_and_predictions[0][0].center.y)
+            xyz_point = self.convert_uv_point_to_xyz_point(self.grasps_and_predictions.center.x, self.grasps_and_predictions.center.y)
         if(xyz_point[2] < 0):
-            return 0, torch.tensor([0, 0, 0]), torch.tensor([centroid_angle[0], centroid_angle[1], centroid_angle[2]])
+            return 0, torch.tensor([[0, 0, 0]]), torch.tensor([[centroid_angle[0], centroid_angle[1], centroid_angle[2]]])
         
         '''
         Debugging print statements one for the width and height and other one is the centroid
@@ -135,15 +135,15 @@ class calcualte_suction_score():
             '''
             self.suction_coordinates = torch.cat((self.suction_coordinates, torch.tensor([[x, y, 0.]]).to(self.device)), dim=0).type(torch.float64)
         if(self.grasps_and_predictions != None):
-            centroid_angle = torch.tensor(self.normal_cloud_im[int(self.grasps_and_predictions[0][0].center.y)][int(self.grasps_and_predictions[0][0].center.x)]).to(self.device)
+            centroid_angle = torch.tensor(self.normal_cloud_im[int(self.grasps_and_predictions.center.y)][int(self.grasps_and_predictions.center.x)]).to(self.device)
             centroid_angle[2] = 0
         
             rotation_matrix_normal = euler_angles_to_matrix(torch.tensor([0, 0, -90]).to(self.device), "XYZ", degrees=True)
-            null_translation = torch.tensor([0, 0, 0]).to(self.device)
+            null_translation = torch.tensor([[0, 0, 0]]).to(self.device)
             T_normal = transformation_matrix(rotation_matrix_normal, null_translation)
             rotation_matrix_suction = euler_angles_to_matrix(centroid_angle.clone().detach().to(self.device), "XYZ", degrees=False)
             
-            null_translation = torch.tensor([0, 0, 0]).to(self.device)
+            null_translation = torch.tensor([[0, 0, 0]]).to(self.device)
             T_suction = transformation_matrix(rotation_matrix_suction, null_translation)
             '''
             The trasnformation of the suction is inverse thus trasnpose is applied (ws --> wn*(sn)^-1)
@@ -161,12 +161,12 @@ class calcualte_suction_score():
         
         for i in range(8):
             if(self.segmask[V[i].type(torch.int)][U[i].type(torch.int)] == 0):
-                return 0, torch.tensor([0, 0, 0]), torch.tensor([centroid_angle[0], centroid_angle[1], centroid_angle[2]])
+                return 0, torch.tensor([[0, 0, 0]]), torch.tensor([[centroid_angle[0], centroid_angle[1], centroid_angle[2]]])
         
         thresh = torch.sum(torch.sum(point_cloud_suction[:,:2] - (self.suction_coordinates[:, :2] + xyz_point[:2]), 1))
         
         if(abs(thresh) > 0.005):
-            return 0, torch.tensor([0, 0, 0]), torch.tensor([centroid_angle[0], centroid_angle[1], centroid_angle[2]])
+            return 0, torch.tensor([[0, 0, 0]]), torch.tensor([[centroid_angle[0], centroid_angle[1], centroid_angle[2]]])
 
         '''
         Calcualte the conical spring score
@@ -177,5 +177,5 @@ class calcualte_suction_score():
         ri = torch.clamp(torch.abs(point_cloud_suction[:, 2] - minimum_suction_point) / 0.023, max=1.0)
         suction_score = 1-torch.max(ri)
 
-        return suction_score, torch.tensor([xyz_point[2], -xyz_point[0], -xyz_point[1]]), torch.tensor([centroid_angle[0], centroid_angle[1], centroid_angle[2]])
+        return suction_score, torch.tensor([[xyz_point[2], -xyz_point[0], -xyz_point[1]]]), torch.tensor([[centroid_angle[0], centroid_angle[1], centroid_angle[2]]])
 
