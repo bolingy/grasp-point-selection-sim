@@ -176,9 +176,15 @@ class FrankaCubeStack(VecTask):
         self._refresh()
 
         # Primitives
-        self.primitives = Primitives(self.num_envs, self.states['eef_pos'])
+        self.primitives = Primitives(self.num_envs, self.states['eef_pos'], device=self.device)
         self.counter = 0
-        self.action = "down"
+        self.action = ["right", "down", "left", "up"]
+        # Axis are inverted TODO Fix it
+        self.target_dist = [torch.tensor([0., 0.3, 0.], device=self.device),
+                            torch.tensor([0., 0., 0.3], device=self.device),
+                            torch.tensor([0., -0.3, 0.], device=self.device),
+                            torch.tensor([0., 0., -0.3], device=self.device)]
+        self.prim = 0
 
     def create_sim(self):
         self.sim_params.up_axis = gymapi.UP_AXIS_Z
@@ -736,8 +742,11 @@ class FrankaCubeStack(VecTask):
                 # #############
                 pass
             elif self.counter > 10:
-                u_arm[:, 0:3], self.action = self.primitives.move(self.action, self.states["eef_pos"], [0, 0, 0])
-
+                
+                u_arm[:, 0:3], self.action[self.prim] = self.primitives.move(self.action[self.prim], self.states["eef_pos"], self.target_dist[self.prim])
+            
+            if self.action[self.prim] == "done":
+                self.prim += 1
             # for i in range(len(self.envs)):
             #     goal = self.primitives.get_gymapi_transform([u_arm[i][0], u_arm[i][1], u_arm[i][2], 0, 0, 0, 1])
             #     self.draw_sphere(self.envs[i], goal, 0.05, 12, (0, 0, 1))
