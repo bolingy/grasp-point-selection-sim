@@ -690,21 +690,6 @@ class FrankaCubeStack(VecTask):
 
         # Refresh states
         self._update_states()
-
-    def compute_reward(self, actions):
-        self.rew_buf[:], self.reset_buf[:] = compute_franka_reward(
-            self.reset_buf, self.progress_buf, self.actions, self.states, self.reward_settings, self.max_episode_length
-        )
-
-    def compute_observations(self):
-        self._refresh()
-        obs = ["cubeA_quat", "cubeA_pos", "cubeA_to_cubeB_pos", "eef_pos", "eef_quat"]
-        obs += ["q_gripper"] if self.control_type == "osc" else ["q"]
-        self.obs_buf = torch.cat([self.states[ob] for ob in obs], dim=-1)
-
-        maxs = {ob: torch.max(self.states[ob]).item() for ob in obs}
-
-        return self.obs_buf
     
     def reset_init_arm_pose(self, env_ids):
         # pos = torch.tensor(np.random.uniform(low=-6.2832, high=6.2832, size=(6,))).to(self.device).type(torch.float)
@@ -1048,7 +1033,8 @@ class FrankaCubeStack(VecTask):
                 depth_img_dexnet = DepthImage(depth_numpy_temp, frame=self.camera_intrinsics_back_cam.frame)
 
                 dexnet_object = dexnet3(depth_img_dexnet, segmask_dexnet, None, self.camera_intrinsics_back_cam)
-                grasp_data, self.grasps_and_predictions = dexnet_object.inference()
+                _, self.grasps_and_predictions = dexnet_object.inference()
+                del dexnet_object
                 self.suction_deformation_score_temp = torch.Tensor()
                 self.xyz_point_temp = torch.Tensor([])
                 self.grasp_angle_temp = torch.Tensor([])
@@ -1060,6 +1046,8 @@ class FrankaCubeStack(VecTask):
                     depth_image_suction = depth_image.clone().detach()
                     suction_score_object = calcualte_suction_score(depth_image_suction, segmask, rgb_image_copy, self.camera_intrinsics_back_cam, stack_grasp_points, object_id)
                     suction_deformation_score, xyz_point, grasp_angle = suction_score_object.calculator()
+                    del suction_score_object
+
                     self.suction_deformation_score_temp = torch.cat((self.suction_deformation_score_temp, torch.tensor([suction_deformation_score]))).type(torch.float)
                     self.xyz_point_temp = torch.cat((self.xyz_point_temp, xyz_point))
                     self.grasp_angle_temp = torch.cat((self.grasp_angle_temp, grasp_angle))
@@ -1068,6 +1056,7 @@ class FrankaCubeStack(VecTask):
                     if(suction_deformation_score > 0.2):
                         force_object = calcualte_force(suction_deformation_score)
                         force_SI = force_object.regression()
+                        del force_object
                     else:
                         force_SI = torch.tensor(0).to(self.device)
                     
@@ -1089,7 +1078,7 @@ class FrankaCubeStack(VecTask):
                 return item
             '''
             self.action_env = torch.tensor([[0, 0, 0, 0, 0, 0, 1]], dtype=torch.float)
-            print(self.frame_count[env_count], self.grasp_angle_env)
+            # print(self.frame_count[env_count], self.grasp_angle_env)
             if((self.env_reset_id_env[env_count] == 1) and (self.frame_count[env_count] > 30)):
                 self.env_reset_id_env[env_count] = torch.tensor(0)
                 self.action_env = torch.tensor([[0, 0, 0, 0, 0, 0, 1]], dtype=torch.float)
@@ -1195,6 +1184,8 @@ class FrankaCubeStack(VecTask):
 
                         suction_score_object_gripper = calcualte_suction_score(depth_numpy_gripper, segmask_gripper, rgb_image_copy_gripper, camera_intrinsics, None, object_id)
                         self.score_gripper, _, _ = suction_score_object_gripper.calculator()
+                        del suction_score_object_gripper
+
                         print(env_count, " force: ", self.force_pre_physics)
                         print(env_count, " suction gripper ", self.score_gripper)
                         self.frame_count_contact_object[env_count] = 1
@@ -1237,93 +1228,6 @@ class FrankaCubeStack(VecTask):
         self.gym.set_dof_actuation_force_tensor(self.sim, gymtorch.unwrap_tensor(self._effort_control))
 
     def post_physics_step(self):
-
-        self.progress_buf += 1
-
         env_ids = self.reset_buf.nonzero(as_tuple=False).squeeze(-1)
         if len(env_ids) > 0:
             self.reset_idx(env_ids)
-
-        self.compute_observations()
-        self.compute_reward(self.actions)
-
-        # debug viz
-        if self.viewer and self.debug_viz:
-            self.gym.clear_lines(self.viewer)
-            self.gym.refresh_rigid_body_state_tensor(self.sim)
-
-            # Grab relevant states to visualize
-            eef_pos = self.states["eef_pos"]
-            eef_rot = self.states["eef_quat"]
-            cubeA_pos = self.states["cubeA_pos"]
-            cubeA_rot = self.states["cubeA_quat"]
-            cubeB_pos = self.states["cubeB_pos"]
-            cubeB_rot = self.states["cubeB_quat"]
-
-            # Plot visualizations
-            for i in range(self.num_envs):
-                for pos, rot in zip((eef_pos, cubeA_pos, cubeB_pos), (eef_rot, cubeA_rot, cubeB_rot)):
-                    px = (pos[i] + quat_apply(rot[i], to_torch([1, 0, 0], device=self.device) * 0.2)).cpu().numpy()
-                    py = (pos[i] + quat_apply(rot[i], to_torch([0, 1, 0], device=self.device) * 0.2)).cpu().numpy()
-                    pz = (pos[i] + quat_apply(rot[i], to_torch([0, 0, 1], device=self.device) * 0.2)).cpu().numpy()
-
-                    p0 = pos[i].cpu().numpy()
-                    self.gym.add_lines(self.viewer, self.envs[i], 1, [p0[0], p0[1], p0[2], px[0], px[1], px[2]], [0.85, 0.1, 0.1])
-                    self.gym.add_lines(self.viewer, self.envs[i], 1, [p0[0], p0[1], p0[2], py[0], py[1], py[2]], [0.1, 0.85, 0.1])
-                    self.gym.add_lines(self.viewer, self.envs[i], 1, [p0[0], p0[1], p0[2], pz[0], pz[1], pz[2]], [0.1, 0.1, 0.85])
-
-        
-#####################################################################
-###=========================jit functions=========================###
-#####################################################################
-@torch.jit.script
-def compute_franka_reward(
-    reset_buf, progress_buf, actions, states, reward_settings, max_episode_length
-):
-    # type: (Tensor, Tensor, Tensor, Dict[str, Tensor], Dict[str, float], float) -> Tuple[Tensor, Tensor]
-
-    # Compute per-env physical parameters
-    target_height = states["cubeB_size"] + states["cubeA_size"] / 2.0
-    cubeA_size = states["cubeA_size"]
-    cubeB_size = states["cubeB_size"]
-
-    # distance from hand to the cubeA
-    d = torch.norm(states["cubeA_pos_relative"], dim=-1)
-    #d_lf = torch.norm(states["cubeA_pos"] - states["eef_lf_pos"], dim=-1)
-    #d_rf = torch.norm(states["cubeA_pos"] - states["eef_rf_pos"], dim=-1)
-    dist_reward = 1 - torch.tanh(10.0 * (d) / 3) #1 - torch.tanh(10.0 * (d + d_lf + d_rf) / 3)
-
-    # reward for lifting cubeA
-    cubeA_height = states["cubeA_pos"][:, 2] - reward_settings["table_height"]
-    cubeA_lifted = (cubeA_height - cubeA_size) > 0.04
-    lift_reward = cubeA_lifted
-
-    # how closely aligned cubeA is to cubeB (only provided if cubeA is lifted)
-    offset = torch.zeros_like(states["cubeA_to_cubeB_pos"])
-    offset[:, 2] = (cubeA_size + cubeB_size) / 2
-    d_ab = torch.norm(states["cubeA_to_cubeB_pos"] + offset, dim=-1)
-    align_reward = (1 - torch.tanh(10.0 * d_ab)) * cubeA_lifted
-
-    # Dist reward is maximum of dist and align reward
-    dist_reward = torch.max(dist_reward, align_reward)
-
-    # final reward for stacking successfully (only if cubeA is close to target height and corresponding location, and gripper is not grasping)
-    cubeA_align_cubeB = (torch.norm(states["cubeA_to_cubeB_pos"][:, :2], dim=-1) < 0.02)
-    cubeA_on_cubeB = torch.abs(cubeA_height - target_height) < 0.02
-    gripper_away_from_cubeA = (d > 0.04)
-    stack_reward = cubeA_align_cubeB & cubeA_on_cubeB & gripper_away_from_cubeA
-
-    # Compose rewards
-
-    # We either provide the stack reward or the align + dist reward
-    rewards = torch.where(
-        stack_reward,
-        reward_settings["r_stack_scale"] * stack_reward,
-        reward_settings["r_dist_scale"] * dist_reward + reward_settings["r_lift_scale"] * lift_reward + reward_settings[
-            "r_align_scale"] * align_reward,
-    )
-
-    # Compute resets
-    reset_buf = torch.where((progress_buf >= max_episode_length - 1) | (stack_reward > 0), torch.ones_like(reset_buf), reset_buf)
-
-    return rewards, reset_buf
