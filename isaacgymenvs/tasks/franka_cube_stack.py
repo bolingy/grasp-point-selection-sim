@@ -909,13 +909,11 @@ class FrankaCubeStack(VecTask):
             '''
 
             self.action_env = torch.tensor([[0, 0, 0, 0, 0, 0, 1]], dtype=torch.float)
-            print(self.frame_count[env_count], self.env_reset_id_env)
             if((self.env_reset_id_env[env_count] == 1) and (self.frame_count[env_count] >= self.cooldown_frames)):
                 self.env_reset_id_env[env_count] = torch.tensor(0)
                 self.action_env = torch.tensor([[0, 0, 0, 0, 0, 0, 1]], dtype=torch.float)
                 # print(self.frame_count[env_count], self.grasp_angle_env[env_count], len(self.grasp_angle_env[env_count]), env_count)
                 if(len(self.grasp_angle_env[env_count]) != 0):
-                    print(self.force_SI_env, self.xyz_point_env, self.grasp_angle_env, self.suction_deformation_score_env)
                     self.suction_deformation_score[env_count] = self.suction_deformation_score_env[env_count][0]
                     self.suction_deformation_score_env[env_count] = self.suction_deformation_score_env[env_count][1:]
                     self.grasp_angle[env_count] = self.grasp_angle_env[env_count][0]
@@ -976,7 +974,7 @@ class FrankaCubeStack(VecTask):
                                                     ori_factor*action_orientation[1], ori_factor*action_orientation[2], 1]], dtype=torch.float)
                 else:
                     # Transformation for grasp pose (wg --> wo*og)
-                    rotation_matrix_grasp_pose = euler_angles_to_matrix(torch.tensor([0, -self.grasp_angle[env_count][1], self.grasp_angle[env_count][0]]).to(self.device), "XYZ", degrees=True).type(torch.float)
+                    rotation_matrix_grasp_pose = euler_angles_to_matrix(torch.tensor([0, -self.grasp_angle[env_count][1], self.grasp_angle[env_count][0]]).to(self.device), "XYZ", degrees=False).type(torch.float)
                     translation_grasp_pose = torch.tensor([0.1, 0, 0]).to(self.device).type(torch.float)
                     translation_grasp_pose = torch.matmul(rotation_matrix_grasp_pose, translation_grasp_pose)
                     
@@ -1028,7 +1026,6 @@ class FrankaCubeStack(VecTask):
 
                         suction_score_object_gripper = calcualte_suction_score(depth_numpy_gripper, segmask_gripper, rgb_image_copy_gripper, camera_intrinsics, None, object_id)
                         self.score_gripper, _, _ = suction_score_object_gripper.calculator()
-
                         print(env_count, " force: ", self.force_pre_physics)
                         print(env_count, " suction gripper ", self.score_gripper)
                         self.frame_count_contact_object[env_count] = 1
@@ -1043,7 +1040,6 @@ class FrankaCubeStack(VecTask):
 
             self.actions = torch.cat([self.actions, self.action_env])
             self.frame_count[env_count] += torch.tensor(1)
-        print(env_list_reset)
         if(len(env_list_reset) != 0):
             self.reset_pre_grasp_pose(env_list_reset.to(self.device).type(torch.long))
             # self.reset_init_arm_pose(env_list_reset.to(self.device).type(torch.long))
