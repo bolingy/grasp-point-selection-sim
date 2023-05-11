@@ -197,18 +197,32 @@
     </inertial>
   </link>
 
+  <!-- <joint name="gripper_joint" type="fixed">
+    <parent link="wrist_3_link"/>
+    <child link="gripper_link"/>
+    <origin rpy="0 0 4.7124" xyz="0 0 0"/>
+  </joint>
+  <link name="gripper_link">
+  </link>
+  <joint name="ee_fixed_joint" type="fixed">
+    <parent link="gripper_link"/>
+    <child link="ee_link"/>
+    <origin rpy="0 -1.57 -3.14" xyz="0.0 0.0 -0.005"/> 
+  </joint>
+  <link name="ee_link">
+  </link> -->
+
   <!-- Suction Gripper -->
   <joint name="gripper_joint" type="fixed">
     <parent link="wrist_3_link"/>
     <child link="gripper_link"/>
     <origin rpy="0 0 4.7124" xyz="0 0 0"/>
-    <limit effort="1000" lower="0" upper="0.8" velocity="0.5"/>
   </joint>
   <link name="gripper_link">
     <inertial>
-      <mass value="0.745"/>
+      <mass value="0.7"/>
       <origin rpy="0 0 0" xyz="0 0.0 0.055"/>
-      <inertia ixx="0.003084" ixy="0.0" ixz="0.0" iyy="0.002999" iyz="0.0" izz="0.000546"/>
+      <inertia ixx="0.000843" ixy="0.0" ixz="0.0" iyy="0.000843" iyz="0.0" izz="0.000519"/>
     </inertial>
     <visual>
       <origin rpy="0 0 0" xyz="0 0 0.095"/>
@@ -219,61 +233,54 @@
         <color rgba="1 1 1 1"/>
       </material>
     </visual>
-    <visual>
-      <origin rpy="0 0 0" xyz="0 0 0.11"/>
-      <geometry>
-        <cylinder length="0.03" radius="0.006"/>
-      </geometry>
-      <material name="">
-        <color rgba="1 1 1 1"/>
-      </material>
-    </visual>
     <collision>
-      <!-- -0.095 + 0.102/2 = -0.044-->
       <origin rpy="0 0 0" xyz="0 0 0.065"/>
       <geometry>
-        <cylinder length="0.13" radius="0.044"/>
+        <cylinder length="0.10" radius="0.0385"/>
       </geometry>
     </collision>
   </link>
+  
   <joint name="rod_joint" type="fixed">
     <parent link="gripper_link"/>
     <child link="epick_rod"/>
     <origin rpy="0 0 0" xyz="0 0 0.13"/>
   </joint>
   <link name="epick_rod">
-    <!-- <gravity>0</gravity> -->
     <visual>
       <origin rpy="0 0 0" xyz="0 0 0"/>
       <geometry>
-        <cylinder length="0.1" radius="0.01"/>
+        <cylinder length="0.078" radius="0.0065"/>
       </geometry>
-      <!-- <material name="transparent">
-          <color rgba="0 0 0 0"/>
-        </material> -->
     </visual>
     <collision>
       <origin rpy="0 0 0" xyz="0 0 0"/>
       <geometry>
-        <cylinder length="0.1" radius="0.01"/>
+        <cylinder length="0.078" radius="0.0065"/>
       </geometry>
-      <!-- <material name="transparent">
-          <color rgba="0 0 0 0"/>
-        </material> -->
     </collision>
     <inertial>
       <origin rpy="0 0 0" xyz="0 0 0"/>
-      <mass value="0.0001"/>
-      <inertia ixx="1e-08" ixy="0" ixz="0" iyy="1e-08" iyz="0" izz="1e-08"/>
+      <mass value="0.070"/>
+      <inertia ixx="3.6e-05" ixy="0" ixz="0" iyy="3.6e-05" iyz="0" izz="1e-06"/>
     </inertial>
   </link>
-  <joint name="eef_hand_joint" type="fixed">
+  
+  <joint name="eef_hand_joint" type="prismatic">
     <parent link="epick_rod"/>
     <child link="epick_end_effector"/>
-    <origin rpy="0 0 0" xyz="0 0 0.055"/>
+    <axis xyz="0 0 1"/>
+    <origin rpy="0 0 0" xyz="0 0 0.053"/>
+    <dynamics damping="0.0" friction="1.2"/>
+    <limit effort="1000.0" lower="0.0" upper="0.008" velocity="100"/>
   </joint>
+  <!-- <joint name="eef_hand_joint" type="fixed">
+    <parent link="epick_rod"/>
+    <child link="epick_end_effector"/>
+    <axis xyz="0 0 1"/>
+    <origin rpy="0 0 0" xyz="0 0 0.053"/>
+  </joint> -->
   <link name="epick_end_effector">
-    <!-- <gravity>0</gravity> -->
     <visual>
       <origin rpy="0 0 0" xyz="0 0 0"/>
       <geometry>
@@ -288,8 +295,8 @@
     </collision>
     <inertial>
       <origin rpy="0 0 0" xyz="0 0 0"/>
-      <mass value="0.0001"/>
-      <inertia ixx="1e-08" ixy="0" ixz="0" iyy="1e-08" iyz="0" izz="1e-08"/>
+      <mass value="0.01"/>
+      <inertia ixx="1e-06" ixy="0" ixz="0" iyy="1e-06" iyz="0" izz="2e-06"/>
     </inertial>
   </link>
   <joint name="ee_fixed_joint" type="fixed">
@@ -297,12 +304,5 @@
     <child link="ee_link"/>
     <origin rpy="0 -1.57 -3.14" xyz="0.0 0.0 -0.005"/> 
   </joint>
-  <link name="ee_link">
-    <collision>
-      <geometry>
-        <box size="0.01 0.01 0.01"/>
-      </geometry>
-      <origin rpy="0 0 0" xyz="0 0 0"/>
-    </collision>
-  </link>
+  <link name="ee_link"/>
 </robot>
