@@ -20,33 +20,35 @@ from pathlib import Path
 cur_path = str(Path(__file__).parent.absolute())
 
 class dexnet3():
-    def __init__(self, depth_image, segmask, rgb_img, cam_intr):
-        self.depth_im = depth_image
-        self.segmask = segmask
-        self.rgb_im_filename = rgb_img
+    def __init__(self, cam_intr):
         self.camera_intr = cam_intr
         self.config_filename = cur_path + "/../cfg/examples/gqcnn_suction.yaml"
         self.model_dir = cur_path + "/../models"
         self.model_name = "GQCNN-3.0"
-
         self.logger = Logger.get_logger(cur_path + "/../examples/policy_for_training.py")
     
-    def inference(self):
+    def load_dexnet_model(self):
         # Get configs
         model_path = os.path.join(self.model_dir, self.model_name)
         
         # Read config.
-        config = YamlConfig(self.config_filename)
-        inpaint_rescale_factor = config["inpaint_rescale_factor"]
-        policy_config = config["policy"]
+        self.config = YamlConfig(self.config_filename)
+        self.policy_config = self.config["policy"]
 
         # Make relative paths absolute.
-        if "gqcnn_model" in policy_config["metric"]:
-            policy_config["metric"]["gqcnn_model"] = model_path
-            if not os.path.isabs(policy_config["metric"]["gqcnn_model"]):
-                policy_config["metric"]["gqcnn_model"] = os.path.join(
+        if "gqcnn_model" in self.policy_config["metric"]:
+            self.policy_config["metric"]["gqcnn_model"] = model_path
+            if not os.path.isabs(self.policy_config["metric"]["gqcnn_model"]):
+                self.policy_config["metric"]["gqcnn_model"] = os.path.join(
                     os.path.dirname(os.path.realpath(__file__)), "..",
-                    policy_config["metric"]["gqcnn_model"])
+                    self.policy_config["metric"]["gqcnn_model"])
+                
+        self.policy = RobustGraspingPolicy(self.policy_config)
+    
+    def inference(self, depth_image, segmask, rgb_img):
+        self.depth_im = depth_image
+        self.segmask = segmask
+        self.rgb_im_filename = rgb_img
 
         # Read images.
         color_im = ColorImage(np.zeros([self.depth_im.height, self.depth_im.width,
@@ -55,15 +57,13 @@ class dexnet3():
 
         # Optionally read a segmask.
         valid_px_mask = self.depth_im.invalid_pixel_mask().inverse()
-        if self.segmask is None:
-            self.segmask = valid_px_mask
-        else:
-            self.segmask = self.segmask.mask_binary(valid_px_mask)
+        self.segmask = self.segmask.mask_binary(valid_px_mask)
 
         # Inpaint.
+        inpaint_rescale_factor = self.config["inpaint_rescale_factor"]
         self.depth_im = self.depth_im.inpaint(rescale_factor=inpaint_rescale_factor)
 
-        if "input_images" in policy_config["vis"] and policy_config["vis"][
+        if "input_images" in self.policy_config["vis"] and self.policy_config["vis"][
                 "input_images"]:
             vis.figure(size=(10, 10))
             num_plot = 1
@@ -80,21 +80,11 @@ class dexnet3():
         rgbd_im = RgbdImage.from_color_and_depth(color_im, self.depth_im)
         state = RgbdImageState(rgbd_im, self.camera_intr, segmask=self.segmask)
 
-        policy_type = "ranking"
-        if "type" in policy_config:
-            policy_type = policy_config["type"]
-        if policy_type == "ranking":
-            policy = RobustGraspingPolicy(policy_config)
-        elif policy_type == "cem":
-            policy = CrossEntropyRobustGraspingPolicy(policy_config)
-        else:
-            raise ValueError("Invalid policy type: {}".format(policy_type))
-
         # Query policy.
         policy_start = time.time()
         # action = policy(state)
 
-        action, grasps, q_values = policy(state)
+        action, grasps, q_values = self.policy(state)
         num_grasps = len(grasps)
         grasps_and_predictions = zip(grasps, q_values)
         grasps_and_predictions = sorted(grasps_and_predictions,
@@ -114,79 +104,14 @@ class dexnet3():
 
         # Vis final grasp.
         # policy_config["vis"]["final_grasp"] = 0
-        if policy_config["vis"]["final_grasp"]:
+        if self.policy_config["vis"]["final_grasp"]:
             vis.figure(size=(10, 10))
             vis.imshow(rgbd_im.depth,
-                    vmin=policy_config["vis"]["vmin"],
-                    vmax=policy_config["vis"]["vmax"])
+                    vmin=self.policy_config["vis"]["vmin"],
+                    vmax=self.policy_config["vis"]["vmax"])
             vis.grasp(action.grasp, scale=2.5, show_center=False, show_axis=True)
             vis.title("Planned grasp at depth {0:.3f}m with Q={1:.3f}".format(
                 action.grasp.depth, action.q_value))
             vis.show()
         
         return action, grasps_and_predictions
-
-import cv2
-import random
-import imutils
-if __name__ == "__main__":
-    depth_im_filename = np.load("/home/soofiyan_ws/Documents/Issac_gym_ws/grasp-point-selection-sim/gqcnn/data/examples/single_object/primesense/depth_2.npy")
-    segmask = cv2.imread("/home/soofiyan_ws/Documents/Issac_gym_ws/grasp-point-selection-sim/gqcnn/data/examples/single_object/primesense/segmask_2.png", cv2.IMREAD_GRAYSCALE)
-    # camera_intr_filename = "/home/soofiyan_ws/catkin_ws/src/gqcnn/data/calib/primesense/primesense.intr"
-    segmentation = np.where(segmask == 255)
-    bbox = 0, 0, 0, 0
-    if len(segmentation) != 0 and len(segmentation[1]) != 0 and len(segmentation[0]) != 0:
-        x_min = int(np.min(segmentation[1]))
-        x_max = int(np.max(segmentation[1]))
-        y_min = int(np.min(segmentation[0]))
-        y_max = int(np.max(segmentation[0]))
-
-        bbox = x_min, x_max, y_min, y_max
-
-    segmask = cv2.rectangle(segmask, (x_min, y_min), (x_max, y_max), (255, 0, 0), 1)
-    
-    print(bbox)
-
-    depth_left = depth_im_filename[y_min, x_min]
-    depth_right = depth_im_filename[y_max, x_max]
-    print(depth_left, depth_right)
-    x_world_left = (x_min-319.5)/525.0 * depth_left
-    x_world_right = (x_max-319.5)/525.0 * depth_right
-    y_world_left = (y_min-239.5)/525.0 * depth_left
-    y_world_right = (y_max-239.5)/525.0 * depth_right
-
-    division_x = ((x_world_right-x_world_left)/0.005)[0]
-    division_y = ((y_world_right-y_world_left)/0.005)[0]
-
-    range_x = x_max - x_min
-    range_y = y_max - y_min
-    prev_x_coordinate = x_min
-    prev_y_coordinate = y_min
-    print(range_x/division_x)
-    for i in range(x_min, x_max, round(range_x/division_x)):
-        for j in range(y_min, y_max, round(range_y/division_y)):
-            x = random.randint(prev_x_coordinate, prev_x_coordinate+round(range_x/division_x))
-            y = random.randint(prev_y_coordinate, prev_y_coordinate+round(range_y/division_y))
-            # print(x, y, segmask[y,x], depth_im_filename[y,x])
-            if(segmask[y,x]):
-                cv2.circle(segmask, (x,y), radius=1, color=(0, 0, 0), thickness=-1)
-            prev_x_coordinate = i
-            prev_y_coordinate = j
-
-    cv2.imshow("segmask", segmask)
-    cv2.waitKey(0)
-
-    # camera_intrinsics = CameraIntrinsics(frame="camera", fx=525.0, fy=525.0, cx=319.5, cy=239.5, skew=0.0, height=480, width=640)
-    
-    # segmask_dexnet = segmask
-    # segmask_numpy = segmask_dexnet.astype(np.uint8)
-    # segmask_dexnet = BinaryImage(segmask_numpy, frame=camera_intrinsics.frame)
-    
-    # depth_image_dexnet = depth_im_filename
-    # depth_numpy = depth_image_dexnet
-    # depth_img_dexnet = DepthImage(depth_numpy, frame=camera_intrinsics.frame)
-
-    # dexnet_object = dexnet3(depth_img_dexnet, segmask_dexnet, None, camera_intrinsics)
-    # action = dexnet_object.inference()
-    # print(action.q_value)
-    # print(action.grasp.center.x, action.grasp.center.y)
