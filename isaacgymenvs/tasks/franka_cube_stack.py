@@ -849,7 +849,7 @@ class FrankaCubeStack(VecTask):
                 self.xyz_point_temp = torch.empty((0,3))
                 self.grasp_angle_temp = torch.empty((0,3))
                 self.force_SI_temp = torch.Tensor()
-                for i in range():
+                for i in range(1):
                     stack_grasp_points = self.grasps_and_predictions[i][0]
                     # dexnet score
                     # print(self.grasps_and_predictions[i][1])
@@ -905,8 +905,7 @@ class FrankaCubeStack(VecTask):
                     self.reset_idx(torch.tensor([env_count]).to(self.device).type(torch.long))  
                 if(torch.all(self.xyz_point[env_count]) == torch.tensor(0.)):
                     env_list_reset = torch.cat((env_list_reset, torch.tensor([env_count])), axis=0)
-
-            elif(self.env_reset_id_env[env_count] == 0 and self.frame_count[env_count] >= self.cooldown_frames):
+            elif(self.env_reset_id_env[env_count] == 0 and self.frame_count[env_count] > self.cooldown_frames):
                 # Transformation for object from camera (wo --> wc*co)
                 rotation_matrix_camera_to_object = euler_angles_to_matrix(torch.tensor([0, -self.grasp_angle[env_count][1], self.grasp_angle[env_count][0]]).to(self.device), "XYZ", degrees=False)
                 T_camera_to_object = transformation_matrix(rotation_matrix_camera_to_object, self.xyz_point[env_count])
@@ -918,14 +917,6 @@ class FrankaCubeStack(VecTask):
                 T_pre_grasp_pose = transformation_matrix(rotation_matrix_pre_grasp_pose, translation_pre_grasp_pose)
                 # Transformation of object with base link to pre grasp pose
                 T_world_to_pre_grasp_pose = torch.matmul(T_world_to_object, T_pre_grasp_pose)
-
-                # For now we are resettign all the environments
-                # if(suction_deformation_score == torch.tensor(0) or force_SI <= torch.tensor(0)):
-                #     self.reset_init_arm_pose(torch.arange(self.num_envs, device=self.device, dtype=torch.long))
-                #     self.reset_object_pose(torch.arange(self.num_envs, device=self.device, dtype=torch.long))
-                # else:
-                #     self.reset_pre_grasp_pose(torch.arange(self.num_envs, device=self.device, dtype=torch.long))
-
                 # force sensor update
                 self.gym.refresh_force_sensor_tensor(self.sim)
                 try:
@@ -1008,8 +999,6 @@ class FrankaCubeStack(VecTask):
                         env_list_reset = torch.cat((env_list_reset, torch.tensor([env_count])), axis=0)
                 elif(self.frame_count_contact_object[env_count] == torch.tensor(1)):
                     env_list_reset = torch.cat((env_list_reset, torch.tensor([env_count])), axis=0)
-                elif(self.frame_count[env_count] <= torch.tensor(self.cooldown_frames)):
-                    self.action_env = torch.tensor([[0, 0, 0, 0, 0, 0, 1]], dtype=torch.float)
 
             if(self.frame_count[env_count] <= torch.tensor(self.cooldown_frames)):
                 self.action_env = torch.tensor([[0, 0, 0, 0, 0, 0, 1]], dtype=torch.float)
@@ -1044,7 +1033,8 @@ class FrankaCubeStack(VecTask):
         self.progress_buf += 1
         env_ids = self.reset_buf.nonzero(as_tuple=False).squeeze(-1)
         if len(env_ids) > 0:
-            self.reset_idx(env_ids)
+            self.reset_pre_grasp_pose(env_ids)
+            self.reset_object_pose(env_ids)
 
         self.compute_observations()
         # Compute resets
