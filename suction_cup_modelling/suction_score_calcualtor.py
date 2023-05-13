@@ -196,8 +196,8 @@ class calcualte_suction_score():
             minimum_suction_point = torch.min(point_cloud_suction[:, 2]).to(self.device)
             ri = torch.clamp(torch.abs(point_cloud_suction[:, 2] - minimum_suction_point) / 0.023, max=1.0)
             suction_score = 1-torch.max(ri)
-
-        return suction_score, torch.tensor([xyz_point[2], -xyz_point[0], -xyz_point[1]]), torch.tensor([centroid_angle[0], centroid_angle[1], centroid_angle[2]])
+        # 0.98 is used because the pre grasp pose should always be outside the bin
+        return suction_score, torch.tensor([0.98, -xyz_point[0], -xyz_point[1]]), torch.tensor([centroid_angle[0], centroid_angle[1], centroid_angle[2]])
 
 
     def calculate_contact(self, depth_image, segmask, rgb_img, grasps_and_predictions, object_id):
