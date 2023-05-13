@@ -153,3 +153,4 @@ dmypy.json
 cython_debug/
 isaacgymenvs/tasks/__pycache__/ant.cpython-37.pyc
 isaacgymenvs/tasks/__pycache__/franka_cube_stack.cpython-37.pyc
+.vscode/settings.json
