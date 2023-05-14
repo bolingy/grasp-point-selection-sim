@@ -17,7 +17,7 @@ env:
   startRotationNoise: 0.785
   frankaPositionNoise: 0.0
   frankaRotationNoise: 0.0
-  frankaDofNoise: 0.0
+  frankaDofNoise: 0.25
 
   aggregateMode: 3
 
