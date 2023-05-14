@@ -1161,8 +1161,7 @@ class FrankaCubeStack(VecTask):
                     # Append all the force data
                     # self.force_list = np.append(
                     #     self.force_list, self.force_pre_physics)
-                    current_object_pose = self._root_state[:, self.gym.find_actor_rigid_body_handle(
-                        self.envs[0], self._object_model_id[self.object_target_id[env_count]-1], "urdf_model"), :][0][:3]
+                    current_object_pose = self._root_state[:, self._object_model_id[self.object_target_id[env_count]-1], :][0][:3].type(torch.float).detach().clone()
                     try:
                         object_pose_error = torch.abs(torch.norm(
                             current_object_pose - self.last_object_pose[env_count])).cpu().numpy()
@@ -1217,8 +1216,6 @@ class FrankaCubeStack(VecTask):
                                 [0.1, 0.1, 0.1, 0.5, 0.5, 0.5], device=self.device).unsqueeze(0)
                     except:
                         pass
-                    print(current_object_pose)
-                    print(self.last_object_pose)
                     self.last_object_pose[env_count] = current_object_pose
 
                 if (self.frame_count[env_count] > torch.tensor(self.cooldown_frames) and self.frame_count_contact_object[env_count] == torch.tensor(0)):
