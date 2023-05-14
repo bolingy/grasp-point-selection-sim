@@ -198,8 +198,8 @@ class calcualte_suction_score():
             suction_score = 1-torch.max(ri)
         if(grasps_and_predictions == None):
             return suction_score, torch.tensor([xyz_point[2]-0.07, -xyz_point[0], -xyz_point[1]]), torch.tensor([centroid_angle[0], centroid_angle[1], centroid_angle[2]])
-        
-        return suction_score, torch.tensor([1.02, -xyz_point[0], -xyz_point[1]]), torch.tensor([centroid_angle[0], centroid_angle[1], centroid_angle[2]])
+        print(centroid_angle)
+        return suction_score, torch.tensor([1.02, -xyz_point[0], -xyz_point[1]]), torch.tensor([0, 0, 0])
 
 
     def calculate_contact(self, depth_image, segmask, rgb_img, grasps_and_predictions, object_id):
