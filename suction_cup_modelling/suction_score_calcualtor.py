@@ -5,7 +5,7 @@ from matplotlib import pyplot as plt, patches
 import open3d as o3d
 import os
 import torch
-from autolab_core import (YamlConfig, Logger, BinaryImage, CameraIntrinsics, ColorImage, DepthImage, RgbdImage)
+from autolab_core import DepthImage
 from homogeneous_trasnformation_and_conversion.rotation_conversions import *
 
 class calcualte_suction_score():
@@ -167,14 +167,14 @@ class calcualte_suction_score():
             
         difference_xy_plane = point_cloud_suction[:,:2] - (self.suction_coordinates[:, :2] + xyz_point[:2])
         thresh = torch.sum(torch.sum(difference_xy_plane, 1))
-        if(abs(thresh) >= 0.004):
+        if(abs(thresh) >= 0.005):
             # removing largest 
             abs_difference_xy_plane = torch.abs(difference_xy_plane)
             max_id = torch.argmax(abs_difference_xy_plane)
             x_index = (max_id/2).to(torch.int)
             difference_xy_plane = torch.cat((difference_xy_plane[:x_index,:], difference_xy_plane[x_index+1:,:]), dim=0)
             thresh = torch.sum(torch.sum(difference_xy_plane, 1))
-        if(abs(thresh) > 0.0075):
+        if(abs(thresh) > 0.08):
             return torch.tensor(0), torch.tensor([0, 0, 0]), torch.tensor([centroid_angle[0], centroid_angle[1], centroid_angle[2]])
 
         '''
@@ -196,7 +196,9 @@ class calcualte_suction_score():
             minimum_suction_point = torch.min(point_cloud_suction[:, 2]).to(self.device)
             ri = torch.clamp(torch.abs(point_cloud_suction[:, 2] - minimum_suction_point) / 0.023, max=1.0)
             suction_score = 1-torch.max(ri)
-        # 0.98 is used because the pre grasp pose should always be outside the bin
+        if(grasps_and_predictions == None):
+            return suction_score, torch.tensor([xyz_point[2]-0.07, -xyz_point[0], -xyz_point[1]]), torch.tensor([centroid_angle[0], centroid_angle[1], centroid_angle[2]])
+        
         return suction_score, torch.tensor([1.02, -xyz_point[0], -xyz_point[1]]), torch.tensor([centroid_angle[0], centroid_angle[1], centroid_angle[2]])
 
 
