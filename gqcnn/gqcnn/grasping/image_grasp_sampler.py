@@ -1003,10 +1003,10 @@ class DepthImageSuctionPointGridSampler(ImageGraspSampler):
         depth_im_ = depth_im.data
         depth_left = depth_im_[y_min, x_min]
         depth_right = depth_im_[y_max, x_max]
-        width = 640
-        height = 480
-        fx = 628.0354
-        fy = 628.0354
+        width = 1280
+        height = 786
+        fx = 914.0148
+        fy = 914.0147
         x_world_left = (x_min-(width/2))/fx * depth_left
         x_world_right = (x_max-(width/2))/fx * depth_right
         y_world_left = (y_min-(height/2))/fy * depth_left
@@ -1022,8 +1022,6 @@ class DepthImageSuctionPointGridSampler(ImageGraspSampler):
         prev_x_coordinate = x_min
         prev_y_coordinate = y_min
         
-        division_x = 10
-        division_y = 10
         indices_u = np.array([])
         indices_v = np.array([])
         for i in range(x_min, x_max, round(range_x/division_x)):
