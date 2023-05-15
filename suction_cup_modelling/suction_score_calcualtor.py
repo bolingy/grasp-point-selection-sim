@@ -99,7 +99,6 @@ class calcualte_suction_score():
         '''
         points = self.convert_rgb_depth_to_point_cloud()
         centroid_point = torch.FloatTensor([torch.median(points[:, 0]), torch.median(points[:, 1]), torch.median(points[:, 2])]).to(self.device)
-        centroid_point[0] -= 0.01
         if(centroid_point.any() == float('nan')):
             return torch.tensor(0), torch.tensor([0, 0, 0]), torch.tensor([centroid_angle[0], centroid_angle[1], centroid_angle[2]])
         '''
@@ -108,8 +107,7 @@ class calcualte_suction_score():
         if(self.grasps_and_predictions == None):
             xyz_point = self.convert_uv_point_to_xyz_point(int(self.segmask.shape[1]/2), int(self.segmask.shape[0]/2))
         else:
-            xyz_point = centroid_point
-            # xyz_point = self.convert_uv_point_to_xyz_point(self.grasps_and_predictions[0][0].center.x, self.grasps_and_predictions[0][0].center.y)
+            xyz_point = self.convert_uv_point_to_xyz_point(self.grasps_and_predictions.center.x+410, self.grasps_and_predictions.center.y+180)
         if(xyz_point[2] < 0):
             return torch.tensor(0), torch.tensor([0, 0, 0]), torch.tensor([centroid_angle[0], centroid_angle[1], centroid_angle[2]])
         
