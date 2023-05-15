@@ -682,8 +682,10 @@ class FrankaCubeStack(VecTask):
 
         # reinitializing the variables
         for env_id in env_ids:
+            self.action_contrib[env_id] = 2
             self.force_encounter[env_id] = 0
             self.frame_count_contact_object[env_id] = 0
+            self.frame_count[env_id] = 0
             self.env_reset_id_env[env_id] = 1
             self.speed[env_id] = 0.1
 
@@ -994,11 +996,11 @@ class FrankaCubeStack(VecTask):
                                 suction_deformation_score)
                         else:
                             force_SI = torch.tensor(0).to(self.device)
-                        print(
-                            f"Quality is {action.q_value}, xyz point is {self.xyz_point_temp}, deformation score is {self.suction_deformation_score_temp}, grasp angle is {self.grasp_angle_temp} for environment {env_count}")
 
                         self.force_SI_temp = torch.cat(
                             (self.force_SI_temp, torch.tensor([force_SI])))
+                    print(
+                        f"Quality is {action.q_value}, xyz point is {self.xyz_point_temp}, deformation score is {self.suction_deformation_score_temp}, grasp angle is {self.grasp_angle_temp} for environment {env_count}")
 
                     self.suction_deformation_score_env[env_count] = self.suction_deformation_score_temp
                     self.grasp_angle_env[env_count] = self.grasp_angle_temp
@@ -1009,7 +1011,7 @@ class FrankaCubeStack(VecTask):
                     # dexnet_coordinates = np.array([grasp_data.grasp.center.x, grasp_data.grasp.center.y])
                     # print(f"Quality is {grasp_data.q_value} grasp location is {grasp_data.grasp.center.x}, {grasp_data.grasp.center.y}")
                     # print(f"suction deforamtion score --> {suction_deformation_score}, Force along z axis --> {force_SI}")
-                else:
+                elif(total_objects == objects_spawned and (self.free_envs_list[env_count] == 1)):
                     print(f"Object falled down for environment {env_count}")
                     env_complete_reset = torch.cat(
                         (env_complete_reset, torch.tensor([env_count])), axis=0)
@@ -1028,7 +1030,6 @@ class FrankaCubeStack(VecTask):
                 self.env_reset_id_env[env_count] = torch.tensor(0)
                 self.action_env = torch.tensor(
                     [[0, 0, 0, 0, 0, 0, 1]], dtype=torch.float)
-                print(self.grasp_angle_env)
                 # print(self.frame_count[env_count], self.grasp_angle_env[env_count], len(self.grasp_angle_env[env_count]), env_count)
                 if ((env_count in self.grasp_angle_env) and (len(self.grasp_angle_env[env_count]) != 0)):
                     self.suction_deformation_score[env_count] = self.suction_deformation_score_env[env_count][0]
@@ -1045,7 +1046,7 @@ class FrankaCubeStack(VecTask):
                 else:
                     env_complete_reset = torch.cat(
                         (env_complete_reset, torch.tensor([env_count])), axis=0)
-                    
+
                 if (torch.all(self.xyz_point[env_count]) == torch.tensor(0.)):
                     env_list_reset = torch.cat(
                         (env_list_reset, torch.tensor([env_count])), axis=0)
@@ -1251,7 +1252,7 @@ class FrankaCubeStack(VecTask):
                             depth_numpy_gripper, segmask_gripper, rgb_image_copy_gripper, None, self.object_target_id[env_count])
 
                         print(
-                            f"when {self.action_contrib[env_count]}, {self.suction_deformation_score[env_count]}, {temp_xyz_point}, {temp_grasp}")
+                            f"For environment {env_count} at action contrib {self.action_contrib[env_count]}, suction deformation score: {self.suction_deformation_score[env_count]}, displacement: {temp_xyz_point}, normal: {temp_grasp}")
                         if (self.suction_deformation_score[env_count] > 0.2):
                             self.force_SI[env_count] = self.force_object.regression(
                                 self.suction_deformation_score[env_count])
