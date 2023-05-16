@@ -56,7 +56,7 @@ from suction_cup_modelling.suction_score_calcualtor import CameraInfo
 # import sys
 # sys.path.insert(0, '/home/soofiyan_ws/Documents/Issac_gym_ws/grasp-point-selection-sim/')
 
-from gqcnn.examples.policy_for_training import dexnet3
+from gqcnn_examples.policy_for_training import dexnet3
 
 from autolab_core import (YamlConfig, Logger, BinaryImage, CameraIntrinsics, ColorImage, DepthImage, RgbdImage)
 
