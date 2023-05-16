@@ -37,7 +37,7 @@ import tensorflow as tf
 class GeneralConstants(object):
     SEED = 3472134
     SEED_SAMPLE_MAX = 2**32 - 1  # Max range for `np.random.seed`.
-    timeout_option = tf.RunOptions(timeout_in_ms=1000000)
+    timeout_option = tf.compat.v1.RunOptions(timeout_in_ms=1000000)
     MAX_PREFETCH_Q_SIZE = 250
     NUM_PREFETCH_Q_WORKERS = 3
     QUEUE_SLEEP = 0.001
