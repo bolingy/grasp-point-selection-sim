@@ -56,8 +56,8 @@ class calcualte_suction_score():
         # position = position@vinv
         points = position[:, 0:3]
         if(len(points) == 0):
-            return torch.tensor([0, 0, -1])
-        return points[0]
+            return torch.tensor([0, 0, -1]).to(self.device)
+        return points[0].to(self.device)
     
     def convert_xyz_point_to_uv_point(self, xyz_point):
         X = xyz_point[:, 0]
@@ -69,11 +69,15 @@ class calcualte_suction_score():
         return U, V
 
     def find_nearest(self, centroid, points):
-        suction_points = centroid[:2] + self.suction_coordinates[:,:2]
-        distances = torch.cdist(points[:,:2].type(torch.float64), suction_points.type(torch.float64))
-        min_indices = torch.argmin(distances, dim=0)
-        point_cloud_suction = points[min_indices]
-        return point_cloud_suction
+        try:
+            suction_points = centroid[:2] + self.suction_coordinates[:,:2]
+            distances = torch.cdist(points[:,:2].type(torch.float64), suction_points.type(torch.float64))
+            min_indices = torch.argmin(distances, dim=0)
+            point_cloud_suction = points[min_indices]
+            return point_cloud_suction
+        except Exception as error:
+            print(error, centroid, self.suction_coordinates)
+            return None
 
     def calculator(self, depth_image, segmask, rgb_img, grasps_and_predictions, object_id):
         self.depth_image = depth_image
