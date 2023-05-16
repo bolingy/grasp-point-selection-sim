@@ -10,11 +10,11 @@ from autolab_core import (YamlConfig, Logger, BinaryImage, CameraIntrinsics,
                           ColorImage, DepthImage, RgbdImage)
 from visualization import Visualizer2D as vis
 
-from gqcnn.gqcnn.grasping import (RobustGraspingPolicy,
+from gqcnn.grasping import (RobustGraspingPolicy,
                             CrossEntropyRobustGraspingPolicy, RgbdImageState,
                             FullyConvolutionalGraspingPolicyParallelJaw,
                             FullyConvolutionalGraspingPolicySuction)
-from gqcnn.gqcnn.utils import GripperMode
+from gqcnn.utils import GripperMode
 
 from pathlib import Path
 cur_path = str(Path(__file__).parent.absolute())
