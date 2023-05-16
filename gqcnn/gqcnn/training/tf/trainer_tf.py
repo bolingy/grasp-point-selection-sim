@@ -156,7 +156,7 @@ class GQCNNTrainerTF(object):
         elif self.cfg["loss"] == "weighted_cross_entropy":
             return tf.reduce_mean(
                 tf.nn.weighted_cross_entropy_with_logits(
-                    targets=tf.reshape(self.train_labels_node, [-1, 1]),
+                    labels=tf.reshape(self.train_labels_node, [-1, 1]),
                     logits=self.train_net_output,
                     pos_weight=self.pos_weight,
                     name=None))
@@ -183,12 +183,12 @@ class GQCNNTrainerTF(object):
         """
         # Instantiate optimizer.
         if self.cfg["optimizer"] == "momentum":
-            optimizer = tf.train.MomentumOptimizer(learning_rate,
+            optimizer = tf.compat.v1.train.MomentumOptimizer(learning_rate,
                                                    self.momentum_rate)
         elif self.cfg["optimizer"] == "adam":
-            optimizer = tf.train.AdamOptimizer(learning_rate)
+            optimizer = tf.compat.v1.train.AdamOptimizer(learning_rate)
         elif self.cfg["optimizer"] == "rmsprop":
-            optimizer = tf.train.RMSPropOptimizer(learning_rate)
+            optimizer = tf.compat.v1.train.RMSPropOptimizer(learning_rate)
         else:
             raise ValueError("Optimizer '{}' not supported".format(
                 self.cfg["optimizer"]))
@@ -304,17 +304,17 @@ class GQCNNTrainerTF(object):
         self.weights = self.gqcnn.weights
 
         # Once weights have been initialized, create TF saver for weights.
-        self.saver = tf.train.Saver()
+        self.saver = tf.compat.v1.train.Saver()
 
         # Form loss.
-        with tf.name_scope("loss"):
+        with tf.compat.v1.name_scope("loss"):
             # Part 1: error.
             loss = self._create_loss()
             unregularized_loss = loss
 
             # Part 2: regularization.
             layer_weights = list(self.weights.values())
-            with tf.name_scope("regularization"):
+            with tf.compat.v1.name_scope("regularization"):
                 regularizers = tf.nn.l2_loss(layer_weights[0])
                 for w in layer_weights[1:]:
                     regularizers = regularizers + tf.nn.l2_loss(w)
@@ -322,7 +322,7 @@ class GQCNNTrainerTF(object):
 
         # Setup learning rate.
         batch = tf.Variable(0)
-        learning_rate = tf.train.exponential_decay(
+        learning_rate = tf.compat.v1.train.exponential_decay(
             self.base_lr,  # Base learning rate.
             batch * self.train_batch_size,  # Current index into the dataset.
             self.decay_step,  # Decay step.
@@ -340,7 +340,7 @@ class GQCNNTrainerTF(object):
                     var_list.append(weights_val)
 
         # Create optimizer.
-        with tf.name_scope("optimizer"):
+        with tf.compat.v1.name_scope("optimizer"):
             apply_grad_op, global_grad_norm = self._create_optimizer(
                 loss, batch, var_list, learning_rate)
 
@@ -369,7 +369,7 @@ class GQCNNTrainerTF(object):
                 self.prefetch_q_workers.append(p)
 
             # Init TF variables.
-            init = tf.global_variables_initializer()
+            init = tf.compat.v1.global_variables_initializer()
             self.sess.run(init)
 
             self.logger.info("Beginning Optimization...")
@@ -1251,15 +1251,15 @@ class GQCNNTrainerTF(object):
                 self.training_mode))
 
         # Set up placeholders.
-        self.train_labels_node = tf.placeholder(train_label_dtype,
+        self.train_labels_node = tf.compat.v1.placeholder(train_label_dtype,
                                                 (self.train_batch_size, ))
-        self.input_im_node = tf.placeholder(
+        self.input_im_node = tf.compat.v1.placeholder(
             tf.float32, (self.train_batch_size, self.im_height, self.im_width,
                          self.im_channels))
-        self.input_pose_node = tf.placeholder(
+        self.input_pose_node = tf.compat.v1.placeholder(
             tf.float32, (self.train_batch_size, self.pose_dim))
         if self._angular_bins > 0:
-            self.train_pred_mask_node = tf.placeholder(
+            self.train_pred_mask_node = tf.compat.v1.placeholder(
                 tf.int32, (self.train_batch_size, self._angular_bins * 2))
 
         # Create data prefetch queue.
@@ -1281,34 +1281,34 @@ class GQCNNTrainerTF(object):
         writer."""
         # Create placeholders for Python values because `tf.summary.scalar`
         # expects a placeholder.
-        self.val_error_placeholder = tf.placeholder(tf.float32, [])
-        self.minibatch_error_placeholder = tf.placeholder(tf.float32, [])
-        self.minibatch_loss_placeholder = tf.placeholder(tf.float32, [])
-        self.learning_rate_placeholder = tf.placeholder(tf.float32, [])
+        self.val_error_placeholder = tf.compat.v1.placeholder(tf.float32, [])
+        self.minibatch_error_placeholder = tf.compat.v1.placeholder(tf.float32, [])
+        self.minibatch_loss_placeholder = tf.compat.v1.placeholder(tf.float32, [])
+        self.learning_rate_placeholder = tf.compat.v1.placeholder(tf.float32, [])
 
         # Tag the `tf.summary.scalar`s so that we can group them together and
         # write different batches of summaries at different intervals.
-        tf.summary.scalar("val_error",
+        tf.compat.v1.summary.scalar("val_error",
                           self.val_error_placeholder,
                           collections=["eval_frequency"])
-        tf.summary.scalar("minibatch_error",
+        tf.compat.v1.summary.scalar("minibatch_error",
                           self.minibatch_error_placeholder,
                           collections=["log_frequency"])
-        tf.summary.scalar("minibatch_loss",
+        tf.compat.v1.summary.scalar("minibatch_loss",
                           self.minibatch_loss_placeholder,
                           collections=["log_frequency"])
-        tf.summary.scalar("learning_rate",
+        tf.compat.v1.summary.scalar("learning_rate",
                           self.learning_rate_placeholder,
                           collections=["log_frequency"])
-        self.merged_eval_summaries = tf.summary.merge_all("eval_frequency")
-        self.merged_log_summaries = tf.summary.merge_all("log_frequency")
+        self.merged_eval_summaries = tf.compat.v1.summary.merge_all("eval_frequency")
+        self.merged_log_summaries = tf.compat.v1.summary.merge_all("log_frequency")
 
         # Create a TF summary writer with the specified summary directory.
-        self.summary_writer = tf.summary.FileWriter(self.summary_dir)
+        self.summary_writer = tf.compat.v1.summary.FileWriter(self.summary_dir)
 
         # Initialize the variables again now that we have added some new ones.
         with self.sess.as_default():
-            tf.global_variables_initializer().run()
+            tf.compat.v1.global_variables_initializer().run()
 
     def _cleanup(self):
         self.logger.info("Cleaning and preparing to exit optimization...")
