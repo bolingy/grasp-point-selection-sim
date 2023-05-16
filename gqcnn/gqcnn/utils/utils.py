@@ -149,7 +149,8 @@ def read_pose_data(pose_arr, gripper_mode):
 
 def reduce_shape(shape):
     """Get shape of a layer for flattening."""
-    shape = [x.value for x in shape[1:]]
+    #shape = [x.value for x in shape[1:]]
+    shape = [x for x in shape[1:]]
     f = lambda x, y: 1 if y is None else x * y  # noqa: E731
     return reduce(f, shape, 1)
 

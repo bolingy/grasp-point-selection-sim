@@ -39,7 +39,7 @@ import time
 
 import numpy as np
 import tensorflow as tf
-import tensorflow.contrib.framework as tcf
+import tensorflow.train as tcf
 
 from autolab_core import Logger
 from ...utils import (reduce_shape, read_pose_data, pose_dim,
@@ -334,7 +334,7 @@ class GQCNNTF(object):
 
         with self._graph.as_default():
             # Create new tf checkpoint reader.
-            reader = tf.train.NewCheckpointReader(ckpt_file)
+            reader = tf.compat.v1.train.NewCheckpointReader(ckpt_file)
 
             # Create empty weights object.
             self._weights = GQCNNWeights()
@@ -367,7 +367,8 @@ class GQCNNTF(object):
         """
         with self._graph.as_default():
             # Create new tf checkpoint reader.
-            reader = tf.train.NewCheckpointReader(ckpt_file)
+            #ckpt_file ="/home/aurmr/workspaces/manipulation_policy/src/grasp-point-selection-sim/gqcnn/models/GQCNN-3.0/model.ckpt"
+            reader = tf.compat.v1.train.NewCheckpointReader(ckpt_file)
 
             # Create empty weight object.
             self._weights = GQCNNWeights()
@@ -512,24 +513,24 @@ class GQCNNTF(object):
         with self._graph.as_default():
             # Set TF random seed if debugging.
             if self._debug:
-                tf.set_random_seed(self._rand_seed)
+                tf.compat.v1.set_random_seed(self._rand_seed)
 
             # Setup input placeholders.
             if train_im_node is not None:
                 # Training.
-                self._input_im_node = tf.placeholder_with_default(
+                self._input_im_node = tf.compat.v1.placeholder_with_default(
                     train_im_node, (None, self._im_height, self._im_width,
                                     self._num_channels))
-                self._input_pose_node = tf.placeholder_with_default(
+                self._input_pose_node = tf.compat.v1.placeholder_with_default(
                     train_pose_node, (None, self._pose_dim))
             else:
                 # Inference only using GQ-CNN instantiated from `GQCNNTF.load`.
-                self._input_im_node = tf.placeholder(
+                self._input_im_node = tf.compat.v1.placeholder(
                     tf.float32, (self._batch_size, self._im_height,
                                  self._im_width, self._num_channels))
-                self._input_pose_node = tf.placeholder(
+                self._input_pose_node = tf.compat.v1.placeholder(
                     tf.float32, (self._batch_size, self._pose_dim))
-            self._input_drop_rate_node = tf.placeholder_with_default(
+            self._input_drop_rate_node = tf.compat.v1.placeholder_with_default(
                 tf.constant(0.0), ())
 
             # Build network.
@@ -560,12 +561,12 @@ class GQCNNTF(object):
             return self._sess
         self._logger.info("Initializing TF Session...")
         with self._graph.as_default():
-            init = tf.global_variables_initializer()
-            self.tf_config = tf.ConfigProto()
+            init = tf.compat.v1.global_variables_initializer()
+            self.tf_config = tf.compat.v1.ConfigProto()
             # Allow Tensorflow gpu growth so Tensorflow does not lock-up all
             # GPU memory.
             self.tf_config.gpu_options.allow_growth = True
-            self._sess = tf.Session(graph=self._graph, config=self.tf_config)
+            self._sess = tf.compat.v1.Session(graph=self._graph, config=self.tf_config)
             self._sess.run(init)
         return self._sess
 
@@ -803,7 +804,7 @@ class GQCNNTF(object):
 
     def add_softmax_to_output(self):
         """Adds softmax to output of network."""
-        with tf.name_scope("softmax"):
+        with tf.compat.v1.name_scope("softmax"):
             if self._angular_bins > 0:
                 self._logger.info("Building Pair-wise Softmax Layer...")
                 binwise_split_output = tf.split(self._output_tensor,
@@ -819,7 +820,7 @@ class GQCNNTF(object):
 
     def add_sigmoid_to_output(self):
         """Adds sigmoid to output of network."""
-        with tf.name_scope("sigmoid"):
+        with tf.compat.v1.name_scope("sigmoid"):
             self._logger.info("Building Sigmoid Layer...")
             self._output_tensor = tf.nn.sigmoid(self._output_tensor)
 
@@ -1038,7 +1039,7 @@ class GQCNNTF(object):
                           norm=False,
                           pad="SAME"):
         self._logger.info("Building convolutional layer: {}...".format(name))
-        with tf.name_scope(name):
+        with tf.compat.v1.name_scope(name):
             # Initialize weights.
             if "{}_weights".format(name) in self._weights.weights:
                 convW = self._weights.weights["{}_weights".format(name)]
@@ -1055,10 +1056,10 @@ class GQCNNTF(object):
 
                 fan_in = filter_h * filter_w * input_channels
                 std = np.sqrt(2 / fan_in)
-                convW = tf.Variable(tf.truncated_normal(convW_shape,
+                convW = tf.Variable(tf.random.truncated_normal(convW_shape,
                                                         stddev=std),
                                     name="{}_weights".format(name))
-                convb = tf.Variable(tf.truncated_normal([num_filt],
+                convb = tf.Variable(tf.random.truncated_normal([num_filt],
                                                         stddev=std),
                                     name="{}_bias".format(name))
 
@@ -1077,7 +1078,7 @@ class GQCNNTF(object):
 
             # Build layer.
             convh = tf.nn.conv2d(
-                input_node, convW, strides=[1, 1, 1, 1], padding=pad) + convb
+                input_node, filters=convW, strides=[1, 1, 1, 1], padding=pad) + convb
             convh = self._leaky_relu(convh, alpha=self._relu_coeff)
 
             if norm:
@@ -1087,7 +1088,7 @@ class GQCNNTF(object):
                     alpha=self._normalization_alpha,
                     beta=self._normalization_beta,
                     bias=self._normalization_bias)
-            pool = tf.nn.max_pool(convh,
+            pool = tf.nn.max_pool2d(input=convh,
                                   ksize=[1, pool_size, pool_size, 1],
                                   strides=[1, pool_stride_h, pool_stride_w, 1],
                                   padding="SAME")
@@ -1118,14 +1119,14 @@ class GQCNNTF(object):
         else:
             self._logger.info("Reinitializing layer {}.".format(name))
             std = np.sqrt(2 / fan_in)
-            fcW = tf.Variable(tf.truncated_normal([fan_in, out_size],
+            fcW = tf.Variable(tf.random.truncated_normal([fan_in, out_size],
                                                   stddev=std),
                               name="{}_weights".format(name))
             if final_fc_layer:
                 fcb = tf.Variable(tf.constant(0.0, shape=[out_size]),
                                   name="{}_bias".format(name))
             else:
-                fcb = tf.Variable(tf.truncated_normal([out_size], stddev=std),
+                fcb = tf.Variable(tf.random.truncated_normal([out_size], stddev=std),
                                   name="{}_bias".format(name))
 
             self._weights.weights["{}_weights".format(name)] = fcW
@@ -1141,7 +1142,7 @@ class GQCNNTF(object):
             fc = self._leaky_relu(tf.matmul(input_node, fcW) + fcb,
                                   alpha=self._relu_coeff)
 
-        fc = tf.nn.dropout(fc, 1 - drop_rate)
+        fc = tf.nn.dropout(fc, rate=1 - (1 - drop_rate))
 
         # Add output to feature dict.
         self._feature_tensors[name] = fc
@@ -1165,10 +1166,10 @@ class GQCNNTF(object):
         else:
             self._logger.info("Reinitializing layer {}".format(name))
             std = np.sqrt(2 / fan_in)
-            pcW = tf.Variable(tf.truncated_normal([fan_in, out_size],
+            pcW = tf.Variable(tf.random.truncated_normal([fan_in, out_size],
                                                   stddev=std),
                               name="{}_weights".format(name))
-            pcb = tf.Variable(tf.truncated_normal([out_size], stddev=std),
+            pcb = tf.Variable(tf.random.truncated_normal([out_size], stddev=std),
                               name="{}_bias".format(name))
 
             self._weights.weights["{}_weights".format(name)] = pcW
@@ -1200,13 +1201,13 @@ class GQCNNTF(object):
         else:
             self._logger.info("Reinitializing layer {}.".format(name))
             std = np.sqrt(2 / (fan_in_1 + fan_in_2))
-            input1W = tf.Variable(tf.truncated_normal([fan_in_1, out_size],
+            input1W = tf.Variable(tf.random.truncated_normal([fan_in_1, out_size],
                                                       stddev=std),
                                   name="{}_input_1_weights".format(name))
-            input2W = tf.Variable(tf.truncated_normal([fan_in_2, out_size],
+            input2W = tf.Variable(tf.random.truncated_normal([fan_in_2, out_size],
                                                       stddev=std),
                                   name="{}_input_2_weights".format(name))
-            fcb = tf.Variable(tf.truncated_normal([out_size], stddev=std),
+            fcb = tf.Variable(tf.random.truncated_normal([out_size], stddev=std),
                               name="{}_bias".format(name))
 
             self._weights.weights["{}_input_1_weights".format(name)] = input1W
@@ -1217,7 +1218,7 @@ class GQCNNTF(object):
         fc = self._leaky_relu(tf.matmul(input_fc_node_1, input1W) +
                               tf.matmul(input_fc_node_2, input2W) + fcb,
                               alpha=self._relu_coeff)
-        fc = tf.nn.dropout(fc, 1 - drop_rate)
+        fc = tf.nn.dropout(fc, rate=1 - (1 - drop_rate))
 
         # Add output to feature dict.
         self._feature_tensors[name] = fc
@@ -1243,7 +1244,7 @@ class GQCNNTF(object):
                 tf.tile(
                     tf.reshape(input_pose_node, tf.constant((-1, 1, 1, 1))),
                     tf.constant((1, input_height, input_width, 1))))
-            norm_sub_im = tf.div(tf.subtract(sub_im, sub_mean), sub_std)
+            norm_sub_im = tf.compat.v1.div(tf.subtract(sub_im, sub_mean), sub_std)
             input_node = norm_sub_im
 
         output_node = input_node
@@ -1399,16 +1400,16 @@ class GQCNNTF(object):
                                   " merge stream must be present!")
             assert "pose_stream" in self._architecture and \
                 "merge_stream" in self._architecture, missing_stream_msg
-            with tf.name_scope("im_stream"):
+            with tf.compat.v1.name_scope("im_stream"):
                 output_im_stream, fan_out_im = self._build_im_stream(
                     input_im_node, input_pose_node, self._im_height,
                     self._im_width, self._num_channels, input_drop_rate_node,
                     self._architecture["im_stream"])
-            with tf.name_scope("pose_stream"):
+            with tf.compat.v1.name_scope("pose_stream"):
                 output_pose_stream, fan_out_pose = self._build_pose_stream(
                     input_pose_node, self._pose_dim,
                     self._architecture["pose_stream"])
-            with tf.name_scope("merge_stream"):
+            with tf.compat.v1.name_scope("merge_stream"):
                 return self._build_merge_stream(
                     output_im_stream, output_pose_stream, fan_out_im,
                     fan_out_pose, input_drop_rate_node,
@@ -1420,7 +1421,7 @@ class GQCNNTF(object):
             assert not ("pose_stream" in self._architecture or "merge_stream"
                         in self._architecture), extraneous_stream_msg.format(
                             self._input_depth_mode)
-            with tf.name_scope("im_stream"):
+            with tf.compat.v1.name_scope("im_stream"):
                 return self._build_im_stream(input_im_node,
                                              input_pose_node,
                                              self._im_height,
