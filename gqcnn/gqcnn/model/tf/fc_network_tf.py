@@ -166,7 +166,7 @@ class FCGQCNNTF(GQCNNTF):
         # want an output size of 1 x 1 x num_filts for the original input
         # size).
         convh = tf.nn.conv2d(input_node,
-                             convW,
+                             filters=convW,
                              strides=[1, 1, 1, 1],
                              padding="VALID")
 
@@ -212,7 +212,7 @@ class FCGQCNNTF(GQCNNTF):
         # because we want an output size of 1 x 1 x num_filts for the original
         # input size).
         convh_im = tf.nn.conv2d(input_node_im,
-                                convW,
+                                filters=convW,
                                 strides=[1, 1, 1, 1],
                                 padding="VALID")
 
@@ -265,7 +265,7 @@ class FCGQCNNTF(GQCNNTF):
                 tf.tile(
                     tf.reshape(input_pose_node, tf.constant((-1, 1, 1, 1))),
                     tf.constant((1, input_height, input_width, 1))))
-            norm_sub_im = tf.div(tf.subtract(sub_im, sub_mean), sub_std)
+            norm_sub_im = tf.compat.v1.div(tf.subtract(sub_im, sub_mean), sub_std)
             input_node = norm_sub_im
 
         output_node = input_node
