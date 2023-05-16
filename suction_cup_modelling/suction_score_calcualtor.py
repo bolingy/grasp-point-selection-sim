@@ -69,15 +69,11 @@ class calcualte_suction_score():
         return U, V
 
     def find_nearest(self, centroid, points):
-        try:
-            suction_points = centroid[:2] + self.suction_coordinates[:,:2]
-            distances = torch.cdist(points[:,:2].type(torch.float64), suction_points.type(torch.float64))
-            min_indices = torch.argmin(distances, dim=0)
-            point_cloud_suction = points[min_indices]
-            return point_cloud_suction
-        except Exception as error:
-            print(error, centroid, self.suction_coordinates)
-            return None
+        suction_points = centroid[:2] + self.suction_coordinates[:,:2]
+        distances = torch.cdist(points[:,:2].type(torch.float64), suction_points.type(torch.float64))
+        min_indices = torch.argmin(distances, dim=0)
+        point_cloud_suction = points[min_indices]
+        return point_cloud_suction
 
     def calculator(self, depth_image, segmask, rgb_img, grasps_and_predictions, object_id):
         self.depth_image = depth_image
