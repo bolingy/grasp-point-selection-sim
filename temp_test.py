@@ -2,7 +2,7 @@ import isaacgym
 import isaacgymenvs
 import torch
 
-ne = 2
+ne = 50
 
 envs = isaacgymenvs.make(
 	seed=0,
@@ -10,6 +10,7 @@ envs = isaacgymenvs.make(
 	num_envs=ne,
 	sim_device="cuda:0",
 	rl_device="cuda:0",
+	multi_gpu=True,
 	graphics_device_id=0
 )
 print("Observation space is", envs.observation_space)
