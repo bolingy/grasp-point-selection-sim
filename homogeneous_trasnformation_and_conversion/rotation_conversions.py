@@ -59,6 +59,12 @@ def euler_angles_to_quaternion(euler_angles: torch.Tensor, convention: str, degr
 
     return torch.tensor([quaternion[1], quaternion[2], quaternion[3], quaternion[0]]).to(device)
 
+def quaternion_to_euler_angles(quaternion: torch.Tensor, convention: str, degrees: bool) -> torch.Tensor:
+    rot_matrix = quaternion_to_matrix(quaternion)
+    euler_angles = matrix_to_euler_angles(rot_matrix, convention=convention)
+
+    return torch.tensor(euler_angles).to(device)
+
 def matrix_to_quaternion(matrix: torch.Tensor) -> torch.Tensor:
     """
     Convert rotations given as rotation matrices to quaternions.
