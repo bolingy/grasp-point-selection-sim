@@ -165,14 +165,14 @@ class calcualte_suction_score():
             
         difference_xy_plane = point_cloud_suction[:,:2] - (self.suction_coordinates[:, :2] + xyz_point[:2])
         thresh = torch.sum(torch.sum(difference_xy_plane, 1))
-        if(abs(thresh) >= 0.005):
-            # removing largest 
-            abs_difference_xy_plane = torch.abs(difference_xy_plane)
-            max_id = torch.argmax(abs_difference_xy_plane)
-            x_index = (max_id/2).to(torch.int)
-            difference_xy_plane = torch.cat((difference_xy_plane[:x_index,:], difference_xy_plane[x_index+1:,:]), dim=0)
-            thresh = torch.sum(torch.sum(difference_xy_plane, 1))
-        if(abs(thresh) > 0.08):
+        # if(abs(thresh) >= 0.005):
+        #     # removing largest 
+        #     abs_difference_xy_plane = torch.abs(difference_xy_plane)
+        #     max_id = torch.argmax(abs_difference_xy_plane)
+        #     x_index = (max_id/2).to(torch.int)
+        #     difference_xy_plane = torch.cat((difference_xy_plane[:x_index,:], difference_xy_plane[x_index+1:,:]), dim=0)
+        #     thresh = torch.sum(torch.sum(difference_xy_plane, 1))
+        if(abs(thresh) > 0.008):
             return torch.tensor(0), torch.tensor([0, 0, 0]), torch.tensor([centroid_angle[0], centroid_angle[1], centroid_angle[2]])
 
         '''
@@ -183,17 +183,17 @@ class calcualte_suction_score():
         ri = torch.clamp(torch.abs(point_cloud_suction[:, 2] - minimum_suction_point) / 0.023, max=1.0)
         suction_score = 1-torch.max(ri)
 
-        if(suction_score < 0.2):
-            # removing largest
-            max_id = torch.argmax(point_cloud_suction[:,2])
-            x_index = (max_id/2).to(torch.int)
-            point_cloud_suction = torch.cat((point_cloud_suction[:x_index,:], point_cloud_suction[x_index+1:,:]), dim=0)
-            self.suction_coordinates = torch.cat((self.suction_coordinates[:x_index,:], self.suction_coordinates[x_index+1:,:]), dim=0)
-            point_cloud_suction[:,2] = point_cloud_suction[:, 2]*torch.cos(centroid_angle[0])*torch.cos(centroid_angle[1]) - self.suction_coordinates[:,2]
+        # if(suction_score < 0.2):
+        #     # removing largest
+        #     max_id = torch.argmax(point_cloud_suction[:,2])
+        #     x_index = (max_id/2).to(torch.int)
+        #     point_cloud_suction = torch.cat((point_cloud_suction[:x_index,:], point_cloud_suction[x_index+1:,:]), dim=0)
+        #     self.suction_coordinates = torch.cat((self.suction_coordinates[:x_index,:], self.suction_coordinates[x_index+1:,:]), dim=0)
+        #     point_cloud_suction[:,2] = point_cloud_suction[:, 2]*torch.cos(centroid_angle[0])*torch.cos(centroid_angle[1]) - self.suction_coordinates[:,2]
             
-            minimum_suction_point = torch.min(point_cloud_suction[:, 2]).to(self.device)
-            ri = torch.clamp(torch.abs(point_cloud_suction[:, 2] - minimum_suction_point) / 0.023, max=1.0)
-            suction_score = 1-torch.max(ri)
+        #     minimum_suction_point = torch.min(point_cloud_suction[:, 2]).to(self.device)
+        #     ri = torch.clamp(torch.abs(point_cloud_suction[:, 2] - minimum_suction_point) / 0.023, max=1.0)
+        #     suction_score = 1-torch.max(ri)
         if(grasps_and_predictions == None):
             return suction_score, torch.tensor([xyz_point[2]-0.07, -xyz_point[0], -xyz_point[1]]), torch.tensor([centroid_angle[0], centroid_angle[1], centroid_angle[2]])
         return suction_score, torch.tensor([1.02, -xyz_point[0], -xyz_point[1]]), torch.tensor([0, 0, 0])
@@ -251,7 +251,7 @@ class calcualte_suction_score():
         # TO check if any of the point is within the threshold or not
         count = 0
         for i in range(8):
-            if(self.depth_image[V[i].type(torch.int)][U[i].type(torch.int)] > 0.015):
+            if(self.depth_image[V[i].type(torch.int)][U[i].type(torch.int)] > 0.022):
                 count += 1        
         if(count == 8):
             return torch.tensor(0)
