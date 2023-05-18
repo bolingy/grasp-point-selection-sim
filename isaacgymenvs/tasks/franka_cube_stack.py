@@ -1058,6 +1058,7 @@ class FrankaCubeStack(VecTask):
                         self.dexnet_score_temp = torch.Tensor()
                         max_num_grasps = len(self.grasps_and_predictions)
                         top_grasps = max_num_grasps if max_num_grasps <= 10 else 10
+
                         # top_grasps = 5
                         for i in range(top_grasps):
                             grasp_point = torch.tensor(
@@ -1178,6 +1179,7 @@ class FrankaCubeStack(VecTask):
                     # env_list_reset = torch.cat((env_list_reset, torch.tensor([env_count])), axis=0)
                     env_list_reset_dexnet = torch.cat(
                         (env_list_reset_dexnet, torch.tensor([env_count])), axis=0)
+                    
                 else:
                     env_complete_reset = torch.cat(
                         (env_complete_reset, torch.tensor([env_count])), axis=0)
@@ -1186,8 +1188,10 @@ class FrankaCubeStack(VecTask):
                         env_list_reset = torch.cat(
                             (env_list_reset, torch.tensor([env_count])), axis=0)
                 except:
+                    env_complete_reset = torch.cat(
+                        (env_complete_reset, torch.tensor([env_count])), axis=0)
                     print("xyz error")
-            elif (self.env_reset_id_env[env_count] == 0 and self.frame_count[env_count] > self.cooldown_frames):
+            elif (self.env_reset_id_env[env_count] == 0 and self.frame_count[env_count] > torch.tensor(self.cooldown_frames) and self.free_envs_list[env_count] == torch.tensor(0)):
 
                 # force sensor update
                 self.gym.refresh_force_sensor_tensor(self.sim)
@@ -1575,30 +1579,31 @@ class FrankaCubeStack(VecTask):
         if len(env_ids) > 0:
             for env_id in env_ids:
                 env_count = env_id.item()
-                oscillation = self.detect_oscillation(
-                    self.force_list_save[env_count])
-                success = False
-                json_save = {
-                    "force_array": self.force_list_save[env_count].tolist(),
-                    "grasp point": self.grasp_point[env_count].tolist(),
-                    "grasp_angle": self.grasp_angle[env_count].tolist(),
-                    "dexnet_score": self.dexnet_score[env_count].item(),
-                    "suction_deformation_score": self.suction_deformation_score[env_count].item(),
-                    "oscillation": oscillation,
-                    "gripper_score": 0,
-                    "success": success,
-                    "penetration": False
-                }
-                new_dir_name = str(
-                    env_count)+"_"+str(self.track_save[env_count].type(torch.int).item())
-                save_dir_json = cur_path+"/../../../System_Identification_Data/Parallelization-Data/" + \
-                    str(env_count)+"/json_data_"+new_dir_name+"_" + \
-                    str(self.config_env_count[env_count].type(
-                        torch.int).item())+".json"
-                with open(save_dir_json, 'w') as json_file:
-                    json.dump(json_save, json_file)
-                self.track_save[env_count] = self.track_save[env_count] + \
-                    torch.tensor(1)
+                if (self.force_list_save[env_count] != None and len(self.force_list_save[env_count]) > 0):
+                    oscillation = self.detect_oscillation(
+                        self.force_list_save[env_count])
+                    success = False
+                    json_save = {
+                        "force_array": self.force_list_save[env_count].tolist(),
+                        "grasp point": self.grasp_point[env_count].tolist(),
+                        "grasp_angle": self.grasp_angle[env_count].tolist(),
+                        "dexnet_score": self.dexnet_score[env_count].item(),
+                        "suction_deformation_score": self.suction_deformation_score[env_count].item(),
+                        "oscillation": oscillation,
+                        "gripper_score": 0,
+                        "success": success,
+                        "penetration": False
+                    }
+                    new_dir_name = str(
+                        env_count)+"_"+str(self.track_save[env_count].type(torch.int).item())
+                    save_dir_json = cur_path+"/../../../System_Identification_Data/Parallelization-Data/" + \
+                        str(env_count)+"/json_data_"+new_dir_name+"_" + \
+                        str(self.config_env_count[env_count].type(
+                            torch.int).item())+".json"
+                    with open(save_dir_json, 'w') as json_file:
+                        json.dump(json_save, json_file)
+                    self.track_save[env_count] = self.track_save[env_count] + \
+                        torch.tensor(1)
             print(f"timeout reset for environment {env_ids}")
             self.reset_pre_grasp_pose(env_ids)
             self.reset_object_pose(env_ids)
