@@ -641,6 +641,35 @@ class FrankaCubeStack(VecTask):
         # Refresh states
         self._update_states()
 
+    def deploy_actions(self, env_ids, pos):
+        # Reset the internal obs accordingly
+        self._q[env_ids, :] = pos
+        self._qd[env_ids, :] = torch.zeros_like(self._qd[env_ids])
+        # Set any position control to the current position, and any vel / effort control to be 0
+        # NOTE: Task takes care of actually propagating these controls in sim using the SimActions API
+        self._pos_control[env_ids, :] = pos
+        self._effort_control[env_ids, :] = torch.zeros_like(pos)
+        # Deploy updates
+        multi_env_ids_int32 = self._global_indices[env_ids, 0].flatten()
+        self.gym.set_dof_position_target_tensor_indexed(self.sim,
+                                                        gymtorch.unwrap_tensor(
+                                                            self._pos_control),
+                                                        gymtorch.unwrap_tensor(
+                                                            multi_env_ids_int32),
+                                                        len(multi_env_ids_int32))
+        self.gym.set_dof_actuation_force_tensor_indexed(self.sim,
+                                                        gymtorch.unwrap_tensor(
+                                                            self._effort_control),
+                                                        gymtorch.unwrap_tensor(
+                                                            multi_env_ids_int32),
+                                                        len(multi_env_ids_int32))
+        self.gym.set_dof_state_tensor_indexed(self.sim,
+                                                gymtorch.unwrap_tensor(
+                                                    self._dof_state),
+                                                gymtorch.unwrap_tensor(
+                                                    multi_env_ids_int32),
+                                                len(multi_env_ids_int32))
+
     def reset_init_arm_pose(self, env_ids):
         for env_count in env_ids:
             env_count = env_count.item()
@@ -671,36 +700,6 @@ class FrankaCubeStack(VecTask):
             0), self.franka_dof_lower_limits.unsqueeze(0), self.franka_dof_upper_limits)
         pos = pos.repeat(len(env_ids), 1)
 
-        # Reset the internal obs accordingly
-        self._q[env_ids, :] = pos
-        self._qd[env_ids, :] = torch.zeros_like(self._qd[env_ids])
-
-        # Set any position control to the current position, and any vel / effort control to be 0
-        # NOTE: Task takes care of actually propagating these controls in sim using the SimActions API
-        self._pos_control[env_ids, :] = pos
-        self._effort_control[env_ids, :] = torch.zeros_like(pos)
-
-        # Deploy updates
-        multi_env_ids_int32 = self._global_indices[env_ids, 0].flatten()
-        self.gym.set_dof_position_target_tensor_indexed(self.sim,
-                                                        gymtorch.unwrap_tensor(
-                                                            self._pos_control),
-                                                        gymtorch.unwrap_tensor(
-                                                            multi_env_ids_int32),
-                                                        len(multi_env_ids_int32))
-        self.gym.set_dof_actuation_force_tensor_indexed(self.sim,
-                                                        gymtorch.unwrap_tensor(
-                                                            self._effort_control),
-                                                        gymtorch.unwrap_tensor(
-                                                            multi_env_ids_int32),
-                                                        len(multi_env_ids_int32))
-        self.gym.set_dof_state_tensor_indexed(self.sim,
-                                              gymtorch.unwrap_tensor(
-                                                  self._dof_state),
-                                              gymtorch.unwrap_tensor(
-                                                  multi_env_ids_int32),
-                                              len(multi_env_ids_int32))
-
         # reinitializing the variables
         for env_id in env_ids:
             self.action_contrib[env_id] = 2
@@ -712,6 +711,8 @@ class FrankaCubeStack(VecTask):
 
         self.progress_buf[env_ids] = 0
         self.reset_buf[env_ids] = 0
+
+        return pos
 
     def reset_object_pose(self, env_ids):
         for counter in range(len(self.object_models)):
@@ -770,18 +771,19 @@ class FrankaCubeStack(VecTask):
             [0.1, 0.1, 0.1, 0.5, 0.5, 0.5], device=self.device).unsqueeze(0)
 
     def reset_idx(self, env_ids):
-        self.reset_init_arm_pose(env_ids)
+        pos = self.reset_init_arm_pose(env_ids)
+        self.deploy_actions(env_ids, pos)
         # Update objects states
         self.reset_object_pose(env_ids)
 
     def detect_oscillation(self, force_list):
-        force = pd.DataFrame(force_list)
-        force = force.astype(float)
-        force_z_average = force.rolling(window=10).mean()
-        force_numpy = force_z_average.to_numpy()
-        dx = np.gradient(np.squeeze(force_numpy))
-        dx = dx[~np.isnan(dx)]
         try:
+            force = pd.DataFrame(force_list)
+            force = force.astype(float)
+            force_z_average = force.rolling(window=10).mean()
+            force_numpy = force_z_average.to_numpy()
+            dx = np.gradient(np.squeeze(force_numpy))
+            dx = dx[~np.isnan(dx)]
             if (np.min(dx) < -0.3):
                 return True
             else:
@@ -896,36 +898,7 @@ class FrankaCubeStack(VecTask):
                 (temp_pos, torch.tensor([[0]]).to(self.device)), dim=1)
             # temp_pos = tensor_clamp(temp_pos.unsqueeze(0), self.franka_dof_lower_limits.unsqueeze(0), self.franka_dof_upper_limits)
             pos = torch.cat([pos, temp_pos])
-
-        # Reset the internal obs accordingly
-        self._q[env_ids, :] = pos
-        self._qd[env_ids, :] = torch.zeros_like(self._qd[env_ids])
-
-        # Set any position control to the current position, and any vel / effort control to be 0
-        # NOTE: Task takes care of actually propagating these controls in sim using the SimActions API
-        self._pos_control[env_ids, :] = pos
-        self._effort_control[env_ids, :] = torch.zeros_like(pos)
-
-        # Deploy updates
-        multi_env_ids_int32 = self._global_indices[env_ids, 0].flatten()
-        self.gym.set_dof_position_target_tensor_indexed(self.sim,
-                                                        gymtorch.unwrap_tensor(
-                                                            self._pos_control),
-                                                        gymtorch.unwrap_tensor(
-                                                            multi_env_ids_int32),
-                                                        len(multi_env_ids_int32))
-        self.gym.set_dof_actuation_force_tensor_indexed(self.sim,
-                                                        gymtorch.unwrap_tensor(
-                                                            self._effort_control),
-                                                        gymtorch.unwrap_tensor(
-                                                            multi_env_ids_int32),
-                                                        len(multi_env_ids_int32))
-        self.gym.set_dof_state_tensor_indexed(self.sim,
-                                              gymtorch.unwrap_tensor(
-                                                  self._dof_state),
-                                              gymtorch.unwrap_tensor(
-                                                  multi_env_ids_int32),
-                                              len(multi_env_ids_int32))
+        return pos
 
     def pre_physics_step(self, actions):
         '''
@@ -941,8 +914,8 @@ class FrankaCubeStack(VecTask):
 
         self.actions = torch.zeros(0, 7)
         # Before each loop this will track all the environments where a condition for reset has been called
-        env_list_reset = torch.tensor([])
-        env_list_reset_dexnet = torch.tensor([])
+        env_list_reset_objects = torch.tensor([])
+        env_list_reset_arm_pose = torch.tensor([])
         env_complete_reset = torch.tensor([])
         for env_count in range(self.num_envs):
             mask_camera_tensor = self.gym.get_camera_image_gpu_tensor(
@@ -1059,7 +1032,7 @@ class FrankaCubeStack(VecTask):
                         max_num_grasps = len(self.grasps_and_predictions)
                         top_grasps = max_num_grasps if max_num_grasps <= 10 else 10
 
-                        # top_grasps = 5
+                        # top_grasps = 1
                         for i in range(top_grasps):
                             grasp_point = torch.tensor(
                                 [self.grasps_and_predictions[i][0].center.x+410, self.grasps_and_predictions[i][0].center.x+180])
@@ -1093,6 +1066,12 @@ class FrankaCubeStack(VecTask):
                             bin_objects_current_pose[int(object_id.item())] = self._root_state[env_count, self._object_model_id[int(object_id.item())-1], :][:7].type(
                                 torch.float).cpu().numpy()
                         self.object_pose_store[env_count] = bin_objects_current_pose
+
+                        if (top_grasps > 0):
+                            env_list_reset_arm_pose = torch.cat(
+                                (env_list_reset_arm_pose, torch.tensor([env_count])), axis=0)
+                            env_list_reset_objects = torch.cat(
+                                (env_list_reset_objects, torch.tensor([env_count])), axis=0)
                     except:
                         print("dexnet error")
                         env_complete_reset = torch.cat(
@@ -1158,7 +1137,7 @@ class FrankaCubeStack(VecTask):
 
             self.action_env = torch.tensor(
                 [[0, 0, 0, 0, 0, 0, 1]], dtype=torch.float)
-            if ((self.env_reset_id_env[env_count] == 1) and (self.frame_count[env_count] >= self.cooldown_frames)):
+            if ((self.env_reset_id_env[env_count] == 1) and (self.frame_count[env_count] > self.cooldown_frames)):
                 self.env_reset_id_env[env_count] = torch.tensor(0)
                 self.action_env = torch.tensor(
                     [[0, 0, 0, 0, 0, 0, 1]], dtype=torch.float)
@@ -1176,17 +1155,15 @@ class FrankaCubeStack(VecTask):
                     self.dexnet_score_env[env_count] = self.dexnet_score_env[env_count][1:]
                     self.force_SI[env_count] = self.force_SI_env[env_count][0]
                     self.force_SI_env[env_count] = self.force_SI_env[env_count][1:]
-                    # env_list_reset = torch.cat((env_list_reset, torch.tensor([env_count])), axis=0)
-                    env_list_reset_dexnet = torch.cat(
-                        (env_list_reset_dexnet, torch.tensor([env_count])), axis=0)
-                    
                 else:
                     env_complete_reset = torch.cat(
                         (env_complete_reset, torch.tensor([env_count])), axis=0)
                 try:
                     if (torch.all(self.xyz_point[env_count]) == torch.tensor(0.)):
-                        env_list_reset = torch.cat(
-                            (env_list_reset, torch.tensor([env_count])), axis=0)
+                        env_list_reset_arm_pose = torch.cat(
+                            (env_list_reset_arm_pose, torch.tensor([env_count])), axis=0)
+                        env_list_reset_objects = torch.cat(
+                            (env_list_reset_objects, torch.tensor([env_count])), axis=0)
                 except:
                     env_complete_reset = torch.cat(
                         (env_complete_reset, torch.tensor([env_count])), axis=0)
@@ -1272,8 +1249,10 @@ class FrankaCubeStack(VecTask):
                     _all_objects_current_pose[int(object_id.item())] = self._root_state[env_count, self._object_model_id[int(object_id.item())-1], :][:3].type(
                         torch.float).detach().clone()
                     if (_all_objects_current_pose[int(object_id.item())][2] < torch.tensor(0.5)):
-                        env_list_reset = torch.cat(
-                            (env_list_reset, torch.tensor([env_count])), axis=0)
+                        env_list_reset_arm_pose = torch.cat(
+                            (env_list_reset_arm_pose, torch.tensor([env_count])), axis=0)
+                        env_list_reset_objects = torch.cat(
+                            (env_list_reset_objects, torch.tensor([env_count])), axis=0)
 
                 self.distance = torch.tensor([1, 1, 1])
                 if (self.action_contrib[env_count] >= torch.tensor(1)):
@@ -1369,8 +1348,10 @@ class FrankaCubeStack(VecTask):
                         angle_error = quaternion_to_euler_angles(self._eef_state[env_count][3:7], "XYZ", degrees=False) - torch.tensor(
                             [0, -self.grasp_angle[env_count][1], self.grasp_angle[env_count][0]]).to(self.device)
                         if (torch.max(torch.abs(angle_error)) > torch.deg2rad(torch.tensor(10))):
-                            env_list_reset = torch.cat(
-                                (env_list_reset, torch.tensor([env_count])), axis=0)
+                            env_list_reset_arm_pose = torch.cat(
+                                (env_list_reset_arm_pose, torch.tensor([env_count])), axis=0)
+                            env_list_reset_objects = torch.cat(
+                                (env_list_reset_objects, torch.tensor([env_count])), axis=0)
                         self.force_contact_flag[env_count] = torch.tensor(
                             1).type(torch.bool)
 
@@ -1387,8 +1368,10 @@ class FrankaCubeStack(VecTask):
                         # print("pose error", error)
 
                     if ((_all_object_pose_error > torch.tensor(0.005)) and contact_exist == torch.tensor(0)):
-                        env_list_reset = torch.cat(
-                            (env_list_reset, torch.tensor([env_count])), axis=0)
+                        env_list_reset_arm_pose = torch.cat(
+                            (env_list_reset_arm_pose, torch.tensor([env_count])), axis=0)
+                        env_list_reset_objects = torch.cat(
+                            (env_list_reset_objects, torch.tensor([env_count])), axis=0)
 
                     # If the object is moving then increase the speed else go to the default value of 0.1
                     # print(depth_point_cam, object_pose_error, self.action_contrib[env_count], contact_exist)
@@ -1527,11 +1510,15 @@ class FrankaCubeStack(VecTask):
                     elif (self.force_pre_physics > torch.tensor(10) and self.action_contrib[env_count] == 1):
                         print(env_count, " force due to collision: ",
                               self.force_pre_physics)
-                        env_list_reset = torch.cat(
-                            (env_list_reset, torch.tensor([env_count])), axis=0)
+                        env_list_reset_arm_pose = torch.cat(
+                            (env_list_reset_arm_pose, torch.tensor([env_count])), axis=0)
+                        env_list_reset_objects = torch.cat(
+                            (env_list_reset_objects, torch.tensor([env_count])), axis=0)
                 elif (self.frame_count_contact_object[env_count] == torch.tensor(1)):
-                    env_list_reset = torch.cat(
-                        (env_list_reset, torch.tensor([env_count])), axis=0)
+                    env_list_reset_arm_pose = torch.cat(
+                        (env_list_reset_arm_pose, torch.tensor([env_count])), axis=0)
+                    env_list_reset_objects = torch.cat(
+                        (env_list_reset_objects, torch.tensor([env_count])), axis=0)
 
             if (self.frame_count[env_count] <= torch.tensor(self.cooldown_frames)):
                 self.action_env = torch.tensor(
@@ -1540,17 +1527,49 @@ class FrankaCubeStack(VecTask):
             self.actions = torch.cat([self.actions, self.action_env])
             self.frame_count[env_count] += torch.tensor(1)
 
-        if (len(env_list_reset_dexnet) != 0):
-            self.reset_pre_grasp_pose(
-                env_list_reset_dexnet.to(self.device).type(torch.long))
-        if (len(env_list_reset) != 0):
-            self.reset_pre_grasp_pose(
-                env_list_reset.to(self.device).type(torch.long))
-            # self.reset_init_arm_pose(env_list_reset.to(self.device).type(torch.long))
-            self.reset_object_pose(env_list_reset.to(
+        if (len(env_complete_reset) != 0 and len(env_list_reset_arm_pose) != 0):
+            env_complete_reset = torch.unique(env_complete_reset)
+
+            env_list_reset_objects = torch.cat(
+                (env_list_reset_objects, env_complete_reset), axis=0)
+
+            env_list_reset_arm_pose = torch.unique(env_list_reset_arm_pose)
+            env_list_reset_arm_pose = torch.tensor(
+                [x for x in env_list_reset_arm_pose if x not in env_complete_reset])
+
+            env_ids = torch.cat(
+                (env_list_reset_arm_pose, env_complete_reset), axis=0)
+            env_ids = env_ids.to(self.device).type(torch.long)
+            pos1 = self.reset_pre_grasp_pose(
+                env_list_reset_arm_pose.to(self.device).type(torch.long))
+            pos2 = self.reset_init_arm_pose(
+                env_complete_reset.to(self.device).type(torch.long))
+            # env_complete_reset = torch.cat((env_complete_reset,env_list_reset_arm_pose), axis=0)
+
+            pos = torch.cat([pos1, pos2])
+            self.deploy_actions(env_ids, pos)
+
+        elif (len(env_list_reset_arm_pose) != 0):
+            env_list_reset_arm_pose = torch.unique(env_list_reset_arm_pose)
+            pos = self.reset_pre_grasp_pose(
+                env_list_reset_arm_pose.to(self.device).type(torch.long))
+
+            env_ids = env_list_reset_arm_pose.to(self.device).type(torch.long)
+            self.deploy_actions(env_ids, pos)
+
+        elif (len(env_complete_reset) != 0):
+            env_complete_reset = torch.unique(env_complete_reset)
+            env_list_reset_objects = torch.cat(
+                (env_list_reset_objects, env_complete_reset), axis=0)
+            pos = self.reset_init_arm_pose(
+                env_complete_reset.to(self.device).type(torch.long))
+            env_ids = env_complete_reset.to(self.device).type(torch.long)
+            self.deploy_actions(env_ids, pos)
+
+        if (len(env_list_reset_objects) != 0):
+            env_list_reset_objects = torch.unique(env_list_reset_objects)
+            self.reset_object_pose(env_list_reset_objects.to(
                 self.device).type(torch.long))
-        if (len(env_complete_reset) != 0):
-            self.reset_idx(env_complete_reset.to(self.device).type(torch.long))
 
         # if(self.force_encounter == 1):
         #     actions = torch.tensor(self.num_envs * [[-0.1, T_ee_pose_to_pre_grasp_pose[1][3], T_ee_pose_to_pre_grasp_pose[2][3], 0.1*action_orientation[0], 0.1*action_orientation[1], 0.1*action_orientation[2], 1]], dtype=torch.float)
@@ -1579,7 +1598,7 @@ class FrankaCubeStack(VecTask):
         if len(env_ids) > 0:
             for env_id in env_ids:
                 env_count = env_id.item()
-                if (self.force_list_save[env_count] != None and len(self.force_list_save[env_count]) > 0):
+                if (self.force_list_save[env_count] != None and len(self.force_list_save[env_count]) > 10):
                     oscillation = self.detect_oscillation(
                         self.force_list_save[env_count])
                     success = False
@@ -1605,7 +1624,8 @@ class FrankaCubeStack(VecTask):
                     self.track_save[env_count] = self.track_save[env_count] + \
                         torch.tensor(1)
             print(f"timeout reset for environment {env_ids}")
-            self.reset_pre_grasp_pose(env_ids)
+            pos = self.reset_pre_grasp_pose(env_ids)
+            self.deploy_actions(env_ids, pos)
             self.reset_object_pose(env_ids)
 
         self.compute_observations()
