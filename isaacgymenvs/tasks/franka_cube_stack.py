@@ -664,11 +664,11 @@ class FrankaCubeStack(VecTask):
                                                             multi_env_ids_int32),
                                                         len(multi_env_ids_int32))
         self.gym.set_dof_state_tensor_indexed(self.sim,
-                                                gymtorch.unwrap_tensor(
-                                                    self._dof_state),
-                                                gymtorch.unwrap_tensor(
-                                                    multi_env_ids_int32),
-                                                len(multi_env_ids_int32))
+                                              gymtorch.unwrap_tensor(
+                                                  self._dof_state),
+                                              gymtorch.unwrap_tensor(
+                                                  multi_env_ids_int32),
+                                              len(multi_env_ids_int32))
 
     def reset_init_arm_pose(self, env_ids):
         for env_count in env_ids:
@@ -932,7 +932,7 @@ class FrankaCubeStack(VecTask):
                     self.sim, self.envs[env_count], self.camera_handles[env_count][0], gymapi.IMAGE_SEGMENTATION)
                 torch_mask_tensor = gymtorch.wrap_tensor(mask_camera_tensor)
                 segmask = torch_mask_tensor.to(self.device)
-                segmask_check = segmask[180:660, 410:1050]
+                # segmask_check = segmask[180:660, 410:1050]
                 segmask_object_count = segmask[341:528, 652:842]
 
                 objects_spawned = len(torch.unique(segmask_object_count))
@@ -1035,7 +1035,7 @@ class FrankaCubeStack(VecTask):
                         # top_grasps = 1
                         for i in range(top_grasps):
                             grasp_point = torch.tensor(
-                                [self.grasps_and_predictions[i][0].center.x+410, self.grasps_and_predictions[i][0].center.x+180])
+                                [self.grasps_and_predictions[i][0].center.x, self.grasps_and_predictions[i][0].center.y])
 
                             depth_image_suction = depth_image
                             suction_deformation_score, xyz_point, grasp_angle = self.suction_score_object.calculator(
@@ -1084,7 +1084,7 @@ class FrankaCubeStack(VecTask):
                     if (max_num_grasps > 10):
                         while sample_point < len(self.grasps_and_predictions):
                             grasp_point = torch.tensor(
-                                [self.grasps_and_predictions[sample_point][0].center.x+410, self.grasps_and_predictions[sample_point][0].center.x+180])
+                                [self.grasps_and_predictions[sample_point][0].center.x, self.grasps_and_predictions[sample_point][0].center.y])
 
                             depth_image_suction = depth_image
                             suction_deformation_score, xyz_point, grasp_angle = self.suction_score_object.calculator(
