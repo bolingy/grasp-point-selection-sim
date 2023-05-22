@@ -271,9 +271,20 @@ class FrankaCubeStack(VecTask):
         asset_options.use_mesh_materials = True
 
         # self.object_models = ["small_health_bottle_3", "pizza_cutter_3", "calcium_bottle_3"]
-        self.object_models = ["calcium_bottle_1", "calcium_bottle_2", "calcium_bottle_3", "calcium_bottle_4", "calcium_bottle_5",
-                              "small_health_bottle_1", "small_health_bottle_2", "small_health_bottle_3", "small_health_bottle_4",
-                              "small_health_bottle_5", "pizza_cutter_1", "pizza_cutter_2", "pizza_cutter_3", "pizza_cutter_4", "pizza_cutter_5"]
+        self.object_models = []
+        objects_file = open('misc/object_list_domain_randomization.txt', 'r')
+        objects = objects_file.readlines()
+        
+        self.object_count_unique = 0
+        # Strips the newline character
+        for object in objects:
+            self.object_count_unique += 1
+            for domain in range(5):
+                self.object_models.append(str(object.strip())+"_"+str(domain+1))
+
+        # self.object_models = ["orange_cylinder_1", "orange_cylinder_2", "orange_cylinder_3", "orange_cylinder_4", "orange_cylinder_5",
+        #                       "centrum_box_1", "centrum_box_2", "centrum_box_3", "centrum_box_4",
+        #                       "centrum_box_5", "green_cylinder_1", "green_cylinder_2", "green_cylinder_3", "green_cylinder_4", "green_cylinder_5"]
         object_model_asset_file = []
         object_model_asset = []
         for counter, model in enumerate(self.object_models):
@@ -676,7 +687,7 @@ class FrankaCubeStack(VecTask):
             # How many objects should we spawn 2 or 3
             random_number = random.choice([2, 3])
             object_list_env = {}
-            object_set = [1, 2, 3]
+            object_set = range(1, self.object_count_unique+1)
             selected_object = random.sample(object_set, random_number)
             list_objects_domain_randomizer = torch.tensor([])
             for object_count in selected_object:
