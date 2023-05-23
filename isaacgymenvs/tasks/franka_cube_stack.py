@@ -480,6 +480,15 @@ class FrankaCubeStack(VecTask):
                 camera_handle_gripper, env_ptr, franka_hand_link_handle, local_transform, gymapi.FOLLOW_TRANSFORM)
             self.camera_handles[i].append(camera_handle_gripper)
 
+            l_color = gymapi.Vec3(1, 1, 1)
+            l_ambient = gymapi.Vec3(0.2, 0.2, 0.2)
+            l_direction = gymapi.Vec3(-1, -1, 1)
+            self.gym.set_light_parameters(
+                self.sim, 0, l_color, l_ambient, l_direction)
+            l_direction = gymapi.Vec3(-1, 1, 1)
+            self.gym.set_light_parameters(
+                self.sim, 1, l_color, l_ambient, l_direction)
+
         # Setup data
         self.init_data()
 
@@ -1034,7 +1043,7 @@ class FrankaCubeStack(VecTask):
                         self.dexnet_score_temp = torch.Tensor()
                         max_num_grasps = len(self.grasps_and_predictions)
                         top_grasps = max_num_grasps if max_num_grasps <= 10 else 10
-                        print("Total points pre sampling: ", max_num_grasps)
+
                         # top_grasps = 1
                         for i in range(top_grasps):
                             grasp_point = torch.tensor(
@@ -1113,9 +1122,7 @@ class FrankaCubeStack(VecTask):
                                 (self.dexnet_score_temp, torch.tensor([self.grasps_and_predictions[i][1]])))
                             increment_value = max(math.ceil(len(self.grasps_and_predictions)/25), 5)
                             sample_point += increment_value
-                        
-                    print("num ", len(self.xyz_point_temp))    
-                    
+
                     self.suction_deformation_score_env[env_count] = self.suction_deformation_score_temp
                     self.grasp_angle_env[env_count] = self.grasp_angle_temp
                     self.force_SI_env[env_count] = self.force_SI_temp
@@ -1543,9 +1550,6 @@ class FrankaCubeStack(VecTask):
 
             env_ids = torch.cat(
                 (env_list_reset_arm_pose, env_complete_reset), axis=0)
-            
-            env_ids = torch.unique(env_ids)
-
             env_ids = env_ids.to(self.device).type(torch.long)
             pos1 = self.reset_pre_grasp_pose(
                 env_list_reset_arm_pose.to(self.device).type(torch.long))
