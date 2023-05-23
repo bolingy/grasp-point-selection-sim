@@ -1042,6 +1042,7 @@ class FrankaCubeStack(VecTask):
                         self.force_SI_temp = torch.Tensor()
                         self.dexnet_score_temp = torch.Tensor()
                         max_num_grasps = len(self.grasps_and_predictions)
+                        print("num ", max_num_grasps)
                         top_grasps = max_num_grasps if max_num_grasps <= 10 else 10
 
                         # top_grasps = 1
@@ -1093,7 +1094,7 @@ class FrankaCubeStack(VecTask):
                         #     f"Quality is {self.grasps_and_predictions[i][1]}, xyz point is {self.xyz_point_temp}, deformation score is {self.suction_deformation_score_temp}, grasp angle is {self.grasp_angle_temp} for environment {env_count}")
                     sample_point = 0
                     # max_num_grasps = 0
-                    if (max_num_grasps > 10):
+                    if (max_num_grasps > 30):
                         while sample_point < len(self.grasps_and_predictions):
                             grasp_point = torch.tensor(
                                 [self.grasps_and_predictions[sample_point][0].center.x, self.grasps_and_predictions[sample_point][0].center.y])
@@ -1120,8 +1121,9 @@ class FrankaCubeStack(VecTask):
                                 (self.force_SI_temp, torch.tensor([force_SI])))
                             self.dexnet_score_temp = torch.cat(
                                 (self.dexnet_score_temp, torch.tensor([self.grasps_and_predictions[i][1]])))
-                            sample_point += 10
-
+                            increment_value = min(len(self.grasps_and_predictions)/25, 10)
+                            sample_point += increment_value
+                            
                     self.suction_deformation_score_env[env_count] = self.suction_deformation_score_temp
                     self.grasp_angle_env[env_count] = self.grasp_angle_temp
                     self.force_SI_env[env_count] = self.force_SI_temp
@@ -1261,10 +1263,8 @@ class FrankaCubeStack(VecTask):
                     _all_objects_current_pose[int(object_id.item())] = self._root_state[env_count, self._object_model_id[int(object_id.item())-1], :][:3].type(
                         torch.float).detach().clone()
                     if (_all_objects_current_pose[int(object_id.item())][2] < torch.tensor(0.5)):
-                        env_list_reset_arm_pose = torch.cat(
-                            (env_list_reset_arm_pose, torch.tensor([env_count])), axis=0)
-                        env_list_reset_objects = torch.cat(
-                            (env_list_reset_objects, torch.tensor([env_count])), axis=0)
+                        env_complete_reset = torch.cat(
+                        (env_complete_reset, torch.tensor([env_count])), axis=0)
 
                 self.distance = torch.tensor([1, 1, 1])
                 if (self.action_contrib[env_count] >= torch.tensor(1)):
@@ -1551,6 +1551,9 @@ class FrankaCubeStack(VecTask):
 
             env_ids = torch.cat(
                 (env_list_reset_arm_pose, env_complete_reset), axis=0)
+            
+            env_ids = torch.unique(env_ids)
+
             env_ids = env_ids.to(self.device).type(torch.long)
             pos1 = self.reset_pre_grasp_pose(
                 env_list_reset_arm_pose.to(self.device).type(torch.long))
