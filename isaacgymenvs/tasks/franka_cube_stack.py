@@ -274,13 +274,14 @@ class FrankaCubeStack(VecTask):
         self.object_models = []
         objects_file = open('misc/object_list_domain_randomization.txt', 'r')
         objects = objects_file.readlines()
-        
+
         self.object_count_unique = 0
         # Strips the newline character
         for object in objects:
             self.object_count_unique += 1
             for domain in range(5):
-                self.object_models.append(str(object.strip())+"_"+str(domain+1))
+                self.object_models.append(
+                    str(object.strip())+"_"+str(domain+1))
 
         # self.object_models = ["orange_cylinder_1", "orange_cylinder_2", "orange_cylinder_3", "orange_cylinder_4", "orange_cylinder_5",
         #                       "centrum_box_1", "centrum_box_2", "centrum_box_3", "centrum_box_4",
@@ -694,8 +695,8 @@ class FrankaCubeStack(VecTask):
                 domain_randomizer = random_number = random.choice(
                     [1, 2, 3, 4, 5])
                 offset_object = np.array([np.random.uniform(0.67, 0.7, 1).reshape(
-                    1,)[0], np.random.uniform(-0.22, -0.12, 1).reshape(1,)[0], 1.3, np.random.uniform(0.0, 0.0, 1).reshape(
-                    1,)[0], np.random.uniform(0.0, 0.0, 1).reshape(1,)[0], np.random.uniform(0.0, 3.14, 1).reshape(1,)[0]])
+                    1,)[0], np.random.uniform(-0.22, -0.12, 1).reshape(1,)[0], 1.3, random.choice([0, 1.57, 3.14]), 
+                    random.choice([0, 1.57, 3.14]), np.random.uniform(0.0, 3.14, 1).reshape(1,)[0]])
                 item_config = (object_count-1)*5 + domain_randomizer
                 object_list_env[item_config] = offset_object
                 list_objects_domain_randomizer = torch.cat(
