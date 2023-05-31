@@ -19,6 +19,7 @@ from gqcnn.utils import GripperMode
 from pathlib import Path
 cur_path = str(Path(__file__).parent.absolute())
 
+
 class dexnet3():
     def __init__(self, cam_intr):
         self.camera_intr = cam_intr
@@ -87,9 +88,12 @@ class dexnet3():
         action, grasps, q_values = self.policy(state)
         num_grasps = len(grasps)
         grasps_and_predictions = zip(grasps, q_values)
+        
         grasps_and_predictions = sorted(grasps_and_predictions,
                                         key=lambda x: x[1],
                                         reverse=True)
+        unsorted_grasps_and_predictions = list(zip(grasps, q_values))
+        
         # std_dev_np = np.array([])
         
         # for i in range(num_grasps):
@@ -114,4 +118,4 @@ class dexnet3():
                 action.grasp.depth, action.q_value))
             vis.show()
         
-        return action, grasps_and_predictions
+        return action, grasps_and_predictions, unsorted_grasps_and_predictions
