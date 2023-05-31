@@ -139,6 +139,7 @@ class FrankaCubeStack(VecTask):
         self.dexnet_coordinates = np.array([])
         self.grasp_angle = torch.tensor([[0, 0, 0]])
         self.grasps_and_predictions = None
+        self.unsorted_grasps_and_predictions  = None
 
         # #dexnet results
         # self.suction_deformation_score = torch.tensor(0.0)
@@ -482,15 +483,6 @@ class FrankaCubeStack(VecTask):
                 camera_handle_gripper, env_ptr, franka_hand_link_handle, local_transform, gymapi.FOLLOW_TRANSFORM)
             self.camera_handles[i].append(camera_handle_gripper)
 
-            l_color = gymapi.Vec3(1, 1, 1)
-            l_ambient = gymapi.Vec3(0.2, 0.2, 0.2)
-            l_direction = gymapi.Vec3(-1, -1, 1)
-            self.gym.set_light_parameters(
-                self.sim, 0, l_color, l_ambient, l_direction)
-            l_direction = gymapi.Vec3(-1, 1, 1)
-            self.gym.set_light_parameters(
-                self.sim, 1, l_color, l_ambient, l_direction)
-
         # Setup data
         self.init_data()
 
@@ -688,7 +680,7 @@ class FrankaCubeStack(VecTask):
         for env_count in env_ids:
             env_count = env_count.item()
             # How many objects should we spawn 2 or 3
-            random_number = random.choice([2, 3])
+            random_number = random.choice([1, 2])
             object_list_env = {}
             object_set = range(1, self.object_count_unique+1)
             selected_object = random.sample(object_set, random_number)
@@ -696,9 +688,12 @@ class FrankaCubeStack(VecTask):
             for object_count in selected_object:
                 domain_randomizer = random_number = random.choice(
                     [1, 2, 3, 4, 5])
+                # offset_object = np.array([np.random.uniform(0.67, 0.7, 1).reshape(
+                #     1,)[0], np.random.uniform(-0.22, -0.12, 1).reshape(1,)[0], 1.3, random.choice([0, 1.57, 3.14]),
+                #     random.choice([0, 1.57, 3.14]), np.random.uniform(0.0, 3.14, 1).reshape(1,)[0]])
                 offset_object = np.array([np.random.uniform(0.67, 0.7, 1).reshape(
-                    1,)[0], np.random.uniform(-0.22, -0.12, 1).reshape(1,)[0], 1.3, random.choice([0, 1.57, 3.14]),
-                    random.choice([0, 1.57, 3.14]), np.random.uniform(0.0, 3.14, 1).reshape(1,)[0]])
+                    1,)[0], np.random.uniform(-0.22, -0.12, 1).reshape(1,)[0], 1.3, 0.0,
+                    0.0, 0.0])
                 quat = euler_angles_to_quaternion(
                     torch.tensor(offset_object[3:6]), "XYZ", degrees=False)
                 offset_object = np.concatenate(
@@ -1056,7 +1051,7 @@ class FrankaCubeStack(VecTask):
                         depth_numpy_temp[180:660, 410:1050], frame=self.camera_intrinsics_back_cam.frame)
                     max_num_grasps = 0
                     try:
-                        action, self.grasps_and_predictions = self.dexnet_object.inference(
+                        action, self.grasps_and_predictions, self.unsorted_grasps_and_predictions = self.dexnet_object.inference(
                             depth_img_dexnet, segmask_dexnet, None)
 
                         self.suction_deformation_score_temp = torch.Tensor()
@@ -1066,7 +1061,7 @@ class FrankaCubeStack(VecTask):
                         self.force_SI_temp = torch.Tensor()
                         self.dexnet_score_temp = torch.Tensor()
                         max_num_grasps = len(self.grasps_and_predictions)
-                        top_grasps = max_num_grasps if max_num_grasps <= 10 else 10
+                        top_grasps = max_num_grasps if max_num_grasps <= 10 else 7
 
                         # top_grasps = 2
                         for i in range(top_grasps):
@@ -1108,8 +1103,8 @@ class FrankaCubeStack(VecTask):
                                 (env_list_reset_arm_pose, torch.tensor([env_count])), axis=0)
                             env_list_reset_objects = torch.cat(
                                 (env_list_reset_objects, torch.tensor([env_count])), axis=0)
-                    except:
-                        print("dexnet error")
+                    except Exception as e:
+                        print("dexnet error: ", e)
                         env_complete_reset = torch.cat(
                             (env_complete_reset, torch.tensor([env_count])), axis=0)
 
@@ -1117,14 +1112,14 @@ class FrankaCubeStack(VecTask):
                         #     f"Quality is {self.grasps_and_predictions[i][1]}, xyz point is {self.xyz_point_temp}, deformation score is {self.suction_deformation_score_temp}, grasp angle is {self.grasp_angle_temp} for environment {env_count}")
                     sample_point = 0
                     # max_num_grasps = 1
-                    if (max_num_grasps > 30):
-                        while sample_point < len(self.grasps_and_predictions):
+                    if (max_num_grasps > 10):
+                        while sample_point < len(self.unsorted_grasps_and_predictions):
                             grasp_point = torch.tensor(
-                                [self.grasps_and_predictions[sample_point][0].center.x, self.grasps_and_predictions[sample_point][0].center.y])
+                                [self.unsorted_grasps_and_predictions[sample_point][0].center.x, self.unsorted_grasps_and_predictions[sample_point][0].center.y])
 
                             depth_image_suction = depth_image
                             suction_deformation_score, xyz_point, grasp_angle = self.suction_score_object.calculator(
-                                depth_image_suction, segmask, rgb_image_copy, self.grasps_and_predictions[sample_point][0], self.object_target_id[env_count])
+                                depth_image_suction, segmask, rgb_image_copy, self.unsorted_grasps_and_predictions[sample_point][0], self.object_target_id[env_count])
                             self.suction_deformation_score_temp = torch.cat(
                                 (self.suction_deformation_score_temp, torch.tensor([suction_deformation_score]))).type(torch.float)
                             self.xyz_point_temp = torch.cat(
@@ -1143,10 +1138,11 @@ class FrankaCubeStack(VecTask):
                             self.force_SI_temp = torch.cat(
                                 (self.force_SI_temp, torch.tensor([force_SI])))
                             self.dexnet_score_temp = torch.cat(
-                                (self.dexnet_score_temp, torch.tensor([self.grasps_and_predictions[i][1]])))
+                                (self.dexnet_score_temp, torch.tensor([self.unsorted_grasps_and_predictions[i][1]])))
                             increment_value = max(
-                                math.ceil(len(self.grasps_and_predictions)/25), 5)
+                                math.ceil(len(self.unsorted_grasps_and_predictions)/35), 5)
                             sample_point += increment_value
+
 
                     self.suction_deformation_score_env[env_count] = self.suction_deformation_score_temp
                     self.grasp_angle_env[env_count] = self.grasp_angle_temp
