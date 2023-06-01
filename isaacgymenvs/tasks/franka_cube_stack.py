@@ -139,6 +139,7 @@ class FrankaCubeStack(VecTask):
         self.dexnet_coordinates = np.array([])
         self.grasp_angle = torch.tensor([[0, 0, 0]])
         self.grasps_and_predictions = None
+        self.unsorted_grasps_and_predictions = None
 
         # #dexnet results
         # self.suction_deformation_score = torch.tensor(0.0)
@@ -802,7 +803,7 @@ class FrankaCubeStack(VecTask):
             force_numpy = force_z_average.to_numpy()
             dx = np.gradient(np.squeeze(force_numpy))
             dx = dx[~np.isnan(dx)]
-            if (np.min(dx) < -0.3):
+            if (np.min(dx) < -0.8):
                 return True
             else:
                 return False
@@ -1066,7 +1067,7 @@ class FrankaCubeStack(VecTask):
                         self.force_SI_temp = torch.Tensor()
                         self.dexnet_score_temp = torch.Tensor()
                         max_num_grasps = len(self.grasps_and_predictions)
-                        top_grasps = max_num_grasps if max_num_grasps <= 10 else 10
+                        top_grasps = max_num_grasps if max_num_grasps <= 10 else 7
 
                         # top_grasps = 2
                         for i in range(top_grasps):
@@ -1108,6 +1109,10 @@ class FrankaCubeStack(VecTask):
                                 (env_list_reset_arm_pose, torch.tensor([env_count])), axis=0)
                             env_list_reset_objects = torch.cat(
                                 (env_list_reset_objects, torch.tensor([env_count])), axis=0)
+                        else:
+                            print("No sample points")
+                            env_complete_reset = torch.cat(
+                                (env_complete_reset, torch.tensor([env_count])), axis=0)
                     except:
                         print("dexnet error")
                         env_complete_reset = torch.cat(
@@ -1117,14 +1122,14 @@ class FrankaCubeStack(VecTask):
                         #     f"Quality is {self.grasps_and_predictions[i][1]}, xyz point is {self.xyz_point_temp}, deformation score is {self.suction_deformation_score_temp}, grasp angle is {self.grasp_angle_temp} for environment {env_count}")
                     sample_point = 0
                     # max_num_grasps = 1
-                    if (max_num_grasps > 30):
-                        while sample_point < len(self.grasps_and_predictions):
+                    if (max_num_grasps > 10):
+                        while sample_point < len(self.unsorted_grasps_and_predictions):
                             grasp_point = torch.tensor(
-                                [self.grasps_and_predictions[sample_point][0].center.x, self.grasps_and_predictions[sample_point][0].center.y])
+                                [self.unsorted_grasps_and_predictions[sample_point][0].center.x, self.unsorted_grasps_and_predictions[sample_point][0].center.y])
 
                             depth_image_suction = depth_image
                             suction_deformation_score, xyz_point, grasp_angle = self.suction_score_object.calculator(
-                                depth_image_suction, segmask, rgb_image_copy, self.grasps_and_predictions[sample_point][0], self.object_target_id[env_count])
+                                depth_image_suction, segmask, rgb_image_copy, self.unsorted_grasps_and_predictions[sample_point][0], self.object_target_id[env_count])
                             self.suction_deformation_score_temp = torch.cat(
                                 (self.suction_deformation_score_temp, torch.tensor([suction_deformation_score]))).type(torch.float)
                             self.xyz_point_temp = torch.cat(
@@ -1143,11 +1148,11 @@ class FrankaCubeStack(VecTask):
                             self.force_SI_temp = torch.cat(
                                 (self.force_SI_temp, torch.tensor([force_SI])))
                             self.dexnet_score_temp = torch.cat(
-                                (self.dexnet_score_temp, torch.tensor([self.grasps_and_predictions[i][1]])))
+                                (self.dexnet_score_temp, torch.tensor([self.unsorted_grasps_and_predictions[i][1]])))
                             increment_value = max(
-                                math.ceil(len(self.grasps_and_predictions)/25), 5)
+                                math.ceil(len(self.unsorted_grasps_and_predictions)/40), 3)
                             sample_point += increment_value
-
+                            
                     self.suction_deformation_score_env[env_count] = self.suction_deformation_score_temp
                     self.grasp_angle_env[env_count] = self.grasp_angle_temp
                     self.force_SI_env[env_count] = self.force_SI_temp
@@ -1197,10 +1202,36 @@ class FrankaCubeStack(VecTask):
                         (env_complete_reset, torch.tensor([env_count])), axis=0)
                 try:
                     if (torch.all(self.xyz_point[env_count]) == torch.tensor(0.)):
+                        print("xyz point error", self.xyz_point[env_count])
                         env_list_reset_arm_pose = torch.cat(
                             (env_list_reset_arm_pose, torch.tensor([env_count])), axis=0)
                         env_list_reset_objects = torch.cat(
                             (env_list_reset_objects, torch.tensor([env_count])), axis=0)
+                        oscillation = False
+                        success = False
+                        json_save = {
+                            "force_array": [],
+                            "grasp point": self.grasp_point[env_count].tolist(),
+                            "grasp_angle": self.grasp_angle[env_count].tolist(),
+                            "dexnet_score": self.dexnet_score[env_count].item(),
+                            "suction_deformation_score": self.suction_deformation_score[env_count].item(),
+                            "oscillation": oscillation,
+                            "gripper_score": 0,
+                            "success": success,
+                            "object_id": self.object_target_id[env_count].item(),
+                            "penetration": False,
+                            "unreachable": True
+                        }
+                        new_dir_name = str(
+                            env_count)+"_"+str(self.track_save[env_count].type(torch.int).item())
+                        save_dir_json = cur_path+"/../../../System_Identification_Data/Parallelization-Data/" + \
+                            str(env_count)+"/json_data_"+new_dir_name+"_" + \
+                            str(self.config_env_count[env_count].type(
+                                torch.int).item())+".json"
+                        with open(save_dir_json, 'w') as json_file:
+                            json.dump(json_save, json_file)
+                        self.track_save[env_count] = self.track_save[env_count] + \
+                            torch.tensor(1)
                 except:
                     env_complete_reset = torch.cat(
                         (env_complete_reset, torch.tensor([env_count])), axis=0)
@@ -1403,27 +1434,83 @@ class FrankaCubeStack(VecTask):
                                 (env_list_reset_arm_pose, torch.tensor([env_count])), axis=0)
                             env_list_reset_objects = torch.cat(
                                 (env_list_reset_objects, torch.tensor([env_count])), axis=0)
+                            
+                            print(env_count, "reset because of arm angle errror")
+                            oscillation = False
+                            success = False
+                            json_save = {
+                                "force_array": [],
+                                "grasp point": self.grasp_point[env_count].tolist(),
+                                "grasp_angle": self.grasp_angle[env_count].tolist(),
+                                "dexnet_score": self.dexnet_score[env_count].item(),
+                                "suction_deformation_score": self.suction_deformation_score[env_count].item(),
+                                "oscillation": oscillation,
+                                "gripper_score": 0,
+                                "success": success,
+                                "object_id": self.object_target_id[env_count].item(),
+                                "penetration": False,
+                                "unreachable": True
+                            }
+                            new_dir_name = str(
+                                env_count)+"_"+str(self.track_save[env_count].type(torch.int).item())
+                            save_dir_json = cur_path+"/../../../System_Identification_Data/Parallelization-Data/" + \
+                                str(env_count)+"/json_data_"+new_dir_name+"_" + \
+                                str(self.config_env_count[env_count].type(
+                                    torch.int).item())+".json"
+                            with open(save_dir_json, 'w') as json_file:
+                                json.dump(json_save, json_file)
+                            self.track_save[env_count] = self.track_save[env_count] + \
+                                torch.tensor(1)
+                            
                         self.force_contact_flag[env_count] = torch.tensor(
                             1).type(torch.bool)
 
                     '''
                     detecting contacts with other objects before contact to the target object
                     '''
+                    _all_object_pose_error = torch.tensor(0.0)
                     try:
                         # estimating movement of other objects
                         for object_id in self.selected_object_env[env_count]:
-                            _all_object_pose_error = torch.abs(torch.norm(
-                                _all_objects_current_pose[int(object_id.item())] - self.all_objects_last_pose[env_count][int(object_id.item())]))
+                            if(object_id != self.object_target_id[env_count]):
+                                _all_object_pose_error = torch.abs(torch.norm(
+                                    _all_objects_current_pose[int(object_id.item())] - self.all_objects_last_pose[env_count][int(object_id.item())]))
                     except Exception as error:
                         _all_object_pose_error = torch.tensor(0.0)
 
                         # print("pose error", error)
 
-                    if ((_all_object_pose_error > torch.tensor(0.005)) and contact_exist == torch.tensor(0)):
+                    if ((_all_object_pose_error > torch.tensor(0.02)) and contact_exist == torch.tensor(0)):
                         env_list_reset_arm_pose = torch.cat(
                             (env_list_reset_arm_pose, torch.tensor([env_count])), axis=0)
                         env_list_reset_objects = torch.cat(
                             (env_list_reset_objects, torch.tensor([env_count])), axis=0)
+                        print(env_count, "reset because of object re placement check")
+                        oscillation = False
+                        success = False
+                        json_save = {
+                            "force_array": [],
+                            "grasp point": self.grasp_point[env_count].tolist(),
+                            "grasp_angle": self.grasp_angle[env_count].tolist(),
+                            "dexnet_score": self.dexnet_score[env_count].item(),
+                            "suction_deformation_score": self.suction_deformation_score[env_count].item(),
+                            "oscillation": oscillation,
+                            "gripper_score": 0,
+                            "success": success,
+                            "object_id": self.object_target_id[env_count].item(),
+                            "penetration": False,
+                            "unreachable": True
+                        }
+                        new_dir_name = str(
+                            env_count)+"_"+str(self.track_save[env_count].type(torch.int).item())
+                        save_dir_json = cur_path+"/../../../System_Identification_Data/Parallelization-Data/" + \
+                            str(env_count)+"/json_data_"+new_dir_name+"_" + \
+                            str(self.config_env_count[env_count].type(
+                                torch.int).item())+".json"
+                        with open(save_dir_json, 'w') as json_file:
+                            json.dump(json_save, json_file)
+                        self.track_save[env_count] = self.track_save[env_count] + \
+                            torch.tensor(1)
 
                     # If the object is moving then increase the speed else go to the default value of 0.1
                     # print(depth_point_cam, object_pose_error, self.action_contrib[env_count], contact_exist)
@@ -1440,9 +1527,10 @@ class FrankaCubeStack(VecTask):
                     # except Exception as error:
                     #     print("speed error", error)
                     self.last_object_pose[env_count] = current_object_pose
-                    for object_id in self.selected_object_env[env_count]:
-                        self.all_objects_last_pose[env_count][int(
-                            object_id.item())] = _all_objects_current_pose[int(object_id.item())]
+                    if(self.action_contrib[env_count] > 1):
+                        for object_id in self.selected_object_env[env_count]:
+                            self.all_objects_last_pose[env_count][int(
+                                object_id.item())] = _all_objects_current_pose[int(object_id.item())]
 
                 if (self.frame_count[env_count] > torch.tensor(self.cooldown_frames) and self.frame_count_contact_object[env_count] == torch.tensor(0)):
                     if ((torch.max(torch.abs(self.action_env[0][:3]))) <= 0.001 and (torch.max(torch.abs(self.action_env[0][3:6]))) <= 0.001):
@@ -1547,7 +1635,8 @@ class FrankaCubeStack(VecTask):
                             "gripper_score": score_gripper.item(),
                             "success": success,
                             "object_id": self.object_target_id[env_count].item(),
-                            "penetration": penetration
+                            "penetration": penetration,
+                            "unreachable": False
                         }
                         new_dir_name = str(
                             env_count)+"_"+str(self.track_save[env_count].type(torch.int).item())
@@ -1567,7 +1656,32 @@ class FrankaCubeStack(VecTask):
                             (env_list_reset_arm_pose, torch.tensor([env_count])), axis=0)
                         env_list_reset_objects = torch.cat(
                             (env_list_reset_objects, torch.tensor([env_count])), axis=0)
-                elif (self.frame_count_contact_object[env_count] == torch.tensor(1)):
+                        oscillation = False
+                        success = False
+                        json_save = {
+                            "force_array": [],
+                            "grasp point": self.grasp_point[env_count].tolist(),
+                            "grasp_angle": self.grasp_angle[env_count].tolist(),
+                            "dexnet_score": self.dexnet_score[env_count].item(),
+                            "suction_deformation_score": self.suction_deformation_score[env_count].item(),
+                            "oscillation": oscillation,
+                            "gripper_score": 0,
+                            "success": success,
+                            "object_id": self.object_target_id[env_count].item(),
+                            "penetration": False,
+                            "unreachable": True
+                        }
+                        new_dir_name = str(
+                            env_count)+"_"+str(self.track_save[env_count].type(torch.int).item())
+                        save_dir_json = cur_path+"/../../../System_Identification_Data/Parallelization-Data/" + \
+                            str(env_count)+"/json_data_"+new_dir_name+"_" + \
+                            str(self.config_env_count[env_count].type(
+                                torch.int).item())+".json"
+                        with open(save_dir_json, 'w') as json_file:
+                            json.dump(json_save, json_file)
+                        self.track_save[env_count] = self.track_save[env_count] + \
+                            torch.tensor(1)
+                elif (self.frame_count_contact_object[env_count] == torch.tensor(1) and self.frame_count[env_count] > torch.tensor(self.cooldown_frames)):
                     env_list_reset_arm_pose = torch.cat(
                         (env_list_reset_arm_pose, torch.tensor([env_count])), axis=0)
                     env_list_reset_objects = torch.cat(
@@ -1665,7 +1779,8 @@ class FrankaCubeStack(VecTask):
                         "gripper_score": 0,
                         "success": success,
                         "object_id": self.object_target_id[env_count].item(),
-                        "penetration": False
+                        "penetration": False,
+                        "unreachable": False
                     }
                     new_dir_name = str(
                         env_count)+"_"+str(self.track_save[env_count].type(torch.int).item())
