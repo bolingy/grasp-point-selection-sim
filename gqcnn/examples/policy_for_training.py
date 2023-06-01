@@ -89,7 +89,8 @@ class dexnet3():
         grasps_and_predictions = zip(grasps, q_values)
         grasps_and_predictions = sorted(grasps_and_predictions,
                                         key=lambda x: x[1],
-                                        reverse=True)
+                                        reverse=True)        
+        unsorted_grasps_and_predictions = list(zip(grasps, q_values))
         # std_dev_np = np.array([])
         
         # for i in range(num_grasps):
@@ -114,4 +115,4 @@ class dexnet3():
                 action.grasp.depth, action.q_value))
             vis.show()
         
-        return action, grasps_and_predictions
+        return action, grasps_and_predictions, unsorted_grasps_and_predictions
