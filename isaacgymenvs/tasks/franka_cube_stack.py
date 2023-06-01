@@ -797,7 +797,7 @@ class FrankaCubeStack(VecTask):
             force_numpy = force_z_average.to_numpy()
             dx = np.gradient(np.squeeze(force_numpy))
             dx = dx[~np.isnan(dx)]
-            if (np.min(dx) < -0.3):
+            if (np.min(dx) < -0.7):
                 return True
             else:
                 return False
@@ -1478,7 +1478,7 @@ class FrankaCubeStack(VecTask):
 
                         # print("pose error", error)
 
-                    if ((_all_object_pose_error > torch.tensor(0.005)) and contact_exist == torch.tensor(0)):
+                    if ((_all_object_pose_error > torch.tensor(0.02)) and contact_exist == torch.tensor(0)):
                         env_list_reset_arm_pose = torch.cat(
                             (env_list_reset_arm_pose, torch.tensor([env_count])), axis=0)
                         env_list_reset_objects = torch.cat(
@@ -1525,9 +1525,10 @@ class FrankaCubeStack(VecTask):
                     # except Exception as error:
                     #     print("speed error", error)
                     self.last_object_pose[env_count] = current_object_pose
-                    for object_id in self.selected_object_env[env_count]:
-                        self.all_objects_last_pose[env_count][int(
-                            object_id.item())] = _all_objects_current_pose[int(object_id.item())]
+                    if(self.action_contrib[env_count] > 1):
+                        for object_id in self.selected_object_env[env_count]:
+                            self.all_objects_last_pose[env_count][int(
+                                object_id.item())] = _all_objects_current_pose[int(object_id.item())]
 
                 if (self.frame_count[env_count] > torch.tensor(self.cooldown_frames) and self.frame_count_contact_object[env_count] == torch.tensor(0)):
                     if ((torch.max(torch.abs(self.action_env[0][:3]))) <= 0.001 and (torch.max(torch.abs(self.action_env[0][3:6]))) <= 0.001):
