@@ -130,7 +130,7 @@ class FrankaCubeStack(VecTask):
             [-1.57, 0, 0, 0, 0, 0, 0], device=self.device
         )
 
-        self.cooldown_frames = 200
+        self.cooldown_frames = 150
 
         # System IDentification data results
         self.cur_path = str(Path(__file__).parent.absolute())
@@ -693,8 +693,8 @@ class FrankaCubeStack(VecTask):
                 #     1,)[0], np.random.uniform(-0.22, -0.12, 1).reshape(1,)[0], 1.3, random.choice([0, 1.57, 3.14]),
                 #     random.choice([0, 1.57, 3.14]), np.random.uniform(0.0, 3.14, 1).reshape(1,)[0]])
                 offset_object = np.array([np.random.uniform(0.67, 0.7, 1).reshape(
-                    1,)[0], np.random.uniform(-0.22, -0.12, 1).reshape(1,)[0], 1.3, random.choice([0, 1.57, 3.14]),
-                    random.choice([0, 1.57, 3.14]), np.random.uniform(0.0, 3.14, 1).reshape(1,)[0]])
+                    1,)[0], np.random.uniform(-0.22, -0.12, 1).reshape(1,)[0], 1.3, 0.0,
+                    0.0, 0.0])
                 quat = euler_angles_to_quaternion(
                     torch.tensor(offset_object[3:6]), "XYZ", degrees=False)
                 offset_object = np.concatenate(
@@ -1037,14 +1037,6 @@ class FrankaCubeStack(VecTask):
                     depth_image_save_temp = depth_image_dexnet.clone().detach().cpu().numpy()
                     self.depth_image_save[env_count] = depth_image_save_temp[180:660, 410:1050]
 
-                    # setting the pose of the object after cool down period
-                    bin_objects_current_pose = {}
-                    for object_id in self.selected_object_env[env_count]:
-                        bin_objects_current_pose[int(object_id.item())] = self._root_state[env_count, self._object_model_id[int(object_id.item())-1], :][:7].type(
-                            torch.float).clone().detach()
-                    self.object_pose_store[env_count] = bin_objects_current_pose
-                    print(self.object_pose_store[env_count])
-
                     # saving depth image and creating a folder
                     self.config_env_count[env_count] += torch.tensor(
                         1).type(torch.int)
@@ -1105,7 +1097,9 @@ class FrankaCubeStack(VecTask):
                         top_grasps = max_num_grasps if max_num_grasps <= 10 else 7
 
                         # top_grasps = 2
-                        for i in range(top_grasps):
+                        # max_num_grasps = 5
+                        print(max_num_grasps)
+                        for i in range(max_num_grasps):
                             grasp_point = torch.tensor(
                                 [self.grasps_and_predictions[i][0].center.x, self.grasps_and_predictions[i][0].center.y])
                             
@@ -1132,13 +1126,6 @@ class FrankaCubeStack(VecTask):
                                 (self.force_SI_temp, torch.tensor([force_SI])))
                             self.dexnet_score_temp = torch.cat(
                                 (self.dexnet_score_temp, torch.tensor([self.grasps_and_predictions[i][1]])))
-
-                        # setting the pose of the object after cool down period
-                        bin_objects_current_pose = {}
-                        for object_id in self.selected_object_env[env_count]:
-                            bin_objects_current_pose[int(object_id.item())] = self._root_state[env_count, self._object_model_id[int(object_id.item())-1], :][:7].type(
-                                torch.float).clone().detach()
-                        self.object_pose_store[env_count] = bin_objects_current_pose
 
                         if (top_grasps > 0):
                             env_list_reset_arm_pose = torch.cat(
