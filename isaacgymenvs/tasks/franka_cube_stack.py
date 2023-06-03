@@ -139,7 +139,7 @@ class FrankaCubeStack(VecTask):
         self.dexnet_coordinates = np.array([])
         self.grasp_angle = torch.tensor([[0, 0, 0]])
         self.grasps_and_predictions = None
-        self.unsorted_grasps_and_predictions  = None
+        self.unsorted_grasps_and_predictions = None
 
         # #dexnet results
         # self.suction_deformation_score = torch.tensor(0.0)
@@ -160,6 +160,7 @@ class FrankaCubeStack(VecTask):
         self.force_encounter = torch.zeros(self.num_envs)
         self.frame_count = torch.zeros(self.num_envs)
         self.free_envs_list = torch.ones(self.num_envs)
+        self.object_pose_check_list = torch.ones(self.num_envs)
         self.object_target_id = torch.zeros(self.num_envs).type(torch.int)
         self.speed = torch.ones(self.num_envs)*0.1
         print("No. of environments: ", self.num_envs)
@@ -688,12 +689,12 @@ class FrankaCubeStack(VecTask):
             for object_count in selected_object:
                 domain_randomizer = random_number = random.choice(
                     [1, 2, 3, 4, 5])
+                # offset_object = np.array([np.random.uniform(0.67, 0.7, 1).reshape(
+                #     1,)[0], np.random.uniform(-0.22, -0.12, 1).reshape(1,)[0], 1.3, random.choice([0, 1.57, 3.14]),
+                #     random.choice([0, 1.57, 3.14]), np.random.uniform(0.0, 3.14, 1).reshape(1,)[0]])
                 offset_object = np.array([np.random.uniform(0.67, 0.7, 1).reshape(
                     1,)[0], np.random.uniform(-0.22, -0.12, 1).reshape(1,)[0], 1.3, random.choice([0, 1.57, 3.14]),
                     random.choice([0, 1.57, 3.14]), np.random.uniform(0.0, 3.14, 1).reshape(1,)[0]])
-                # offset_object = np.array([np.random.uniform(0.67, 0.7, 1).reshape(
-                #     1,)[0], np.random.uniform(-0.22, -0.12, 1).reshape(1,)[0], 1.3, 0.0,
-                #     0.0, 0.0])
                 quat = euler_angles_to_quaternion(
                     torch.tensor(offset_object[3:6]), "XYZ", degrees=False)
                 offset_object = np.concatenate(
@@ -720,6 +721,7 @@ class FrankaCubeStack(VecTask):
             self.frame_count_contact_object[env_id] = 0
             self.frame_count[env_id] = 0
             self.free_envs_list[env_id] = torch.tensor(1)
+            self.object_pose_check_list[env_id] = torch.tensor(1)
             self.speed[env_id] = torch.tensor(0.1)
 
         self.progress_buf[env_ids] = 0
@@ -938,9 +940,20 @@ class FrankaCubeStack(VecTask):
             segmask_check = segmask
             self.cmd_limit = to_torch(
                 [0.1, 0.1, 0.1, 0.5, 0.5, 0.5], device=self.device).unsqueeze(0)
+            
+            if ((self.frame_count[env_count] == self.cooldown_frames) and (self.object_pose_check_list[env_count] == torch.tensor(1))):
+                # setting the pose of the object after cool down period
+                bin_objects_current_pose = {}
+                for object_id in self.selected_object_env[env_count]:
+                    bin_objects_current_pose[int(object_id.item())] = self._root_state[env_count, self._object_model_id[int(object_id.item())-1], :][:7].type(
+                        torch.float).clone().detach()
+                self.object_pose_store[env_count] = bin_objects_current_pose
+                self.object_pose_check_list[env_count] == torch.tensor(0)
+                env_list_reset_objects = torch.cat(
+                    (env_list_reset_objects, torch.tensor([env_count])), axis=0)
+                self.object_pose_check_list[env_count] = torch.tensor(0)
 
-            if (self.frame_count[env_count] == self.cooldown_frames):
-
+            if ((self.frame_count[env_count] == self.cooldown_frames) and (self.object_pose_check_list[env_count] == torch.tensor(0))):
                 mask_camera_tensor = self.gym.get_camera_image_gpu_tensor(
                     self.sim, self.envs[env_count], self.camera_handles[env_count][0], gymapi.IMAGE_SEGMENTATION)
                 torch_mask_tensor = gymtorch.wrap_tensor(mask_camera_tensor)
@@ -950,6 +963,26 @@ class FrankaCubeStack(VecTask):
 
                 objects_spawned = len(torch.unique(segmask_object_count))
                 total_objects = len(self.selected_object_env[env_count])+1
+                
+
+                _all_objects_current_pose = {}
+                _all_object_position_error = torch.tensor(0.0).to(self.device)
+                # collecting pose of all objects
+                for object_id in self.selected_object_env[env_count]:
+                    _all_objects_current_pose[int(object_id.item())] = self._root_state[env_count, self._object_model_id[int(object_id.item())-1], :][:3].type(
+                        torch.float).detach().clone()
+                    _all_object_position_error += torch.sum(self.object_pose_store[env_count][int(object_id.item(
+                    ))][:3] - self._root_state[env_count, self._object_model_id[int(object_id.item())-1], :][:3])
+
+                    if (_all_objects_current_pose[int(object_id.item())][2] < torch.tensor(0.5)):
+                        env_complete_reset = torch.cat(
+                            (env_complete_reset, torch.tensor([env_count])), axis=0)
+                _all_object_position_error = torch.abs(_all_object_position_error)
+                if (_all_object_position_error > torch.tensor(0.002)):
+                    print(env_count, " object moved inside bin error")
+                    env_complete_reset = torch.cat(
+                        (env_complete_reset, torch.tensor([env_count])), axis=0)
+                    total_objects = 1000
 
                 # check if the environment returned from reset and the frame for that enviornment is 30 or not
                 # 30 frames is for cooldown period at the start for the simualtor to settle down
@@ -1072,8 +1105,7 @@ class FrankaCubeStack(VecTask):
                         top_grasps = max_num_grasps if max_num_grasps <= 10 else 7
 
                         # top_grasps = 2
-                        print(max_num_grasps)
-                        for i in range(max_num_grasps):
+                        for i in range(top_grasps):
                             grasp_point = torch.tensor(
                                 [self.grasps_and_predictions[i][0].center.x, self.grasps_and_predictions[i][0].center.y])
                             
@@ -1101,7 +1133,12 @@ class FrankaCubeStack(VecTask):
                             self.dexnet_score_temp = torch.cat(
                                 (self.dexnet_score_temp, torch.tensor([self.grasps_and_predictions[i][1]])))
 
-                        
+                        # setting the pose of the object after cool down period
+                        bin_objects_current_pose = {}
+                        for object_id in self.selected_object_env[env_count]:
+                            bin_objects_current_pose[int(object_id.item())] = self._root_state[env_count, self._object_model_id[int(object_id.item())-1], :][:7].type(
+                                torch.float).clone().detach()
+                        self.object_pose_store[env_count] = bin_objects_current_pose
 
                         if (top_grasps > 0):
                             env_list_reset_arm_pose = torch.cat(
@@ -1337,8 +1374,10 @@ class FrankaCubeStack(VecTask):
                 _all_object_position_error = torch.abs(_all_object_position_error)
                 _all_object_rotation_error = torch.abs(_all_object_rotation_error)
                 if ((_all_object_position_error > torch.tensor(0.002)) and (self.action_contrib[env_count] == 2)):
-                    env_complete_reset = torch.cat(
-                        (env_complete_reset, torch.tensor([env_count])), axis=0)
+                    env_list_reset_arm_pose = torch.cat(
+                            (env_list_reset_arm_pose, torch.tensor([env_count])), axis=0)
+                    env_list_reset_objects = torch.cat(
+                        (env_list_reset_objects, torch.tensor([env_count])), axis=0)
 
                 self.distance = torch.tensor([1, 1, 1])
                 if (self.action_contrib[env_count] >= torch.tensor(1)):
