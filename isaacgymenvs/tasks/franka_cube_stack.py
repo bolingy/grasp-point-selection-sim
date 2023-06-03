@@ -978,7 +978,7 @@ class FrankaCubeStack(VecTask):
                         env_complete_reset = torch.cat(
                             (env_complete_reset, torch.tensor([env_count])), axis=0)
                 _all_object_position_error = torch.abs(_all_object_position_error)
-                if (_all_object_position_error > torch.tensor(0.002)):
+                if (_all_object_position_error > torch.tensor(0.0055)):
                     print(env_count, " object moved inside bin error")
                     env_complete_reset = torch.cat(
                         (env_complete_reset, torch.tensor([env_count])), axis=0)
@@ -1360,7 +1360,7 @@ class FrankaCubeStack(VecTask):
                             (env_complete_reset, torch.tensor([env_count])), axis=0)
                 _all_object_position_error = torch.abs(_all_object_position_error)
                 _all_object_rotation_error = torch.abs(_all_object_rotation_error)
-                if ((_all_object_position_error > torch.tensor(0.002)) and (self.action_contrib[env_count] == 2)):
+                if ((_all_object_position_error > torch.tensor(0.0055)) and (self.action_contrib[env_count] == 2)):
                     env_list_reset_arm_pose = torch.cat(
                             (env_list_reset_arm_pose, torch.tensor([env_count])), axis=0)
                     env_list_reset_objects = torch.cat(
@@ -1502,19 +1502,19 @@ class FrankaCubeStack(VecTask):
                         # estimating movement of other objects
                         for object_id in self.selected_object_env[env_count]:
                             if(object_id != self.object_target_id[env_count]):
-                                _all_object_pose_error = torch.abs(torch.norm(
+                                _all_object_pose_error += torch.abs(torch.norm(
                                     _all_objects_current_pose[int(object_id.item())][:3] - self.all_objects_last_pose[env_count][int(object_id.item())][:3]))
                     except Exception as error:
                         _all_object_pose_error = torch.tensor(0.0)
 
                         # print("pose error", error)
 
-                    if ((_all_object_pose_error > torch.tensor(0.005)) and contact_exist == torch.tensor(0)):
+                    if ((_all_object_pose_error > torch.tensor(0.0075)) and contact_exist == torch.tensor(0)):
                         env_list_reset_arm_pose = torch.cat(
                             (env_list_reset_arm_pose, torch.tensor([env_count])), axis=0)
                         env_list_reset_objects = torch.cat(
                             (env_list_reset_objects, torch.tensor([env_count])), axis=0)
-                        print(env_count, "reset because of object re placement check")
+                        print(env_count, _all_object_pose_error, "reset because of object re placement check")
                         oscillation = False
                         success = False
                         json_save = {
