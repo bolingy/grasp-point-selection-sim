@@ -978,7 +978,7 @@ class FrankaCubeStack(VecTask):
                         env_complete_reset = torch.cat(
                             (env_complete_reset, torch.tensor([env_count])), axis=0)
                 _all_object_position_error = torch.abs(_all_object_position_error)
-                if (_all_object_position_error > torch.tensor(0.0075)):
+                if (_all_object_position_error > torch.tensor(0.0055)):
                     print(env_count, " object moved inside bin error")
                     env_complete_reset = torch.cat(
                         (env_complete_reset, torch.tensor([env_count])), axis=0)
@@ -1360,7 +1360,7 @@ class FrankaCubeStack(VecTask):
                             (env_complete_reset, torch.tensor([env_count])), axis=0)
                 _all_object_position_error = torch.abs(_all_object_position_error)
                 _all_object_rotation_error = torch.abs(_all_object_rotation_error)
-                if ((_all_object_position_error > torch.tensor(0.0075)) and (self.action_contrib[env_count] == 2)):
+                if ((_all_object_position_error > torch.tensor(0.0055)) and (self.action_contrib[env_count] == 2)):
                     env_list_reset_arm_pose = torch.cat(
                             (env_list_reset_arm_pose, torch.tensor([env_count])), axis=0)
                     env_list_reset_objects = torch.cat(
