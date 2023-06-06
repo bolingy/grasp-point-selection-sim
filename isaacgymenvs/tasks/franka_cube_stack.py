@@ -689,12 +689,12 @@ class FrankaCubeStack(VecTask):
             for object_count in selected_object:
                 domain_randomizer = random_number = random.choice(
                     [1, 2, 3, 4, 5])
-                # offset_object = np.array([np.random.uniform(0.67, 0.7, 1).reshape(
-                #     1,)[0], np.random.uniform(-0.22, -0.12, 1).reshape(1,)[0], 1.3, random.choice([0, 1.57, 3.14]),
-                #     random.choice([0, 1.57, 3.14]), np.random.uniform(0.0, 3.14, 1).reshape(1,)[0]])
                 offset_object = np.array([np.random.uniform(0.67, 0.7, 1).reshape(
-                    1,)[0], np.random.uniform(-0.22, -0.12, 1).reshape(1,)[0], 1.3, 0.0,
-                    0.0, 0.0])
+                    1,)[0], np.random.uniform(-0.22, -0.12, 1).reshape(1,)[0], 1.3, random.choice([0, 1.57, 3.14]),
+                    random.choice([0, 1.57, 3.14]), np.random.uniform(0.0, 3.14, 1).reshape(1,)[0]])
+                # offset_object = np.array([np.random.uniform(0.67, 0.7, 1).reshape(
+                #     1,)[0], np.random.uniform(-0.22, -0.12, 1).reshape(1,)[0], 1.3, 0.0,
+                #     0.0, 0.0])
                 quat = euler_angles_to_quaternion(
                     torch.tensor(offset_object[3:6]), "XYZ", degrees=False)
                 offset_object = np.concatenate(
@@ -1514,7 +1514,7 @@ class FrankaCubeStack(VecTask):
                             (env_list_reset_arm_pose, torch.tensor([env_count])), axis=0)
                         env_list_reset_objects = torch.cat(
                             (env_list_reset_objects, torch.tensor([env_count])), axis=0)
-                        print(env_count, "reset because of object re placement check")
+                        print(env_count, _all_object_pose_error, "reset because of object re placement check")
                         oscillation = False
                         success = False
                         json_save = {
@@ -1844,3 +1844,4 @@ class FrankaCubeStack(VecTask):
         y = w1 * y2 + y1 * w2 + z1 * x2 - x1 * z2
         z = w1 * z2 + z1 * w2 + x1 * y2 - y1 * x2
         return torch.tensor([w, x, y, z])
+    
