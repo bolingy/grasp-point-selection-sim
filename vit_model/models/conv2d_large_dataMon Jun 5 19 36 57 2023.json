@@ -1,0 +1,1 @@
+{"batch_size": 128, "epochs": 1000, "lr": 5e-05, "gamma": 0.7, "seed": 42, "image_size_h": 256, "image_size_w": 256, "patch_size": 16, "num_classes": 2, "channels": 4, "dim": 128, "depth": 3, "heads": 16, "mlp_dim": 128, "dropout": 0, "emb_dropout": 0}

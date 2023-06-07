@@ -34,6 +34,8 @@ from homogeneous_trasnformation_and_conversion.rotation_conversions import *
 import time
 import pandas as pd
 
+from vit_model.inference_script import inference
+
 from pathlib import Path
 cur_path = str(Path(__file__).parent.absolute())
 
@@ -112,6 +114,8 @@ class FrankaCubeStack(VecTask):
         self.force_threshold = 0.15
 
         self.object_coordiante_camera = torch.tensor([0, 0, 0])
+
+        self.centroid_method = 0
 
         # Parallelization
         self.init_camera_capture = 1
@@ -606,6 +610,8 @@ class FrankaCubeStack(VecTask):
         self.dexnet_object = dexnet3(self.camera_intrinsics_back_cam)
         self.dexnet_object.load_dexnet_model()
 
+        self.inference_object = inference()
+
         print("focal length in x axis: ", self.fx_back_cam)
         print("focal length in y axis: ", self.fy_back_cam)
         # cam_vinv_gripper = torch.inverse((torch.tensor(self.gym.get_camera_view_matrix(self.sim, self.envs[i], self.camera_handles[i][0])))).to(self.device)
@@ -906,6 +912,7 @@ class FrankaCubeStack(VecTask):
         for _ in env_ids:
             joint_poses_list = torch.load(
                 f"{cur_path}/../../misc/joint_poses.pt")
+            print(joint_poses_list)
             temp_pos = joint_poses_list[torch.randint(
                 0, len(joint_poses_list), (1,))[0]].to(self.device)
             temp_pos = torch.reshape(temp_pos, (1, len(temp_pos)))
@@ -913,6 +920,7 @@ class FrankaCubeStack(VecTask):
                 (temp_pos, torch.tensor([[0]]).to(self.device)), dim=1)
             # temp_pos = tensor_clamp(temp_pos.unsqueeze(0), self.franka_dof_lower_limits.unsqueeze(0), self.franka_dof_upper_limits)
             pos = torch.cat([pos, temp_pos])
+        print(pos)
         return pos
 
     def pre_physics_step(self, actions):
@@ -1059,6 +1067,8 @@ class FrankaCubeStack(VecTask):
                         new_dir_name+"/rgb_"+new_dir_name+"_" + \
                         str(self.config_env_count[env_count].type(
                             torch.int).item())+".npy"
+                    
+                    grasp_point_model, centroid_model = self.inference_object.run_model(self.depth_image_save[env_count], self.segmask_save[env_count], self.object_target_id[env_count])
 
                     np.save(save_dir_depth_npy,
                             self.depth_image_save[env_count])
@@ -1083,63 +1093,81 @@ class FrankaCubeStack(VecTask):
                     depth_img_dexnet = DepthImage(
                         depth_numpy_temp[180:660, 410:1050], frame=self.camera_intrinsics_back_cam.frame)
                     max_num_grasps = 0
-                    try:
-                        action, self.grasps_and_predictions, self.unsorted_grasps_and_predictions = self.dexnet_object.inference(
-                            depth_img_dexnet, segmask_dexnet, None)
+                    # try:
+                    action, self.grasps_and_predictions, self.unsorted_grasps_and_predictions = self.dexnet_object.inference(
+                        depth_img_dexnet, segmask_dexnet, None)
 
-                        self.suction_deformation_score_temp = torch.Tensor()
-                        self.xyz_point_temp = torch.empty((0, 3))
-                        self.grasp_angle_temp = torch.empty((0, 3))
-                        self.grasp_point_temp = torch.empty((0, 2))
-                        self.force_SI_temp = torch.Tensor()
-                        self.dexnet_score_temp = torch.Tensor()
-                        max_num_grasps = len(self.grasps_and_predictions)
-                        top_grasps = max_num_grasps if max_num_grasps <= 10 else 7
+                    self.suction_deformation_score_temp = torch.Tensor()
+                    self.xyz_point_temp = torch.empty((0, 3))
+                    self.grasp_angle_temp = torch.empty((0, 3))
+                    self.grasp_point_temp = torch.empty((0, 2))
+                    self.force_SI_temp = torch.Tensor()
+                    self.dexnet_score_temp = torch.Tensor()
+                    max_num_grasps = len(self.grasps_and_predictions)
+                    top_grasps = max_num_grasps if max_num_grasps <= 10 else 7
 
-                        # top_grasps = 2
-                        # max_num_grasps = 5
-                        print(max_num_grasps)
-                        for i in range(max_num_grasps):
-                            grasp_point = torch.tensor(
-                                [self.grasps_and_predictions[i][0].center.x, self.grasps_and_predictions[i][0].center.y])
-                            
+                    # top_grasps = 2
+                    max_num_grasps = 3
+                    self.centroid_method = 0
+                    print(max_num_grasps)
+                    for i in range(max_num_grasps):
+                        if i == 0:
+                            grasp_point = grasp_point_model + torch.tensor([centroid_model[0], centroid_model[1]])
                             depth_image_suction = depth_image
                             suction_deformation_score, xyz_point, grasp_angle = self.suction_score_object.calculator(
-                                depth_image_suction, segmask, rgb_image_copy, self.grasps_and_predictions[i][0], self.object_target_id[env_count])
-                            self.suction_deformation_score_temp = torch.cat(
-                                (self.suction_deformation_score_temp, torch.tensor([suction_deformation_score]))).type(torch.float)
-                            self.xyz_point_temp = torch.cat(
-                                [self.xyz_point_temp, xyz_point.unsqueeze(0)], dim=0)
-                            self.grasp_angle_temp = torch.cat(
-                                [self.grasp_angle_temp, grasp_angle.unsqueeze(0)], dim=0)
-                            self.grasp_point_temp = torch.cat(
-                                [self.grasp_point_temp, grasp_point.clone().detach().unsqueeze(0)], dim=0)
-                            # cv2.circle(self.rgb_save[env_count], (grasp_point.clone().detach().cpu().numpy()[0], grasp_point.clone().detach().cpu().numpy()[1]), 2, (0, 0, 0), 1)
-                            self.object_coordiante_camera = xyz_point.clone().detach()
-                            if (suction_deformation_score > 0):
-                                force_SI = self.force_object.regression(
-                                    suction_deformation_score)
-                            else:
-                                force_SI = torch.tensor(0).to(self.device)
+                                depth_image_suction, segmask, rgb_image_copy, grasp_point.type(torch.int16), self.object_target_id[env_count])
+                        elif(i == 1):
+                            grasp_point = torch.tensor(
+                            [self.grasps_and_predictions[0][0].center.x, self.grasps_and_predictions[0][0].center.y])
+                            depth_image_suction = depth_image
+                            suction_deformation_score, xyz_point, grasp_angle = self.suction_score_object.calculator(
+                                depth_image_suction, segmask, rgb_image_copy, grasp_point.type(torch.int16), self.object_target_id[env_count])
+                        elif(i == 2):
+                            grasp_point = torch.tensor([128, 128]) + torch.tensor([centroid_model[0], centroid_model[1]])
+                            depth_image_suction = depth_image
+                            suction_deformation_score, xyz_point, grasp_angle = self.suction_score_object.calculator(
+                                depth_image_suction, segmask, rgb_image_copy, grasp_point, self.object_target_id[env_count])
+                            grasp_angle = torch.tensor([0, 0, 0])
+                        
+                        print(grasp_point)
+                        # plt.Circle((grasp_point[0]+410, grasp_point[1]+180), 100, fill=True)
+                        # plt.imshow(rgb_image_copy.cpu().numpy())
+                        # plt.show()
 
-                            self.force_SI_temp = torch.cat(
-                                (self.force_SI_temp, torch.tensor([force_SI])))
-                            self.dexnet_score_temp = torch.cat(
-                                (self.dexnet_score_temp, torch.tensor([self.grasps_and_predictions[i][1]])))
-
-                        if (top_grasps > 0):
-                            env_list_reset_arm_pose = torch.cat(
-                                (env_list_reset_arm_pose, torch.tensor([env_count])), axis=0)
-                            env_list_reset_objects = torch.cat(
-                                (env_list_reset_objects, torch.tensor([env_count])), axis=0)
+                        self.suction_deformation_score_temp = torch.cat(
+                            (self.suction_deformation_score_temp, torch.tensor([suction_deformation_score]))).type(torch.float)
+                        self.xyz_point_temp = torch.cat(
+                            [self.xyz_point_temp, xyz_point.unsqueeze(0)], dim=0)
+                        self.grasp_angle_temp = torch.cat(
+                            [self.grasp_angle_temp, grasp_angle.unsqueeze(0)], dim=0)
+                        self.grasp_point_temp = torch.cat(
+                            [self.grasp_point_temp, grasp_point.clone().detach().unsqueeze(0)], dim=0)
+                        # cv2.circle(self.rgb_save[env_count], (grasp_point.clone().detach().cpu().numpy()[0], grasp_point.clone().detach().cpu().numpy()[1]), 2, (0, 0, 0), 1)
+                        self.object_coordiante_camera = xyz_point.clone().detach()
+                        if (suction_deformation_score > 0):
+                            force_SI = self.force_object.regression(
+                                suction_deformation_score)
                         else:
-                            print("No sample points")
-                            env_complete_reset = torch.cat(
-                                (env_complete_reset, torch.tensor([env_count])), axis=0)
-                    except Exception as e:
-                        print("dexnet error: ", e)
+                            force_SI = torch.tensor(0).to(self.device)
+
+                        self.force_SI_temp = torch.cat(
+                            (self.force_SI_temp, torch.tensor([force_SI])))
+                        self.dexnet_score_temp = torch.cat(
+                            (self.dexnet_score_temp, torch.tensor([self.grasps_and_predictions[i][1]])))
+
+                    if (top_grasps > 0):
+                        env_list_reset_arm_pose = torch.cat(
+                            (env_list_reset_arm_pose, torch.tensor([env_count])), axis=0)
+                        env_list_reset_objects = torch.cat(
+                            (env_list_reset_objects, torch.tensor([env_count])), axis=0)
+                    else:
+                        print("No sample points")
                         env_complete_reset = torch.cat(
                             (env_complete_reset, torch.tensor([env_count])), axis=0)
+                    # except Exception as e:
+                    #     print("dexnet error: ", e)
+                    #     env_complete_reset = torch.cat(
+                    #         (env_complete_reset, torch.tensor([env_count])), axis=0)
 
                         # print(
                         #     f"Quality is {self.grasps_and_predictions[i][1]}, xyz point is {self.xyz_point_temp}, deformation score is {self.suction_deformation_score_temp}, grasp angle is {self.grasp_angle_temp} for environment {env_count}")
@@ -1223,6 +1251,8 @@ class FrankaCubeStack(VecTask):
                     self.dexnet_score_env[env_count] = self.dexnet_score_env[env_count][1:]
                     self.force_SI[env_count] = self.force_SI_env[env_count][0]
                     self.force_SI_env[env_count] = self.force_SI_env[env_count][1:]
+                    if(len(self.grasp_angle_env[env_count]) == 0):
+                        self.centroid_method = 1
                 else:
                     env_complete_reset = torch.cat(
                         (env_complete_reset, torch.tensor([env_count])), axis=0)
@@ -1588,6 +1618,8 @@ class FrankaCubeStack(VecTask):
                         depth_numpy_gripper = depth_image.clone().detach()
                         self.suction_deformation_score[env_count], temp_xyz_point, temp_grasp = self.suction_score_object_gripper.calculator(
                             depth_numpy_gripper, segmask_gripper, rgb_image_copy_gripper, None, self.object_target_id[env_count])
+                        if(self.centroid_method == 1):
+                            temp_grasp = torch.tensor([0, 0, 0])
 
                         # print(
                         #     f"For environment {env_count} at action contrib {self.action_contrib[env_count]}, suction deformation score: {self.suction_deformation_score[env_count]}, displacement: {temp_xyz_point}, normal: {temp_grasp}")
@@ -1648,7 +1680,7 @@ class FrankaCubeStack(VecTask):
                         oscillation = self.detect_oscillation(
                             self.force_list_save[env_count])
                         success = False
-                        if (score_gripper > torch.tensor(0.1) and oscillation == False):
+                        if (score_gripper > torch.tensor(0.0) and oscillation == False):
                             success = True
                         penetration = False
                         if (score_gripper == torch.tensor(0)):

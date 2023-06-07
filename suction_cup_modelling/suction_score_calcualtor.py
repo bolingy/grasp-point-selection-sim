@@ -107,7 +107,7 @@ class calcualte_suction_score():
         if(self.grasps_and_predictions == None):
             xyz_point = self.convert_uv_point_to_xyz_point(int(self.segmask.shape[1]/2), int(self.segmask.shape[0]/2))
         else:
-            xyz_point = self.convert_uv_point_to_xyz_point(self.grasps_and_predictions.center.x+410, self.grasps_and_predictions.center.y+180)
+            xyz_point = self.convert_uv_point_to_xyz_point(self.grasps_and_predictions[0]+410, self.grasps_and_predictions[1]+180)
         if(xyz_point[2] < 0):
             return torch.tensor(0), torch.tensor([0, 0, 0]), torch.tensor([centroid_angle[0], centroid_angle[1], centroid_angle[2]])
         
@@ -133,7 +133,7 @@ class calcualte_suction_score():
             '''
             self.suction_coordinates = torch.cat((self.suction_coordinates, torch.tensor([[x, y, 0.]]).to(self.device)), dim=0).type(torch.float64)
         if(self.grasps_and_predictions != None):
-            centroid_angle = torch.tensor(self.normal_cloud_im[int(self.grasps_and_predictions.center.y)][int(self.grasps_and_predictions.center.x)]).to(self.device)
+            centroid_angle = torch.tensor(self.normal_cloud_im[int(self.grasps_and_predictions[1])][int(self.grasps_and_predictions[0])]).to(self.device)
             centroid_angle[2] = 0
         
             rotation_matrix_normal = euler_angles_to_matrix(torch.tensor([0, 0, -90]).to(self.device), "XYZ", degrees=True)
