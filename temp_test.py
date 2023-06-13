@@ -2,11 +2,11 @@ import isaacgym
 import isaacgymenvs
 import torch
 
-ne = 50
+ne = 1
 
 envs = isaacgymenvs.make(
 	seed=0,
-	task="FrankaCubeStack", # Aurmar, FrankaCabinet
+	task="UR16eManipualtion", # Aurmar, FrankaCabinet
 	num_envs=ne,
 	sim_device="cuda:0",
 	rl_device="cuda:0",
