@@ -15,9 +15,9 @@ env:
 
   startPositionNoise: 0.0
   startRotationNoise: 0.0
-  frankaPositionNoise: 0.0
-  frankaRotationNoise: 0.0
-  frankaDofNoise: 0.0
+  ur16ePositionNoise: 0.0
+  ur16eRotationNoise: 0.0
+  ur16eDofNoise: 0.0
 
   aggregateMode: 3
 
@@ -31,7 +31,7 @@ env:
 
   asset:
     assetRoot: "../../assets"
-    assetFileNameFranka: "urdf/franka_description/robots/franka_panda_gripper.urdf"
+    assetFileNameur16e: "urdf/ur16e_description/robots/ur16e_panda_gripper.urdf"
 
   # set to True if you use camera sensors in the environment
   enableCameraSensors: False

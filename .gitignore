@@ -152,7 +152,7 @@ dmypy.json
 # Cython debug symbols
 cython_debug/
 isaacgymenvs/tasks/__pycache__/ant.cpython-37.pyc
-isaacgymenvs/tasks/__pycache__/franka_cube_stack.cpython-37.pyc
 .vscode/settings.json
 .vscode/launch.json
 .vscode/tasks.json
+*.pyc

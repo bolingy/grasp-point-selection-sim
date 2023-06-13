@@ -6,7 +6,7 @@ ne = 1
 
 envs = isaacgymenvs.make(
 	seed=0,
-	task="UR16eManipualtion", # Aurmar, FrankaCabinet
+	task="UR16eManipualtion",
 	num_envs=ne,
 	sim_device="cuda:0",
 	rl_device="cuda:0",
@@ -19,6 +19,5 @@ obs = envs.reset()
 while True:
 	action = torch.tensor(ne * [[0.1, 0, 0, 0, 0, 0, 1]])
 	obs, reward, done, info = envs.step(
-		#torch.rand((ne,)+envs.action_space.shape, device="cuda:0")
 		action
 		)

@@ -8,7 +8,6 @@ import json
 from isaacgym import gymtorch
 from isaacgym import gymapi
 from isaacgym.torch_utils import *
-
 from isaacgymenvs.utils.torch_jit_utils import *
 from isaacgymenvs.tasks.base.vec_task import VecTask
 
@@ -17,18 +16,16 @@ import math
 from suction_cup_modelling.suction_score_calcualtor import calcualte_suction_score
 from suction_cup_modelling.force_calculator import calcualte_force
 
-# Importing DexNet and 
+# Importing DexNet
 from gqcnn.examples.policy_for_training import dexnet3
 from autolab_core import (BinaryImage, CameraIntrinsics, DepthImage)
 import assets.urdf_models.models_data as md
 
 from homogeneous_trasnformation_and_conversion.rotation_conversions import *
-
 import pandas as pd
 
 from pathlib import Path
 cur_path = str(Path(__file__).parent.absolute())
-
 
 class UR16eManipualtion(VecTask):
 
@@ -38,11 +35,6 @@ class UR16eManipualtion(VecTask):
         self.max_episode_length = self.cfg["env"]["episodeLength"]
 
         self.action_scale = self.cfg["env"]["actionScale"]
-        self.start_position_noise = self.cfg["env"]["startPositionNoise"]
-        self.start_rotation_noise = self.cfg["env"]["startRotationNoise"]
-        self.franka_position_noise = self.cfg["env"]["frankaPositionNoise"]
-        self.franka_rotation_noise = self.cfg["env"]["frankaRotationNoise"]
-        self.franka_dof_noise = self.cfg["env"]["frankaDofNoise"]
         self.aggregate_mode = self.cfg["env"]["aggregateMode"]
 
         # Controller type
@@ -83,7 +75,7 @@ class UR16eManipualtion(VecTask):
         self._gripper_control = None  # Tensor buffer for controlling gripper
         self._pos_control = None            # Position actions
         self._effort_control = None         # Torque actions
-        self._franka_effort_limits = None        # Actuator effort limits for franka
+        self._ur16e_effort_limits = None        # Actuator effort limits for ur16e
         # Unique indices corresponding to all envs in flattened array
         self._global_indices = None
 
@@ -96,9 +88,9 @@ class UR16eManipualtion(VecTask):
         self.up_axis = "z"
         self.up_axis_idx = 2
 
-        self.franka_hand = "ee_link"
-        self.franka_wrist_3_link = "wrist_3_link"
-        self.franka_base = "base_link"
+        self.ur16e_hand = "ee_link"
+        self.ur16e_wrist_3_link = "wrist_3_link"
+        self.ur16e_base = "base_link"
         self.suction_gripper = "epick_end_effector"
 
         self.force_threshold = 0.15
@@ -114,11 +106,7 @@ class UR16eManipualtion(VecTask):
         super().__init__(config=self.cfg, rl_device=rl_device, sim_device=sim_device, graphics_device_id=graphics_device_id,
                          headless=headless, virtual_screen_capture=virtual_screen_capture, force_render=force_render)
 
-        # Franka defaults
-        # self.franka_default_dof_pos = to_torch(
-        #     [0.06, -2.5, 2.53, 0.58, 1.67, 1.74], device=self.device
-        # )
-        self.franka_default_dof_pos = to_torch(
+        self.ur16e_default_dof_pos = to_torch(
             [-1.57, 0, 0, 0, 0, 0, 0], device=self.device
         )
 
@@ -132,12 +120,6 @@ class UR16eManipualtion(VecTask):
         self.grasp_angle = torch.tensor([[0, 0, 0]])
         self.grasps_and_predictions = None
         self.unsorted_grasps_and_predictions = None
-
-        # #dexnet results
-        # self.suction_deformation_score = torch.tensor(0.0)
-        # self.score_gripper = 0.0
-        # self.force_SI = torch.tensor(0)
-        # self.last_pos = None
 
         # OSC Gains
         self.kp = to_torch(
@@ -201,7 +183,7 @@ class UR16eManipualtion(VecTask):
 
         # Set control limits
         self.cmd_limit = to_torch([0.1, 0.1, 0.1, 0.5, 0.5, 0.5], device=self.device).unsqueeze(0) if \
-            self.control_type == "osc" else self._franka_effort_limits[:6].unsqueeze(0)
+            self.control_type == "osc" else self._ur16e_effort_limits[:6].unsqueeze(0)
 
         # Reset all environments
         self.reset_idx(torch.arange(self.num_envs, device=self.device))
@@ -232,9 +214,9 @@ class UR16eManipualtion(VecTask):
 
         asset_root = os.path.join(os.path.dirname(
             os.path.abspath(__file__)), "../../assets")
-        franka_asset_file = "urdf/Aurmar_description/robots/robot_storm.urdf"
+        ur16e_asset_file = "urdf/Aurmar_description/robots/ur16e.urdf"
 
-        # load franka asset
+        # load ur16e asset
         asset_options = gymapi.AssetOptions()
         asset_options.flip_visual_attachments = True
         asset_options.fix_base_link = True
@@ -243,12 +225,12 @@ class UR16eManipualtion(VecTask):
         asset_options.thickness = 0.001
         asset_options.default_dof_drive_mode = gymapi.DOF_MODE_EFFORT
         asset_options.use_mesh_materials = True
-        franka_asset = self.gym.load_asset(
-            self.sim, asset_root, franka_asset_file, asset_options)
+        ur16e_asset = self.gym.load_asset(
+            self.sim, asset_root, ur16e_asset_file, asset_options)
 
-        franka_dof_stiffness = to_torch(
+        ur16e_dof_stiffness = to_torch(
             [0, 0, 0, 0, 0, 0, 0], dtype=torch.float, device=self.device)
-        franka_dof_damping = to_torch(
+        ur16e_dof_damping = to_torch(
             [0., 0., 0., 0., 0., 0., 0.], dtype=torch.float, device=self.device)
 
         # Create table asset
@@ -285,48 +267,48 @@ class UR16eManipualtion(VecTask):
             object_model_asset.append(self.gym.load_asset(
                 self.sim, asset_root, object_model_asset_file[counter], asset_options))
 
-        self.num_franka_bodies = self.gym.get_asset_rigid_body_count(
-            franka_asset)
-        self.num_franka_dofs = self.gym.get_asset_dof_count(franka_asset)
+        self.num_ur16e_bodies = self.gym.get_asset_rigid_body_count(
+            ur16e_asset)
+        self.num_ur16e_dofs = self.gym.get_asset_dof_count(ur16e_asset)
 
-        print("num franka bodies: ", self.num_franka_bodies)
-        print("num franka dofs: ", self.num_franka_dofs)
+        print("num ur16e bodies: ", self.num_ur16e_bodies)
+        print("num ur16e dofs: ", self.num_ur16e_dofs)
 
-        # set franka dof properties
-        franka_dof_props = self.gym.get_asset_dof_properties(franka_asset)
-        self.franka_dof_lower_limits = []
-        self.franka_dof_upper_limits = []
-        self._franka_effort_limits = []
-        for i in range(self.num_franka_dofs):
-            franka_dof_props['driveMode'][i] = gymapi.DOF_MODE_POS if i > 6 else gymapi.DOF_MODE_EFFORT
+        # set ur16e dof properties
+        ur16e_dof_props = self.gym.get_asset_dof_properties(ur16e_asset)
+        self.ur16e_dof_lower_limits = []
+        self.ur16e_dof_upper_limits = []
+        self._ur16e_effort_limits = []
+        for i in range(self.num_ur16e_dofs):
+            ur16e_dof_props['driveMode'][i] = gymapi.DOF_MODE_POS if i > 6 else gymapi.DOF_MODE_EFFORT
             if self.physics_engine == gymapi.SIM_PHYSX:
-                franka_dof_props['stiffness'][i] = franka_dof_stiffness[i]
-                franka_dof_props['damping'][i] = franka_dof_damping[i]
+                ur16e_dof_props['stiffness'][i] = ur16e_dof_stiffness[i]
+                ur16e_dof_props['damping'][i] = ur16e_dof_damping[i]
             else:
-                franka_dof_props['stiffness'][i] = 7000.0
-                franka_dof_props['damping'][i] = 50.0
+                ur16e_dof_props['stiffness'][i] = 7000.0
+                ur16e_dof_props['damping'][i] = 50.0
 
-            self.franka_dof_lower_limits.append(franka_dof_props['lower'][i])
-            self.franka_dof_upper_limits.append(franka_dof_props['upper'][i])
-            self._franka_effort_limits.append(franka_dof_props['effort'][i])
+            self.ur16e_dof_lower_limits.append(ur16e_dof_props['lower'][i])
+            self.ur16e_dof_upper_limits.append(ur16e_dof_props['upper'][i])
+            self._ur16e_effort_limits.append(ur16e_dof_props['effort'][i])
 
-        self.franka_dof_lower_limits = to_torch(
-            self.franka_dof_lower_limits, device=self.device)
-        self.franka_dof_upper_limits = to_torch(
-            self.franka_dof_upper_limits, device=self.device)
-        self._franka_effort_limits = to_torch(
-            self._franka_effort_limits, device=self.device)
-        self.franka_dof_speed_scales = torch.ones_like(
-            self.franka_dof_lower_limits)
+        self.ur16e_dof_lower_limits = to_torch(
+            self.ur16e_dof_lower_limits, device=self.device)
+        self.ur16e_dof_upper_limits = to_torch(
+            self.ur16e_dof_upper_limits, device=self.device)
+        self._ur16e_effort_limits = to_torch(
+            self._ur16e_effort_limits, device=self.device)
+        self.ur16e_dof_speed_scales = torch.ones_like(
+            self.ur16e_dof_lower_limits)
 
-        # Define start pose for franka
-        franka_start_pose = gymapi.Transform()
+        # Define start pose for ur16e
+        ur16e_start_pose = gymapi.Transform()
         # gymapi.Vec3(-0.45, 0.0, 1.0 + table_thickness / 2 + table_stand_height)
-        franka_start_pose.p = gymapi.Vec3(0, 0, 2.020)
+        ur16e_start_pose.p = gymapi.Vec3(0, 0, 2.020)
 
         quat = euler_angles_to_quaternion(torch.tensor(
             [180, 0, 0]).to(self.device), "XYZ", degrees=True)
-        franka_start_pose.r = gymapi.Quat(quat[0], quat[1], quat[2], quat[3])
+        ur16e_start_pose.r = gymapi.Quat(quat[0], quat[1], quat[2], quat[3])
 
         # Define start pose for table
         table_start_pose = gymapi.Transform()
@@ -343,25 +325,25 @@ class UR16eManipualtion(VecTask):
                 0.0, 0.0, 0.0, 1.0)
 
         # compute aggregate size
-        num_franka_bodies = self.gym.get_asset_rigid_body_count(franka_asset)
-        num_franka_shapes = self.gym.get_asset_rigid_shape_count(franka_asset)
-        max_agg_bodies = num_franka_bodies + 27 + len(self.object_models)
-        max_agg_shapes = num_franka_shapes + 27 + len(self.object_models)
+        num_ur16e_bodies = self.gym.get_asset_rigid_body_count(ur16e_asset)
+        num_ur16e_shapes = self.gym.get_asset_rigid_shape_count(ur16e_asset)
+        max_agg_bodies = num_ur16e_bodies + 27 + len(self.object_models)
+        max_agg_shapes = num_ur16e_shapes + 27 + len(self.object_models)
 
-        self.frankas = []
+        self.ur16es = []
         self.envs = []
 
         self.multi_body_idx = {
-            "base_link": self.gym.find_asset_rigid_body_index(franka_asset, "base_link"),
-            "wrist_3_link": self.gym.find_asset_rigid_body_index(franka_asset, "wrist_3_link"),
-            "ee_link": self.gym.find_asset_rigid_body_index(franka_asset, "ee_link"),
-            "epick_end_effector": self.gym.find_asset_rigid_body_index(franka_asset, "epick_end_effector"),
+            "base_link": self.gym.find_asset_rigid_body_index(ur16e_asset, "base_link"),
+            "wrist_3_link": self.gym.find_asset_rigid_body_index(ur16e_asset, "wrist_3_link"),
+            "ee_link": self.gym.find_asset_rigid_body_index(ur16e_asset, "ee_link"),
+            "epick_end_effector": self.gym.find_asset_rigid_body_index(ur16e_asset, "epick_end_effector"),
         }
 
         # force sensor
         sensor_pose = gymapi.Transform()
         self.gym.create_asset_force_sensor(
-            franka_asset, self.multi_body_idx["wrist_3_link"], sensor_pose)
+            ur16e_asset, self.multi_body_idx["wrist_3_link"], sensor_pose)
 
         # Create environments
         for i in range(self.num_envs):
@@ -369,17 +351,17 @@ class UR16eManipualtion(VecTask):
             env_ptr = self.gym.create_env(self.sim, lower, upper, num_per_row)
 
             # Create actors and define aggregate group appropriately depending on setting
-            # NOTE: franka should ALWAYS be loaded first in sim!
+            # NOTE: ur16e should ALWAYS be loaded first in sim!
             if self.aggregate_mode >= 3:
                 self.gym.begin_aggregate(
                     env_ptr, max_agg_bodies, max_agg_shapes, True)
 
-            # Create franka
-            self.franka_actor = self.gym.create_actor(
-                env_ptr, franka_asset, franka_start_pose, "franka", i, 0, 0)
+            # Create ur16e
+            self.ur16e_actor = self.gym.create_actor(
+                env_ptr, ur16e_asset, ur16e_start_pose, "ur16e", i, 0, 0)
             self.gym.set_actor_dof_properties(
-                env_ptr, self.franka_actor, franka_dof_props)
-            self.gym.enable_actor_dof_force_sensors(env_ptr, self.franka_actor)
+                env_ptr, self.ur16e_actor, ur16e_dof_props)
+            self.gym.enable_actor_dof_force_sensors(env_ptr, self.ur16e_actor)
 
             if self.aggregate_mode == 2:
                 self.gym.begin_aggregate(
@@ -393,7 +375,7 @@ class UR16eManipualtion(VecTask):
                     count += 1
                     dims = cube[obj]['dims']
                     pose = cube[obj]['pose']
-                    self.add_table(dims, pose, franka_start_pose,
+                    self.add_table(dims, pose, ur16e_start_pose,
                                    env_ptr, i, color=[0.6, 0.6, 0.6])
 
             if self.aggregate_mode == 1:
@@ -411,12 +393,12 @@ class UR16eManipualtion(VecTask):
 
             # Store the created env pointers
             self.envs.append(env_ptr)
-            self.frankas.append(self.franka_actor)
+            self.ur16es.append(self.ur16e_actor)
 
             # Addign friction to the suction cup
-            franka_handle = 0
+            ur16e_handle = 0
             suction_gripper_handle = self.gym.find_actor_rigid_body_handle(
-                env_ptr, franka_handle, self.suction_gripper)
+                env_ptr, ur16e_handle, self.suction_gripper)
             suction_gripper_shape_props = self.gym.get_actor_rigid_shape_properties(
                 env_ptr, suction_gripper_handle)
             suction_gripper_shape_props[0].friction = 1.0
@@ -445,13 +427,13 @@ class UR16eManipualtion(VecTask):
                 gymapi.Vec3(1, 0, 0), np.deg2rad(180))
             local_transform.r = camera_rotation_x
 
-            franka_base_link_handle = self.gym.find_actor_rigid_body_handle(
-                env_ptr, 0, self.franka_base)
+            ur16e_base_link_handle = self.gym.find_actor_rigid_body_handle(
+                env_ptr, 0, self.ur16e_base)
             self.gym.attach_camera_to_body(
-                camera_handle, env_ptr, franka_base_link_handle, local_transform, gymapi.FOLLOW_TRANSFORM)
+                camera_handle, env_ptr, ur16e_base_link_handle, local_transform, gymapi.FOLLOW_TRANSFORM)
             self.camera_handles[i].append(camera_handle)
 
-            franka_hand_link_handle = self.gym.find_actor_rigid_body_handle(
+            ur16e_hand_link_handle = self.gym.find_actor_rigid_body_handle(
                 env_ptr, 0, "ee_link")
             self.camera_gripper_link_translation = []
             self.camera_properties_gripper = gymapi.CameraProperties()
@@ -468,7 +450,7 @@ class UR16eManipualtion(VecTask):
                                             self.camera_gripper_link_translation[0][1],
                                             self.camera_gripper_link_translation[0][2])
             self.gym.attach_camera_to_body(
-                camera_handle_gripper, env_ptr, franka_hand_link_handle, local_transform, gymapi.FOLLOW_TRANSFORM)
+                camera_handle_gripper, env_ptr, ur16e_hand_link_handle, local_transform, gymapi.FOLLOW_TRANSFORM)
             self.camera_handles[i].append(camera_handle_gripper)
 
         # Setup data
@@ -509,12 +491,12 @@ class UR16eManipualtion(VecTask):
     def init_data(self):
         # Setup sim handles
         env_ptr = self.envs[0]
-        franka_handle = 0
+        ur16e_handle = 0
         self.handles = {
-            # Franka
-            "base_link": self.gym.find_actor_rigid_body_handle(env_ptr, franka_handle, self.franka_base),
-            "wrist_3_link": self.gym.find_actor_rigid_body_handle(env_ptr, franka_handle, self.franka_wrist_3_link),
-            "hand": self.gym.find_actor_rigid_body_handle(env_ptr, franka_handle, self.franka_hand),
+            # ur16e
+            "base_link": self.gym.find_actor_rigid_body_handle(env_ptr, ur16e_handle, self.ur16e_base),
+            "wrist_3_link": self.gym.find_actor_rigid_body_handle(env_ptr, ur16e_handle, self.ur16e_wrist_3_link),
+            "hand": self.gym.find_actor_rigid_body_handle(env_ptr, ur16e_handle, self.ur16e_hand),
         }
 
         for counter in range(len(self.object_models)):
@@ -548,12 +530,12 @@ class UR16eManipualtion(VecTask):
                                                  self.handles["base_link"], :]
         self._wrist_3_link = self._rigid_body_state[:,
                                                     self.handles["wrist_3_link"], :]
-        _jacobian = self.gym.acquire_jacobian_tensor(self.sim, "franka")
+        _jacobian = self.gym.acquire_jacobian_tensor(self.sim, "ur16e")
         jacobian = gymtorch.wrap_tensor(_jacobian)
         hand_joint_index = self.gym.get_actor_joint_dict(
-            env_ptr, franka_handle)['gripper_joint']
+            env_ptr, ur16e_handle)['gripper_joint']
         self._j_eef = jacobian[:, hand_joint_index, :, :6]
-        _massmatrix = self.gym.acquire_mass_matrix_tensor(self.sim, "franka")
+        _massmatrix = self.gym.acquire_mass_matrix_tensor(self.sim, "ur16e")
         mm = gymtorch.wrap_tensor(_massmatrix)
         self._mm = mm[:, :6, :6]
 
@@ -613,7 +595,7 @@ class UR16eManipualtion(VecTask):
 
     def _update_states(self):
         self.states.update({
-            # Franka
+            # ur16e
             "base_link": self._base_link[:, :7],
             "wrist_3_link": self._wrist_3_link[:, :7],
             "wrist_3_link_vel": self._wrist_3_link[:, 7:],
@@ -676,12 +658,12 @@ class UR16eManipualtion(VecTask):
             for object_count in selected_object:
                 domain_randomizer = random_number = random.choice(
                     [1, 2, 3, 4, 5])
-                offset_object = np.array([np.random.uniform(0.67, 0.7, 1).reshape(
-                    1,)[0], np.random.uniform(-0.22, -0.12, 1).reshape(1,)[0], 1.3, random.choice([0, 1.57, 3.14]),
-                    random.choice([0, 1.57, 3.14]), np.random.uniform(0.0, 3.14, 1).reshape(1,)[0]])
                 # offset_object = np.array([np.random.uniform(0.67, 0.7, 1).reshape(
-                #     1,)[0], np.random.uniform(-0.22, -0.12, 1).reshape(1,)[0], 1.3, 0.0,
-                #     0.0, 0.0])
+                #     1,)[0], np.random.uniform(-0.22, -0.12, 1).reshape(1,)[0], 1.3, random.choice([0, 1.57, 3.14]),
+                #     random.choice([0, 1.57, 3.14]), np.random.uniform(0.0, 3.14, 1).reshape(1,)[0]])
+                offset_object = np.array([np.random.uniform(0.67, 0.7, 1).reshape(
+                    1,)[0], np.random.uniform(-0.22, -0.12, 1).reshape(1,)[0], 1.3, 0.0,
+                    0.0, 0.0])
                 quat = euler_angles_to_quaternion(
                     torch.tensor(offset_object[3:6]), "XYZ", degrees=False)
                 offset_object = np.concatenate(
@@ -696,9 +678,9 @@ class UR16eManipualtion(VecTask):
         print(env_count, "objects spawned in each environemnt",
               self.selected_object_env)
         # pos = torch.tensor(np.random.uniform(low=-6.2832, high=6.2832, size=(6,))).to(self.device).type(torch.float)
-        # pos = tensor_clamp(pos.unsqueeze(0), self.franka_dof_lower_limits.unsqueeze(0), self.franka_dof_upper_limits)
-        pos = tensor_clamp(self.franka_default_dof_pos.unsqueeze(
-            0), self.franka_dof_lower_limits.unsqueeze(0), self.franka_dof_upper_limits)
+        # pos = tensor_clamp(pos.unsqueeze(0), self.ur16e_dof_lower_limits.unsqueeze(0), self.ur16e_dof_upper_limits)
+        pos = tensor_clamp(self.ur16e_default_dof_pos.unsqueeze(
+            0), self.ur16e_dof_lower_limits.unsqueeze(0), self.ur16e_dof_upper_limits)
         pos = pos.repeat(len(env_ids), 1)
 
         # reinitializing the variables
@@ -853,15 +835,15 @@ class UR16eManipualtion(VecTask):
         # roboticsproceedings.org/rss07/p31.pdf
         j_eef_inv = m_eef @ self._j_eef @ mm_inv
         u_null = self.kd_null * -qd + self.kp_null * (
-            (self.franka_default_dof_pos[:6] - q + np.pi) % (2 * np.pi) - np.pi)
-        u_null[:, self.num_franka_dofs:] *= 0
+            (self.ur16e_default_dof_pos[:6] - q + np.pi) % (2 * np.pi) - np.pi)
+        u_null[:, self.num_ur16e_dofs:] *= 0
         u_null = self._mm @ u_null.unsqueeze(-1)
         u += (torch.eye((6), device=self.device).unsqueeze(0) -
               torch.transpose(self._j_eef, 1, 2) @ j_eef_inv) @ u_null
 
         # Clip the values to be within valid effort range
         u = tensor_clamp(u.squeeze(-1),
-                         -self._franka_effort_limits[:6].unsqueeze(0), self._franka_effort_limits[:6].unsqueeze(0))
+                         -self._ur16e_effort_limits[:6].unsqueeze(0), self._ur16e_effort_limits[:6].unsqueeze(0))
 
         return u
 
@@ -875,7 +857,7 @@ class UR16eManipualtion(VecTask):
         return q_r[:3] * torch.sign(q_r[3]).unsqueeze(-1)
 
     def reset_pre_grasp_pose(self, env_ids):
-        pos = torch.zeros(0, self.num_franka_dofs).to(self.device)
+        pos = torch.zeros(0, self.num_ur16e_dofs).to(self.device)
         for _ in env_ids:
             joint_poses_list = torch.load(
                 f"{cur_path}/../../misc/joint_poses.pt")
@@ -884,7 +866,7 @@ class UR16eManipualtion(VecTask):
             temp_pos = torch.reshape(temp_pos, (1, len(temp_pos)))
             temp_pos = torch.cat(
                 (temp_pos, torch.tensor([[0]]).to(self.device)), dim=1)
-            # temp_pos = tensor_clamp(temp_pos.unsqueeze(0), self.franka_dof_lower_limits.unsqueeze(0), self.franka_dof_upper_limits)
+            # temp_pos = tensor_clamp(temp_pos.unsqueeze(0), self.ur16e_dof_lower_limits.unsqueeze(0), self.ur16e_dof_upper_limits)
             pos = torch.cat([pos, temp_pos])
         return pos
 
@@ -984,9 +966,6 @@ class UR16eManipualtion(VecTask):
                     depth_image = torch_depth_tensor.to(self.device)
                     depth_image = -depth_image
 
-                    # mask_camera_tensor = self.gym.get_camera_image_gpu_tensor(self.sim, self.envs[env_count], self.camera_handles[env_count][0], gymapi.IMAGE_SEGMENTATION)
-                    # torch_mask_tensor = gymtorch.wrap_tensor(mask_camera_tensor)
-                    # segmask = torch_mask_tensor.to(self.device)
                     segmask_dexnet = segmask.clone().detach()
                     self.segmask_save[env_count] = segmask[180:660, 410:1050].clone(
                     ).detach().cpu().numpy().astype(np.uint8)
@@ -1058,7 +1037,7 @@ class UR16eManipualtion(VecTask):
                         self.dexnet_score_temp = torch.Tensor()
                         max_num_grasps = len(self.grasps_and_predictions)
                         top_grasps = max_num_grasps if max_num_grasps <= 10 else 7
-
+                        
                         for i in range(max_num_grasps):
                             grasp_point = torch.tensor(
                                 [self.grasps_and_predictions[i][0].center.x, self.grasps_and_predictions[i][0].center.y])
@@ -1100,39 +1079,6 @@ class UR16eManipualtion(VecTask):
                         print("dexnet error: ", e)
                         env_complete_reset = torch.cat(
                             (env_complete_reset, torch.tensor([env_count])), axis=0)
-
-                    sample_point = 0
-                    max_num_grasps = 0
-                    if (max_num_grasps > 10):
-                        while sample_point < len(self.unsorted_grasps_and_predictions):
-                            grasp_point = torch.tensor(
-                                [self.unsorted_grasps_and_predictions[sample_point][0].center.x, self.unsorted_grasps_and_predictions[sample_point][0].center.y])
-
-                            depth_image_suction = depth_image
-                            suction_deformation_score, xyz_point, grasp_angle = self.suction_score_object.calculator(
-                                depth_image_suction, segmask, rgb_image_copy, self.unsorted_grasps_and_predictions[sample_point][0], self.object_target_id[env_count])
-                            self.suction_deformation_score_temp = torch.cat(
-                                (self.suction_deformation_score_temp, torch.tensor([suction_deformation_score]))).type(torch.float)
-                            self.xyz_point_temp = torch.cat(
-                                [self.xyz_point_temp, xyz_point.unsqueeze(0)], dim=0)
-                            self.grasp_angle_temp = torch.cat(
-                                [self.grasp_angle_temp, grasp_angle.unsqueeze(0)], dim=0)
-                            self.grasp_point_temp = torch.cat(
-                                [self.grasp_point_temp, grasp_point.clone().detach().unsqueeze(0)], dim=0)
-                            self.object_coordiante_camera = xyz_point.clone().detach()
-                            if (suction_deformation_score > 0):
-                                force_SI = self.force_object.regression(
-                                    suction_deformation_score)
-                            else:
-                                force_SI = torch.tensor(0).to(self.device)
-
-                            self.force_SI_temp = torch.cat(
-                                (self.force_SI_temp, torch.tensor([force_SI])))
-                            self.dexnet_score_temp = torch.cat(
-                                (self.dexnet_score_temp, torch.tensor([self.unsorted_grasps_and_predictions[i][1]])))
-                            increment_value = max(
-                                math.ceil(len(self.unsorted_grasps_and_predictions)/40), 3)
-                            sample_point += increment_value
 
                     self.suction_deformation_score_env[env_count] = self.suction_deformation_score_temp
                     self.grasp_angle_env[env_count] = self.grasp_angle_temp
