@@ -18,3 +18,8 @@ Create conda environment with python version 3.7
 Extras:
 1. pip uninstall gqcnn
 2. pip install open3d
+
+To run the data collection, run:
+```bash
+$ python temp_test.py
+```
