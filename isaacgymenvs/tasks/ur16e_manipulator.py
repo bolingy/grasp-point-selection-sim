@@ -12,26 +12,18 @@ from isaacgym.torch_utils import *
 from isaacgymenvs.utils.torch_jit_utils import *
 from isaacgymenvs.tasks.base.vec_task import VecTask
 
-# For camera module
-from PIL import Image as im
-import matplotlib.pyplot as plt
-
-from isaacgym import gymutil
 import math
-import cv2
 
 from suction_cup_modelling.suction_score_calcualtor import calcualte_suction_score
 from suction_cup_modelling.force_calculator import calcualte_force
 
+# Importing DexNet and 
 from gqcnn.examples.policy_for_training import dexnet3
-
-from autolab_core import (YamlConfig, Logger, BinaryImage,
-                          CameraIntrinsics, ColorImage, DepthImage, RgbdImage)
+from autolab_core import (BinaryImage, CameraIntrinsics, DepthImage)
 import assets.urdf_models.models_data as md
 
 from homogeneous_trasnformation_and_conversion.rotation_conversions import *
 
-import time
 import pandas as pd
 
 from pathlib import Path
@@ -274,7 +266,6 @@ class UR16eManipualtion(VecTask):
         asset_options.default_dof_drive_mode = gymapi.DOF_MODE_EFFORT
         asset_options.use_mesh_materials = True
 
-        # self.object_models = ["small_health_bottle_3", "pizza_cutter_3", "calcium_bottle_3"]
         self.object_models = []
         objects_file = open('misc/object_list_domain_randomization.txt', 'r')
         objects = objects_file.readlines()
@@ -286,10 +277,6 @@ class UR16eManipualtion(VecTask):
             for domain in range(5):
                 self.object_models.append(
                     str(object.strip())+"_"+str(domain+1))
-
-        # self.object_models = ["orange_cylinder_1", "orange_cylinder_2", "orange_cylinder_3", "orange_cylinder_4", "orange_cylinder_5",
-        #                       "centrum_box_1", "centrum_box_2", "centrum_box_3", "centrum_box_4",
-        #                       "centrum_box_5", "green_cylinder_1", "green_cylinder_2", "green_cylinder_3", "green_cylinder_4", "green_cylinder_5"]
         object_model_asset_file = []
         object_model_asset = []
         for counter, model in enumerate(self.object_models):
@@ -878,20 +865,6 @@ class UR16eManipualtion(VecTask):
 
         return u
 
-    def to_pose_ik(self, dpose):
-        dpose = dpose.unsqueeze(-1)
-        u = self._compute_ik(dpose)
-        self._q += u
-        self._qd = torch.zeros_like(self._qd)
-
-    def _compute_ik(self, dpose):
-        damping = 0.05
-        j_eef_T = torch.transpose(self._j_eef, 1, 2)
-        lmbda = torch.eye(6, device=self.device) * (damping ** 2)
-        u = (j_eef_T @ torch.inverse(self._j_eef @ j_eef_T + lmbda)
-             @ dpose).view(self.num_envs, 6)
-        return u
-
     def orientation_error(self, desired, current):
         '''
         input: desired orientation - quaterion, current orientation - quaterion
@@ -1070,16 +1043,6 @@ class UR16eManipualtion(VecTask):
                     depth_numpy_temp = depth_numpy*segmask_numpy_temp
                     depth_numpy_temp[depth_numpy_temp == 0] = 0.75
 
-                    # # Post processing of segmask and depth iamge which needs to be saved
-                    # segmask_numpy_save_temp = np.zeros_like(
-                    #     segmask_save.cpu().numpy().astype(np.uint8))
-                    # segmask_numpy_save_temp[segmask_save.cpu().numpy().astype(
-                    #     np.uint8) != 0] = 1
-
-                    # depth_image_save_temp = depth_image_save_temp.cpu().numpy() * \
-                    #     segmask_numpy_save_temp
-                    # depth_image_save_temp[depth_image_save_temp == 0] = 1.25
-
                     depth_img_dexnet = DepthImage(
                         depth_numpy_temp[180:660, 410:1050], frame=self.camera_intrinsics_back_cam.frame)
                     max_num_grasps = 0
@@ -1096,9 +1059,6 @@ class UR16eManipualtion(VecTask):
                         max_num_grasps = len(self.grasps_and_predictions)
                         top_grasps = max_num_grasps if max_num_grasps <= 10 else 7
 
-                        # top_grasps = 2
-                        # max_num_grasps = 5
-                        print(max_num_grasps)
                         for i in range(max_num_grasps):
                             grasp_point = torch.tensor(
                                 [self.grasps_and_predictions[i][0].center.x, self.grasps_and_predictions[i][0].center.y])
@@ -1141,8 +1101,6 @@ class UR16eManipualtion(VecTask):
                         env_complete_reset = torch.cat(
                             (env_complete_reset, torch.tensor([env_count])), axis=0)
 
-                        # print(
-                        #     f"Quality is {self.grasps_and_predictions[i][1]}, xyz point is {self.xyz_point_temp}, deformation score is {self.suction_deformation_score_temp}, grasp angle is {self.grasp_angle_temp} for environment {env_count}")
                     sample_point = 0
                     max_num_grasps = 0
                     if (max_num_grasps > 10):
@@ -1161,7 +1119,6 @@ class UR16eManipualtion(VecTask):
                                 [self.grasp_angle_temp, grasp_angle.unsqueeze(0)], dim=0)
                             self.grasp_point_temp = torch.cat(
                                 [self.grasp_point_temp, grasp_point.clone().detach().unsqueeze(0)], dim=0)
-                            # cv2.circle(self.rgb_save[env_count], (grasp_point.clone().detach().cpu().numpy()[0], grasp_point.clone().detach().cpu().numpy()[1]), 2, (0, 0, 0), 1)
                             self.object_coordiante_camera = xyz_point.clone().detach()
                             if (suction_deformation_score > 0):
                                 force_SI = self.force_object.regression(
@@ -1177,8 +1134,6 @@ class UR16eManipualtion(VecTask):
                                 math.ceil(len(self.unsorted_grasps_and_predictions)/40), 3)
                             sample_point += increment_value
 
-                    # cv2.imshow("rgb image", self.rgb_save[env_count])
-                    # cv2.waitKey(0)
                     self.suction_deformation_score_env[env_count] = self.suction_deformation_score_temp
                     self.grasp_angle_env[env_count] = self.grasp_angle_temp
                     self.force_SI_env[env_count] = self.force_SI_temp
@@ -1186,10 +1141,7 @@ class UR16eManipualtion(VecTask):
                     self.grasp_point_env[env_count] = self.grasp_point_temp
                     self.dexnet_score_env[env_count] = self.dexnet_score_temp
                     self.free_envs_list[env_count] = torch.tensor(0)
-                    # pixel coordinates
-                    # dexnet_coordinates = np.array([grasp_data.grasp.center.x, grasp_data.grasp.center.y])
-                    # print(f"Quality is {grasp_data.q_value} grasp location is {grasp_data.grasp.center.x}, {grasp_data.grasp.center.y}")
-                    # print(f"suction deforamtion score --> {suction_deformation_score}, Force along z axis --> {force_SI}")
+                    
                 elif (total_objects != objects_spawned and (self.free_envs_list[env_count] == torch.tensor(1))):
                     print(f"Object falled down in environment {env_count}")
                     env_complete_reset = torch.cat(
@@ -1209,7 +1161,7 @@ class UR16eManipualtion(VecTask):
                 self.env_reset_id_env[env_count] = torch.tensor(0)
                 self.action_env = torch.tensor(
                     [[0, 0, 0, 0, 0, 0, 1]], dtype=torch.float)
-                # print(self.frame_count[env_count], self.grasp_angle_env[env_count], len(self.grasp_angle_env[env_count]), env_count)
+                
                 if ((env_count in self.grasp_angle_env) and (len(self.grasp_angle_env[env_count]) != 0)):
                     self.suction_deformation_score[env_count] = self.suction_deformation_score_env[env_count][0]
                     self.suction_deformation_score_env[env_count] = self.suction_deformation_score_env[env_count][1:]
@@ -1411,9 +1363,6 @@ class UR16eManipualtion(VecTask):
                                                      self.speed[env_count]*100 *
                                                      action_orientation[1],
                                                      self.speed[env_count]*100*action_orientation[2], 1]], dtype=torch.float)
-                    # Append all the force data
-                    # self.force_list = np.append(
-                    #     self.force_list, self.force_pre_physics)
 
                     current_object_pose = self._root_state[env_count, self._object_model_id[self.object_target_id[env_count]-1], :][:3].type(
                         torch.float).detach().clone()
@@ -1553,8 +1502,7 @@ class UR16eManipualtion(VecTask):
                         self.speed[env_count] = torch.tensor(0.1)
                         self.cmd_limit = to_torch(
                             [0.1, 0.1, 0.1, 0.5, 0.5, 0.5], device=self.device).unsqueeze(0)
-                    # except Exception as error:
-                    #     print("speed error", error)
+                    
                     self.last_object_pose[env_count] = current_object_pose
                     for object_id in self.selected_object_env[env_count]:
                         self.all_objects_last_pose[env_count][int(
@@ -1600,14 +1548,6 @@ class UR16eManipualtion(VecTask):
                         if (self.action_contrib[env_count] == 1):
                             self.xyz_point[env_count][0] += temp_xyz_point[0]
                             self.grasp_angle[env_count] = temp_grasp
-
-                        '''
-                        For now we are including the low suction deformation score data
-                        '''
-                        # if (self.action_contrib[env_count] == 0):
-                        # if (self.suction_deformation_score[env_count] == torch.tensor(0) or self.force_SI[env_count] <= torch.tensor(0)):
-                        #     env_complete_reset = torch.cat(
-                        #         (env_complete_reset, torch.tensor([env_count])), axis=0)
 
                     if (self.force_pre_physics > torch.max(torch.tensor([self.force_threshold, self.force_SI[env_count]])) and self.action_contrib[env_count] == 0):
                         self.force_encounter[env_count] = 1
@@ -1740,7 +1680,6 @@ class UR16eManipualtion(VecTask):
                 env_list_reset_arm_pose.to(self.device).type(torch.long))
             pos2 = self.reset_init_arm_pose(
                 env_complete_reset.to(self.device).type(torch.long))
-            # env_complete_reset = torch.cat((env_complete_reset,env_list_reset_arm_pose), axis=0)
 
             pos = torch.cat([pos1, pos2])
             self.deploy_actions(env_ids, pos)
@@ -1767,8 +1706,6 @@ class UR16eManipualtion(VecTask):
             self.reset_object_pose(env_list_reset_objects.to(
                 self.device).type(torch.long))
 
-        # if(self.force_encounter == 1):
-        #     actions = torch.tensor(self.num_envs * [[-0.1, T_ee_pose_to_pre_grasp_pose[1][3], T_ee_pose_to_pre_grasp_pose[2][3], 0.1*action_orientation[0], 0.1*action_orientation[1], 0.1*action_orientation[2], 1]], dtype=torch.float)
         self.actions = self.actions.clone().detach().to(self.device)
 
         # Split arm and gripper command
