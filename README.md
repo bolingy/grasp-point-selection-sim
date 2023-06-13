@@ -45,6 +45,10 @@ pip uninstall pyglet
 
 # Install the following dependencies
 pip install open3d pyglet==1.4.10
+
+# Outside this repo create two folders for saving the data(grasp point properties, depth image, segmentation mask and rgb image),
+mkdir System_Identification_Data && cd System_Identification_Data
+mkdir Parallelization-Data
 ```
 
 ## Running
