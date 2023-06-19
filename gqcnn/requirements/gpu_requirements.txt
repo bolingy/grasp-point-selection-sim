@@ -1,0 +1,12 @@
+autolab-core
+autolab-perception
+visualization
+numpy
+opencv-python
+scipy
+matplotlib
+tensorflow-gpu<=1.15.0
+scikit-learn
+scikit-image
+gputil
+psutil
