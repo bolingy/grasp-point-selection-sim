@@ -1159,6 +1159,7 @@ class UR16eManipualtion(VecTask):
                             "penetration": False,
                             "unreachable": True
                         }
+                        print("success: ", success)
                         new_dir_name = str(
                             env_count)+"_"+str(self.track_save[env_count].type(torch.int).item())
                         save_dir_json = cur_path+"/../../System_Identification_Data/Parallelization-Data/" + \
@@ -1392,6 +1393,7 @@ class UR16eManipualtion(VecTask):
                                 "penetration": False,
                                 "unreachable": True
                             }
+                            print("success: ", success)
                             new_dir_name = str(
                                 env_count)+"_"+str(self.track_save[env_count].type(torch.int).item())
                             save_dir_json = cur_path+"/../../System_Identification_Data/Parallelization-Data/" + \
@@ -1441,6 +1443,7 @@ class UR16eManipualtion(VecTask):
                             "penetration": False,
                             "unreachable": True
                         }
+                        print("success: ", success)
                         new_dir_name = str(
                             env_count)+"_"+str(self.track_save[env_count].type(torch.int).item())
                         save_dir_json = cur_path+"/../../System_Identification_Data/Parallelization-Data/" + \
@@ -1568,6 +1571,7 @@ class UR16eManipualtion(VecTask):
                             "penetration": penetration,
                             "unreachable": False
                         }
+                        print("success: ", success)
                         new_dir_name = str(
                             env_count)+"_"+str(self.track_save[env_count].type(torch.int).item())
                         save_dir_json = cur_path+"/../../System_Identification_Data/Parallelization-Data/" + \
@@ -1602,6 +1606,7 @@ class UR16eManipualtion(VecTask):
                             "penetration": False,
                             "unreachable": True
                         }
+                        print("success: ", success)
                         new_dir_name = str(
                             env_count)+"_"+str(self.track_save[env_count].type(torch.int).item())
                         save_dir_json = cur_path+"/../../System_Identification_Data/Parallelization-Data/" + \
@@ -1713,6 +1718,7 @@ class UR16eManipualtion(VecTask):
                         "penetration": False,
                         "unreachable": False
                     }
+                    print("success: ", success)
                     new_dir_name = str(
                         env_count)+"_"+str(self.track_save[env_count].type(torch.int).item())
                     save_dir_json = cur_path+"/../../System_Identification_Data/Parallelization-Data/" + \
