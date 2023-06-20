@@ -51,6 +51,7 @@ coverage.xml
 .pytest_cache/
 cover/
 IssacGymEnv/
+System_Identification_Data/
 
 # Translations
 *.mo
