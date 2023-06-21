@@ -1285,6 +1285,9 @@ class RL_UR16eManipualtion(VecTask):
                 # TODO: add flag for RL agent to take action or execute pregrasp and grasp from dexnet
                 # executing policy from RL agent or from DexNet 3.0
                 # if (flag == 0):
+
+                #     print("go to a fixed pre grasp pose")
+
                 #     print("RL agent action")
                 #     self.counter += 1
 

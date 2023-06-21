@@ -26,7 +26,7 @@ class Primitives():
         # Get error
         pose_diff = torch.clone(self.target_pose - self.current_pose)
         print('pose_diff', pose_diff)
-        # # Check if done
+        # Check if done
         if torch.all(torch.abs(pose_diff) < self.min_distance_to_goal):
             self.executing = False
             print("done")
