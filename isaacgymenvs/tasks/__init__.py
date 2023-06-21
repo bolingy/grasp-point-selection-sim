@@ -27,8 +27,10 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 from .ur16e_manipulator import UR16eManipualtion
+from .rl_ur16e_manipulator import RL_UR16eManipualtion
 
 # Mappings from strings to environments
 isaacgym_task_map = {
     "UR16eManipualtion": UR16eManipualtion,
+    "RL_UR16eManipualtion": RL_UR16eManipualtion,
 }

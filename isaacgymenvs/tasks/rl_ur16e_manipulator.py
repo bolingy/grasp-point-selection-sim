@@ -11,6 +11,8 @@ from isaacgym.torch_utils import *
 from isaacgymenvs.utils.torch_jit_utils import *
 from isaacgymenvs.tasks.base.vec_task import VecTask
 
+from matplotlib import pyplot as plt
+
 import math
 
 from suction_cup_modelling.suction_score_calcualtor import calcualte_suction_score
@@ -27,7 +29,7 @@ import pandas as pd
 from pathlib import Path
 cur_path = str(Path(__file__).parent.absolute())
 
-class UR16eManipualtion(VecTask):
+class RL_UR16eManipualtion(VecTask):
 
     def __init__(self, cfg, rl_device, sim_device, graphics_device_id, headless, virtual_screen_capture, force_render):
         self.cfg = cfg
@@ -95,6 +97,7 @@ class UR16eManipualtion(VecTask):
 
         self.force_threshold = 0.15
         self.object_coordiante_camera = torch.tensor([0, 0, 0])
+        
 
         # Parallelization
         self.init_camera_capture = 1
@@ -789,11 +792,100 @@ class UR16eManipualtion(VecTask):
 
     def compute_observations(self):
         self._refresh()
-        obs = ["eef_pos", "eef_quat"]
-        obs += ["q_gripper"] if self.control_type == "osc" else ["q"]
-        self.obs_buf = torch.cat([self.states[ob] for ob in obs], dim=-1)
+        # pose state observations
+        #   pose and quaternion of end effector and respective joint angles
+        # obs = ["eef_pos", "eef_quat"]
+        # obs += ["q_gripper"] if self.control_type == "osc" else ["q"]
+        # self.obs_buf = torch.cat([self.states[ob] for ob in obs], dim=-1)
+        # return self.obs_buf
+        
+        # image observations
+        self.rgb_buf = None      
+        self.depth_buf = None  
+        self.seg_buf = None
+        for env_count in range(self.num_envs):
+                mask_camera_tensor = self.gym.get_camera_image_gpu_tensor(
+                    self.sim, self.envs[env_count], self.camera_handles[env_count][0], gymapi.IMAGE_SEGMENTATION)
+                torch_mask_tensor = gymtorch.wrap_tensor(mask_camera_tensor)
+                segmask = torch_mask_tensor.to(self.device)
+                # segmask_dexnet = segmask.clone().detach()
+                #     self.segmask_save[env_count] = segmask[180:660, 410:1050].clone(
+                #     ).detach().cpu().numpy().astype(np.uint8)
+                
 
-        return self.obs_buf
+                # add to rgb_buf
+                # get image tensor
+                rgb_camera_tensor = self.gym.get_camera_image_gpu_tensor(
+                    self.sim, self.envs[env_count], self.camera_handles[env_count][0], gymapi.IMAGE_COLOR)
+                torch_rgb_tensor = gymtorch.wrap_tensor(rgb_camera_tensor)
+                rgb_image = torch_rgb_tensor.to(self.device)
+                # rgb_image_copy = torch.reshape(
+                #     rgb_image, (rgb_image.shape[0], -1, 4))[..., :3]
+                # self.rgb_save[env_count] = rgb_image_copy[180:660,
+                #                                             410:1050].clone().detach().cpu().numpy()
+                torch_rgb_tensor = to_torch(torch_rgb_tensor, dtype=torch.float, device=self.device).unsqueeze(0)
+                if self.rgb_buf is None:
+                    self.rgb_buf = torch_rgb_tensor
+                else:
+                    self.rgb_buf = torch.cat((self.rgb_buf, torch_rgb_tensor), dim=0)
+
+                depth_camera_tensor = self.gym.get_camera_image_gpu_tensor(
+                    self.sim, self.envs[env_count], self.camera_handles[env_count][0], gymapi.IMAGE_DEPTH)
+                torch_depth_tensor = gymtorch.wrap_tensor(depth_camera_tensor)
+                depth_image = torch_depth_tensor.to(self.device)
+                depth_image = -depth_image
+                depth_image_dexnet = depth_image.clone().detach()
+                noise_image = torch.normal(
+                    0, 0.0005, size=depth_image_dexnet.size()).to(self.device)
+                depth_image_dexnet = depth_image_dexnet + noise_image
+                torch_depth_dexnet_tensor = to_torch(depth_image_dexnet, dtype=torch.float, device=self.device).unsqueeze(0)
+                depth_image_save_temp = depth_image_dexnet.clone().detach().cpu().numpy()
+                self.depth_image_save[env_count] = depth_image_save_temp[180:660, 410:1050]
+                if self.depth_buf is None:
+                    self.depth_buf = torch_depth_dexnet_tensor
+                else:
+                    self.depth_buf = torch.cat((self.depth_buf, torch_depth_dexnet_tensor), dim=0)
+
+                segmask_dexnet = segmask.clone().detach()
+                self.segmask_save[env_count] = segmask[180:660, 410:1050].clone(
+                ).detach().cpu().numpy().astype(np.uint8)
+
+                segmask_numpy = np.zeros_like(
+                    segmask_dexnet.cpu().numpy().astype(np.uint8))
+                segmask_numpy_temp = np.zeros_like(
+                    segmask_dexnet.cpu().numpy().astype(np.uint8))
+                segmask_numpy_temp[segmask_dexnet.cpu().numpy().astype(
+                    np.uint8) == self.object_target_id[env_count].cpu().numpy()] = 1
+                segmask_numpy[segmask_dexnet.cpu().numpy().astype(
+                    np.uint8) == self.object_target_id[env_count].cpu().numpy()] = 255
+                torch_segmask_tensor = to_torch(segmask_numpy, dtype=torch.float, device=self.device).unsqueeze(0)
+                if self.seg_buf is None:
+                    self.seg_buf = torch_segmask_tensor
+                else:
+                    self.seg_buf = torch.cat((self.seg_buf, torch_segmask_tensor), dim=0)
+                
+
+        # crop, scale and normalize image
+        self.rgb_buf = self.rgb_buf[:, 180:660, 410:1050, :]
+        self.rgb_buf = self.rgb_buf / 255.0
+
+        # crop depth image
+        self.depth_buf = self.depth_buf[:, 180:660, 410:1050]
+        # add extra dimensions depth image such that it is the same size as the rgb image
+        self.depth_buf = self.depth_buf.unsqueeze(-1)
+
+        # crop segmask
+        self.seg_buf = self.seg_buf[:, 180:660, 410:1050]
+        self.seg_buf = self.seg_buf.unsqueeze(-1)
+
+        # plot latest image from rgb_buf
+        # plt.imshow(self.seg_buf[-1].cpu().numpy())
+        # plt.show()
+        
+        self.obs_buf = torch.cat((self.rgb_buf, self.depth_buf), dim=-1)
+        return self.rgb_buf
+
+
 
     def _reset_init_object_state(self, object, env_ids, offset):
         """
@@ -958,92 +1050,13 @@ class UR16eManipualtion(VecTask):
                 # 30 frames is for cooldown period at the start for the simualtor to settle down
                 if ((self.free_envs_list[env_count] == torch.tensor(1)) and total_objects == objects_spawned):
                     '''
-                    Running DexNet 3.0 after investigating the pose error after spawning
+                    Apply actions here
                     '''
-                    random_object_select = random.sample(
-                        self.selected_object_env[env_count].tolist(), 1)
-                    self.object_target_id[env_count] = torch.tensor(
-                        random_object_select).to(self.device).type(torch.int)
-                    rgb_camera_tensor = self.gym.get_camera_image_gpu_tensor(
-                        self.sim, self.envs[env_count], self.camera_handles[env_count][0], gymapi.IMAGE_COLOR)
-                    torch_rgb_tensor = gymtorch.wrap_tensor(rgb_camera_tensor)
-                    rgb_image = torch_rgb_tensor.to(self.device)
-                    rgb_image_copy = torch.reshape(
-                        rgb_image, (rgb_image.shape[0], -1, 4))[..., :3]
-
-                    self.rgb_save[env_count] = rgb_image_copy[180:660,
-                                                              410:1050].clone().detach().cpu().numpy()
-
-                    depth_camera_tensor = self.gym.get_camera_image_gpu_tensor(
-                        self.sim, self.envs[env_count], self.camera_handles[env_count][0], gymapi.IMAGE_DEPTH)
-                    torch_depth_tensor = gymtorch.wrap_tensor(
-                        depth_camera_tensor)
-                    depth_image = torch_depth_tensor.to(self.device)
-                    depth_image = -depth_image
-
-                    segmask_dexnet = segmask.clone().detach()
-                    self.segmask_save[env_count] = segmask[180:660, 410:1050].clone(
-                    ).detach().cpu().numpy().astype(np.uint8)
-
-                    segmask_numpy = np.zeros_like(
-                        segmask_dexnet.cpu().numpy().astype(np.uint8))
-                    segmask_numpy_temp = np.zeros_like(
-                        segmask_dexnet.cpu().numpy().astype(np.uint8))
-                    segmask_numpy_temp[segmask_dexnet.cpu().numpy().astype(
-                        np.uint8) == self.object_target_id[env_count].cpu().numpy()] = 1
-                    segmask_numpy[segmask_dexnet.cpu().numpy().astype(
-                        np.uint8) == self.object_target_id[env_count].cpu().numpy()] = 255
-                    segmask_dexnet = BinaryImage(
-                        segmask_numpy[180:660, 410:1050], frame=self.camera_intrinsics_back_cam.frame)
-
-                    depth_image_dexnet = depth_image.clone().detach()
-                    noise_image = torch.normal(
-                        0, 0.0005, size=depth_image_dexnet.size()).to(self.device)
-                    depth_image_dexnet = depth_image_dexnet + noise_image
-
-                    depth_image_save_temp = depth_image_dexnet.clone().detach().cpu().numpy()
-                    self.depth_image_save[env_count] = depth_image_save_temp[180:660, 410:1050]
-
-                    # saving depth image, rgb image and segmentation mask
-                    self.config_env_count[env_count] += torch.tensor(
-                        1).type(torch.int)
-                    new_dir_name = str(
-                        env_count)
-                    try:
-                        os.mkdir(
-                            cur_path+"/../../System_Identification_Data/Parallelization-Data/"+new_dir_name)
-                    except:
-                        pass
-                    save_dir_depth_npy = cur_path+"/../../System_Identification_Data/Parallelization-Data/" + \
-                        new_dir_name+"/depth_image_"+new_dir_name+"_" + \
-                        str(self.config_env_count[env_count].type(
-                            torch.int).item())+".npy"
-                    save_dir_segmask_npy = cur_path+"/../../System_Identification_Data/Parallelization-Data/" + \
-                        new_dir_name+"/segmask_"+new_dir_name+"_" + \
-                        str(self.config_env_count[env_count].type(
-                            torch.int).item())+".npy"
-                    save_dir_rgb_npy = cur_path+"/../../System_Identification_Data/Parallelization-Data/" + \
-                        new_dir_name+"/rgb_"+new_dir_name+"_" + \
-                        str(self.config_env_count[env_count].type(
-                            torch.int).item())+".npy"
-
-                    np.save(save_dir_depth_npy,
-                            self.depth_image_save[env_count])
-                    np.save(save_dir_segmask_npy, self.segmask_save[env_count])
-                    np.save(save_dir_rgb_npy, self.rgb_save[env_count])
-
-                    # cropping the image and modifying depth to match the DexNet 3.0 input configuration
-                    depth_image_dexnet -= 0.5
-                    depth_numpy = depth_image_dexnet.cpu().numpy()
-                    depth_numpy_temp = depth_numpy*segmask_numpy_temp
-                    depth_numpy_temp[depth_numpy_temp == 0] = 0.75
-
-                    depth_img_dexnet = DepthImage(
-                        depth_numpy_temp[180:660, 410:1050], frame=self.camera_intrinsics_back_cam.frame)
-                    max_num_grasps = 0
+                    
 
                     # Storing all the sampled grasp point and its properties
                     try:
+                        # TODO: GET ACTION FROM RL AGENT INSTEAD
                         action, self.grasps_and_predictions, self.unsorted_grasps_and_predictions = self.dexnet_object.inference(
                             depth_img_dexnet, segmask_dexnet, None)
 
