@@ -102,7 +102,7 @@ class RL_UR16eManipualtion(VecTask):
         # Parallelization
         self.init_camera_capture = 1
 
-        with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../configs")+'/collision_primitives_3d.yml') as file:
+        with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../configs")+'/big_collision_primitives_3d.yml') as file:
             self.world_params = yaml.load(file, Loader=yaml.FullLoader)
 
         super().__init__(config=self.cfg, rl_device=rl_device, sim_device=sim_device, graphics_device_id=graphics_device_id,
@@ -333,8 +333,12 @@ class RL_UR16eManipualtion(VecTask):
         # compute aggregate size
         num_ur16e_bodies = self.gym.get_asset_rigid_body_count(ur16e_asset)
         num_ur16e_shapes = self.gym.get_asset_rigid_shape_count(ur16e_asset)
-        max_agg_bodies = num_ur16e_bodies + 27 + len(self.object_models)
-        max_agg_shapes = num_ur16e_shapes + 27 + len(self.object_models)
+        if ('cube' in self.world_params['world_model']['coll_objs']):
+            cube = self.world_params['world_model']['coll_objs']['cube']
+            self.num_pod_bodies = len(cube.keys())
+        max_agg_bodies = num_ur16e_bodies + self.num_pod_bodies + len(self.object_models)
+        max_agg_shapes = num_ur16e_shapes + self.num_pod_bodies + len(self.object_models)
+
 
         self.ur16es = []
         self.envs = []
@@ -373,12 +377,10 @@ class RL_UR16eManipualtion(VecTask):
                 self.gym.begin_aggregate(
                     env_ptr, max_agg_bodies, max_agg_shapes, True)
 
-            count = 0
             # Create pod
             if ('cube' in self.world_params['world_model']['coll_objs']):
                 cube = self.world_params['world_model']['coll_objs']['cube']
                 for obj in cube.keys():
-                    count += 1
                     dims = cube[obj]['dims']
                     pose = cube[obj]['pose']
                     self.add_table(dims, pose, ur16e_start_pose,
@@ -561,7 +563,7 @@ class RL_UR16eManipualtion(VecTask):
         self._arm_control = self._effort_control[:, :]
 
         # Initialize indices    ------ > self.num_envs * num of actors
-        self._global_indices = torch.arange(self.num_envs * (28 + len(self.object_models)), dtype=torch.int32,
+        self._global_indices = torch.arange(self.num_envs * (self.num_pod_bodies + 1 + len(self.object_models)), dtype=torch.int32,
                                             device=self.device).view(self.num_envs, -1)
 
         '''
@@ -673,8 +675,8 @@ class RL_UR16eManipualtion(VecTask):
                 # offset_object = np.array([np.random.uniform(0.67, 0.7, 1).reshape(
                 #     1,)[0], np.random.uniform(-0.22, -0.12, 1).reshape(1,)[0], 1.3, random.choice([0, 1.57, 3.14]),
                 #     random.choice([0, 1.57, 3.14]), np.random.uniform(0.0, 3.14, 1).reshape(1,)[0]])
-                offset_object = np.array([np.random.uniform(0.67, 0.7, 1).reshape(
-                    1,)[0], np.random.uniform(-0.22, -0.12, 1).reshape(1,)[0], 1.3, 0.0,
+                offset_object = np.array([np.random.uniform(0.67, 1.0, 1).reshape(
+                    1,)[0], np.random.uniform(-0.15, 0.10, 1).reshape(1,)[0], 1.55, 0.0,
                     0.0, 0.0])
                 quat = euler_angles_to_quaternion(
                     torch.tensor(offset_object[3:6]), "XYZ", degrees=False)
@@ -1028,7 +1030,7 @@ class RL_UR16eManipualtion(VecTask):
                 torch_mask_tensor = gymtorch.wrap_tensor(mask_camera_tensor)
                 segmask = torch_mask_tensor.to(self.device)
                 # segmask_check = segmask[180:660, 410:1050]
-                segmask_object_count = segmask[341:528, 652:842]
+                segmask_object_count = segmask[278:466, 510:774]
 
                 objects_spawned = len(torch.unique(segmask_object_count))
                 total_objects = len(self.selected_object_env[env_count])+1
@@ -1314,15 +1316,7 @@ class RL_UR16eManipualtion(VecTask):
                 #         elif self.counter > 10:
                             
                 #             u_arm[:, 0:3], self.action[self.prim] = self.primitives.move(self.action[self.prim], self.states["eef_pos"], self.target_dist[self.prim])
-                        
-                #         if self.action[self.prim] == "done":
-                #             self.prim += 1
-                #         # for i in range(len(self.envs)):
-                #         #     goal = self.primitives.get_gymapi_transform([u_arm[i][0], u_arm[i][1], u_arm[i][2], 0, 0, 0, 1])
-                #         #     self.draw_sphere(self.envs[i], goal, 0.05, 12, (0, 0, 1))
-                #         u_arm = self._compute_osc_torques_primitives(dpose=u_arm)
-
-                #     self._arm_control[:, :] = u_arm
+                #             self.action_env = torch.cat((self.action_env, self.action[self.prim].unsqueeze(0)), dim=0)
 
 
                     
