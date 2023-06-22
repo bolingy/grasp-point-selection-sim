@@ -23,6 +23,7 @@ import assets.urdf_models.models_data as md
 
 from homogeneous_trasnformation_and_conversion.rotation_conversions import *
 import pandas as pd
+import matplotlib.pyplot as plt
 
 from pathlib import Path
 cur_path = str(Path(__file__).parent.absolute())
@@ -44,7 +45,7 @@ class UR16eManipualtion(VecTask):
 
         # dimensions
         # obs include: cubeA_pose (7) + cubeB_pos (3) + eef_pose (7) + q_gripper (2)
-        self.cfg["env"]["numObservations"] = 9 if self.control_type == "osc" else 27
+        self.cfg["env"]["numObservations"] = 9 if self.control_type == "osc" else 21
         # actions include: delta EEF if OSC (6) or joint torques (7) + bool gripper (1)
         self.cfg["env"]["numActions"] = 6 if self.control_type == "osc" else 7
 
@@ -99,7 +100,7 @@ class UR16eManipualtion(VecTask):
         # Parallelization
         self.init_camera_capture = 1
 
-        with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../configs")+'/collision_primitives_3d.yml') as file:
+        with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../configs")+'/big_collision_primitives_3d.yml') as file:
             self.world_params = yaml.load(file, Loader=yaml.FullLoader)
 
         super().__init__(config=self.cfg, rl_device=rl_device, sim_device=sim_device, graphics_device_id=graphics_device_id,
@@ -327,8 +328,12 @@ class UR16eManipualtion(VecTask):
         # compute aggregate size
         num_ur16e_bodies = self.gym.get_asset_rigid_body_count(ur16e_asset)
         num_ur16e_shapes = self.gym.get_asset_rigid_shape_count(ur16e_asset)
-        max_agg_bodies = num_ur16e_bodies + 27 + len(self.object_models)
-        max_agg_shapes = num_ur16e_shapes + 27 + len(self.object_models)
+        if ('cube' in self.world_params['world_model']['coll_objs']):
+            cube = self.world_params['world_model']['coll_objs']['cube']
+            self.num_pod_bodies = len(cube.keys())
+        max_agg_bodies = num_ur16e_bodies + self.num_pod_bodies + len(self.object_models)
+        max_agg_shapes = num_ur16e_shapes + self.num_pod_bodies + len(self.object_models)
+
 
         self.ur16es = []
         self.envs = []
@@ -367,12 +372,10 @@ class UR16eManipualtion(VecTask):
                 self.gym.begin_aggregate(
                     env_ptr, max_agg_bodies, max_agg_shapes, True)
 
-            count = 0
             # Create pod
             if ('cube' in self.world_params['world_model']['coll_objs']):
                 cube = self.world_params['world_model']['coll_objs']['cube']
                 for obj in cube.keys():
-                    count += 1
                     dims = cube[obj]['dims']
                     pose = cube[obj]['pose']
                     self.add_table(dims, pose, ur16e_start_pose,
@@ -555,7 +558,7 @@ class UR16eManipualtion(VecTask):
         self._arm_control = self._effort_control[:, :]
 
         # Initialize indices    ------ > self.num_envs * num of actors
-        self._global_indices = torch.arange(self.num_envs * (28 + len(self.object_models)), dtype=torch.int32,
+        self._global_indices = torch.arange(self.num_envs * (self.num_pod_bodies + 1 + len(self.object_models)), dtype=torch.int32,
                                             device=self.device).view(self.num_envs, -1)
 
         '''
@@ -667,8 +670,8 @@ class UR16eManipualtion(VecTask):
                 # offset_object = np.array([np.random.uniform(0.67, 0.7, 1).reshape(
                 #     1,)[0], np.random.uniform(-0.22, -0.12, 1).reshape(1,)[0], 1.3, random.choice([0, 1.57, 3.14]),
                 #     random.choice([0, 1.57, 3.14]), np.random.uniform(0.0, 3.14, 1).reshape(1,)[0]])
-                offset_object = np.array([np.random.uniform(0.67, 0.7, 1).reshape(
-                    1,)[0], np.random.uniform(-0.22, -0.12, 1).reshape(1,)[0], 1.3, 0.0,
+                offset_object = np.array([np.random.uniform(0.67, 1.0, 1).reshape(
+                    1,)[0], np.random.uniform(-0.15, 0.10, 1).reshape(1,)[0], 1.55, 0.0,
                     0.0, 0.0])
                 quat = euler_angles_to_quaternion(
                     torch.tensor(offset_object[3:6]), "XYZ", degrees=False)
@@ -899,6 +902,16 @@ class UR16eManipualtion(VecTask):
         env_list_reset_objects = torch.tensor([])
         env_list_reset_arm_pose = torch.tensor([])
         env_complete_reset = torch.tensor([])
+
+        rgb_camera_tensor = self.gym.get_camera_image_gpu_tensor(
+            self.sim, self.envs[0], self.camera_handles[0][0], gymapi.IMAGE_COLOR)
+        torch_rgb_tensor = gymtorch.wrap_tensor(rgb_camera_tensor)
+        rgb_image = torch_rgb_tensor.to(self.device)
+        rgb_image_copy = torch.reshape(
+            rgb_image, (rgb_image.shape[0], -1, 4))[..., :3]
+        # plt.imshow(rgb_image_copy.detach().cpu().numpy())
+        # plt.show()
+
         for env_count in range(self.num_envs):
             mask_camera_tensor = self.gym.get_camera_image_gpu_tensor(
                 self.sim, self.envs[env_count], self.camera_handles[env_count][0], gymapi.IMAGE_SEGMENTATION)
@@ -929,7 +942,7 @@ class UR16eManipualtion(VecTask):
                 torch_mask_tensor = gymtorch.wrap_tensor(mask_camera_tensor)
                 segmask = torch_mask_tensor.to(self.device)
                 # segmask_check = segmask[180:660, 410:1050]
-                segmask_object_count = segmask[341:528, 652:842]
+                segmask_object_count = segmask[278:466, 510:774]
 
                 objects_spawned = len(torch.unique(segmask_object_count))
                 total_objects = len(self.selected_object_env[env_count])+1
@@ -970,10 +983,13 @@ class UR16eManipualtion(VecTask):
                     rgb_image = torch_rgb_tensor.to(self.device)
                     rgb_image_copy = torch.reshape(
                         rgb_image, (rgb_image.shape[0], -1, 4))[..., :3]
+                    
 
+                    
                     self.rgb_save[env_count] = rgb_image_copy[180:660,
                                                               410:1050].clone().detach().cpu().numpy()
 
+                    
                     depth_camera_tensor = self.gym.get_camera_image_gpu_tensor(
                         self.sim, self.envs[env_count], self.camera_handles[env_count][0], gymapi.IMAGE_DEPTH)
                     torch_depth_tensor = gymtorch.wrap_tensor(
