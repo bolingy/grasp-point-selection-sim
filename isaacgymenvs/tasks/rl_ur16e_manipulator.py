@@ -549,7 +549,7 @@ class RL_UR16eManipualtion(VecTask):
             _rigid_body_state_tensor).view(self.num_envs, -1, 13)
         self._q = self._dof_state[..., 0]
         self._qd = self._dof_state[..., 1]
-        self._eef_state = self._rigid_body_state[:, self.handles["hand"], :]
+        self._eef_state = self._rigid_body_state[:, self.handles["wrist_3_link"], :]
         self._base_link = self._rigid_body_state[:,
                                                  self.handles["base_link"], :]
         self._wrist_3_link = self._rigid_body_state[:,
@@ -1295,22 +1295,28 @@ class RL_UR16eManipualtion(VecTask):
                 # TODO: add flag for RL agent to take action or execute pregrasp and grasp from dexnet
                 # executing policy from RL agent or from DexNet 3.0
                 if (self.RL_flag[env_count] == 1):
+                    temp = actions.clone().detach()
 
-                    print("go to a fixed pre grasp pose")
-
-                    print("RL agent action")
-                    temp_action = torch.zeros(1, 6).to(self.device)
+                    # Split arm and gripper command
+                    u_arm_temp, u_gripper = temp[:, :-1], temp[:, -1]
+                    u_arm_temp = u_arm_temp.to(self.device)
+                    u_arm_temp = u_arm_temp * self.cmd_limit / self.action_scale
                     if self.control_type == "osc":
-                        temp_action[:, 0:3], self.action[self.prim] = self.primitives.move(self.action[self.prim], self.states["eef_pos"], self.target_dist[self.prim])
+                        u_arm_temp[:, 0:3], self.action[self.prim] = self.primitives.move(self.action[self.prim], self.states["eef_pos"], self.target_dist[self.prim])
+            
                         if self.action[self.prim] == "done":
                             if self.prim == 3:
                                 self.prim = 0
                                 self.action = ['right', 'down', 'left', 'up']
                             else:
                                 self.prim += 1
-                        temp_action = self._compute_osc_torques(dpose=temp_action)
-                        temp_action = torch.cat((temp_action, torch.ones(temp_action.shape[0], 1).to(self.device)), dim=1)
-                    self.action_env = temp_action.cpu()
+                        u_arm_temp = self._compute_osc_torques(u_arm_temp)
+                        self.action_env = u_arm_temp.cpu()
+                        self.action_env = torch.cat(
+                            (self.action_env, torch.tensor([[1]]).cpu()), dim=1)
+                        print("u_arm_temp: ", u_arm_temp)
+                        
+                    
                 else:
 
                     # force sensor update
