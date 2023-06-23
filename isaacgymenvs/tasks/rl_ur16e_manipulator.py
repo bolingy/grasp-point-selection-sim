@@ -1007,7 +1007,9 @@ class RL_UR16eManipualtion(VecTask):
                 f"{cur_path}/../../misc/joint_poses.pt")
             temp_pos = joint_poses_list[torch.randint(
                 0, len(joint_poses_list), (1,))[0]].to(self.device)
-            temp_pos = torch.tensor([0.0644, -1.8688,  1.1600,  1.0955,  1.4822, -0.2578]).to(self.device)
+            # or if want to start primitives inside the bin
+            # go to [-0.3222, -1.6111, 1.2566, 0.3867, 1.4177, -0.4511]
+            temp_pos = torch.tensor([-0.2578, -1.8044, 1.5144, 0.3867, 1.4177, -0.4511]).to(self.device)
             print("temp_pose: ", temp_pos)
             # temp_pos = torch.tensor([])
             temp_pos = torch.reshape(temp_pos, (1, len(temp_pos)))
@@ -1179,7 +1181,6 @@ class RL_UR16eManipualtion(VecTask):
 
                     # Storing all the sampled grasp point and its properties
                     try:
-                        # TODO: GET ACTION FROM RL AGENT INSTEAD
                         action, self.grasps_and_predictions, self.unsorted_grasps_and_predictions = self.dexnet_object.inference(
                             depth_img_dexnet, segmask_dexnet, None)
                         self.suction_deformation_score_temp = torch.Tensor()
@@ -1333,6 +1334,8 @@ class RL_UR16eManipualtion(VecTask):
                         if self.action[self.prim] == "done":
                             self.RL_flag[env_count] = 0
                             self.action[self.prim] = self.temp_action
+                            # TODO: reset to init pose and call Dexnet again
+
                         self.temp_action = self.action[self.prim]
                         #     if self.prim == 3:
                         #         self.prim = 0
