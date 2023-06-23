@@ -204,10 +204,11 @@ class RL_UR16eManipualtion(VecTask):
         self.counter = 0
         self.action = ["right", "down", "left", "up"]
         # Axis are inverted TODO Fix it
-        self.target_dist = [torch.tensor([0., 0.3, 0.], device=self.device),
-                            torch.tensor([0., 0., 0.3], device=self.device),
-                            torch.tensor([0., -0.3, 0.], device=self.device),
-                            torch.tensor([0., 0., -0.3], device=self.device)]
+        self.true_target_dist = 0.3
+        self.target_dist = [torch.tensor([0., self.true_target_dist, 0.], device=self.device),
+                            torch.tensor([0., 0., self.true_target_dist], device=self.device),
+                            torch.tensor([0., -self.true_target_dist, 0.], device=self.device),
+                            torch.tensor([0., 0., -self.true_target_dist], device=self.device)]
         self.prim = 0
         self.current_directory = os.getcwd()
 
@@ -908,6 +909,23 @@ class RL_UR16eManipualtion(VecTask):
 
         self.obs_buf = torch.cat((self.depth_buf, self.seg_buf), dim=-1)
         return self.rgb_buf
+    
+    def compute_reward(self):
+        # suction score
+        suction_deformation_score = self.suction_score_object.compute_suction_score(
+            self.rgb_buf, self.depth_buf, self.seg_buf, self.object_target_id, self.object_target_id_gripper)
+        suction_deformation_score = suction_deformation_score.unsqueeze(-1)
+        # force score
+        if (suction_deformation_score > 0):
+            force_SI = self.force_object.regression(
+                suction_deformation_score)
+        else:
+            force_SI = torch.tensor(0).to(self.device)
+        force_SI = force_SI.unsqueeze(-1)
+
+        # return reward
+        reward = suction_deformation_score
+        return reward
 
     def _reset_init_object_state(self, object, env_ids, offset):
         """
@@ -1295,22 +1313,28 @@ class RL_UR16eManipualtion(VecTask):
                 # TODO: add flag for RL agent to take action or execute pregrasp and grasp from dexnet
                 # executing policy from RL agent or from DexNet 3.0
                 if (self.RL_flag[env_count] == 1):
-                    temp = actions.clone().detach()
+                    action_temp = actions.clone().detach()
 
                     # Split arm and gripper command
-                    u_arm_temp, u_gripper = temp[:, :-1], temp[:, -1]
+                    u_arm_temp, u_gripper = action_temp[:, :-1], action_temp[:, -1]
                     u_arm_temp = u_arm_temp.to(self.device)
                     u_arm_temp = u_arm_temp * self.cmd_limit / self.action_scale
+
+                    # Get target dist and prim
+                    self.prim = int(action_temp[:, -2].item())
+                    print("self.prim: ", self.prim)
+                    self.true_target_dist = action_temp[:, -1]
+
                     if self.control_type == "osc":
                         print('self.states["eef_pos"]', self.states["eef_pos"])
                         u_arm_temp[:, 0:3], self.action[self.prim] = self.primitives.move(self.action[self.prim], self.states["eef_pos"], self.target_dist[self.prim])
                         
-                        if self.action[self.prim] == "done":
-                            if self.prim == 3:
-                                self.prim = 0
-                                self.action = ['right', 'down', 'left', 'up']
-                            else:
-                                self.prim += 1
+                        # if self.action[self.prim] == "done":
+                        #     if self.prim == 3:
+                        #         self.prim = 0
+                        #         self.action = ['right', 'down', 'left', 'up']
+                        #     else:
+                        #         self.prim += 1
                         # u_arm_temp = self._compute_osc_torques(u_arm_temp)
                         # u_arm_temp[:, 0:3] = torch.tensor([0.15, 0, 0])
                         # u_arm_temp[:, 3:6] = torch.tensor([0, 0, 0])
@@ -1881,6 +1905,7 @@ class RL_UR16eManipualtion(VecTask):
             self.reset_object_pose(env_ids)
 
         self.compute_observations()
+        self.compute_reward()
         # Compute resets
 
         self.reset_buf = torch.where(
