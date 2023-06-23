@@ -18,7 +18,7 @@ print("Observation space is", envs.observation_space)
 print("Action space is", envs.action_space)
 obs = envs.reset()
 while True:
-	action = torch.tensor(ne * [[0.1, 0, 0, 0, 0, 0, 1]])
+	action = torch.tensor(ne * [[0.0001, 0., 0., 0., 0., 0., 1.]])
 	obs, reward, done, info = envs.step(
 		action
 		)

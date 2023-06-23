@@ -1302,20 +1302,22 @@ class RL_UR16eManipualtion(VecTask):
                     u_arm_temp = u_arm_temp.to(self.device)
                     u_arm_temp = u_arm_temp * self.cmd_limit / self.action_scale
                     if self.control_type == "osc":
+                        print('self.states["eef_pos"]', self.states["eef_pos"])
                         u_arm_temp[:, 0:3], self.action[self.prim] = self.primitives.move(self.action[self.prim], self.states["eef_pos"], self.target_dist[self.prim])
-            
+                        
                         if self.action[self.prim] == "done":
                             if self.prim == 3:
                                 self.prim = 0
                                 self.action = ['right', 'down', 'left', 'up']
                             else:
                                 self.prim += 1
-                        u_arm_temp = self._compute_osc_torques(u_arm_temp)
+                        # u_arm_temp = self._compute_osc_torques(u_arm_temp)
+                        # u_arm_temp[:, 0:3] = torch.tensor([0.15, 0, 0])
+                        # u_arm_temp[:, 3:6] = torch.tensor([0, 0, 0])
                         self.action_env = u_arm_temp.cpu()
                         self.action_env = torch.cat(
                             (self.action_env, torch.tensor([[1]]).cpu()), dim=1)
-                        print("u_arm_temp: ", u_arm_temp)
-                        
+                        print("u_arm_temp: ", u_arm_temp)       
                     
                 else:
 

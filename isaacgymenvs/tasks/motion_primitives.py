@@ -2,7 +2,7 @@ from isaacgym import gymapi
 import torch
 import numpy as np
 
-DEFAULT_OSC_DIST = 0.01
+DEFAULT_OSC_DIST = 0.03
 DEFAULT_MIN_DIST_MUL = 3
 
 class Primitives():
@@ -20,9 +20,9 @@ class Primitives():
     def move(self, action, current_pose, target_dist):
         self.current_pose = current_pose
         if self.executing == False:
+            # print("resetting target")
             self.target_pose = self.current_pose - target_dist
             self.executing = True
-           
         # Get error
         pose_diff = torch.clone(self.target_pose - self.current_pose)
         print('pose_diff', pose_diff)
