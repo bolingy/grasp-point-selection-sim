@@ -677,6 +677,7 @@ class RL_UR16eManipualtion(VecTask):
     def reset_init_arm_pose(self, env_ids):
         for env_count in env_ids:
             env_count = env_count.item()
+            self.RL_flag[env_count] = 1
             # How many objects should we spawn 2 or 3
             random_number = random.choice([2, 3])
             object_list_env = {}
@@ -912,16 +913,15 @@ class RL_UR16eManipualtion(VecTask):
     
     def compute_reward(self):
         # suction score
-        suction_deformation_score = self.suction_score_object.compute_suction_score(
-            self.rgb_buf, self.depth_buf, self.seg_buf, self.object_target_id, self.object_target_id_gripper)
-        suction_deformation_score = suction_deformation_score.unsqueeze(-1)
-        # force score
-        if (suction_deformation_score > 0):
-            force_SI = self.force_object.regression(
-                suction_deformation_score)
-        else:
-            force_SI = torch.tensor(0).to(self.device)
-        force_SI = force_SI.unsqueeze(-1)
+        suction_deformation_score = self.suction_deformation_score_temp
+        # suction_deformation_score = suction_deformation_score.unsqueeze(-1)
+        # # force score
+        # if (suction_deformation_score > 0):
+        #     force_SI = self.force_object.regression(
+        #         suction_deformation_score)
+        # else:
+        #     force_SI = torch.tensor(0).to(self.device)
+        # force_SI = force_SI.unsqueeze(-1)
 
         # return reward
         reward = suction_deformation_score
@@ -1007,6 +1007,9 @@ class RL_UR16eManipualtion(VecTask):
                 f"{cur_path}/../../misc/joint_poses.pt")
             temp_pos = joint_poses_list[torch.randint(
                 0, len(joint_poses_list), (1,))[0]].to(self.device)
+            temp_pos = torch.tensor([0.0644, -1.8688,  1.1600,  1.0955,  1.4822, -0.2578]).to(self.device)
+            print("temp_pose: ", temp_pos)
+            # temp_pos = torch.tensor([])
             temp_pos = torch.reshape(temp_pos, (1, len(temp_pos)))
             temp_pos = torch.cat(
                 (temp_pos, torch.tensor([[0]]).to(self.device)), dim=1)
@@ -1026,7 +1029,7 @@ class RL_UR16eManipualtion(VecTask):
         Commands to the arm for eef control
         '''
 
-        self.actions = torch.zeros(0, 7)
+        self.actions = torch.zeros(0, 9)
         # Before each loop this will track all the environments where a condition for reset has been called
         env_list_reset_objects = torch.tensor([])
         env_list_reset_arm_pose = torch.tensor([])
@@ -1245,11 +1248,11 @@ class RL_UR16eManipualtion(VecTask):
 
             # After every reset popping out each prperty to be used for the pick
             self.action_env = torch.tensor(
-                [[0, 0, 0, 0, 0, 0, 1]], dtype=torch.float)
+                [[0, 0, 0, 0, 0, 0, 1, 0, 0]], dtype=torch.float)
             if ((self.env_reset_id_env[env_count] == 1) and (self.frame_count[env_count] > self.cooldown_frames)):
                 self.env_reset_id_env[env_count] = torch.tensor(0)
                 self.action_env = torch.tensor(
-                    [[0, 0, 0, 0, 0, 0, 1]], dtype=torch.float)
+                    [[0, 0, 0, 0, 0, 0, 1, 0, 0]], dtype=torch.float)
 
                 if ((env_count in self.grasp_angle_env) and (len(self.grasp_angle_env[env_count]) != 0)):
                     self.suction_deformation_score[env_count] = self.suction_deformation_score_env[env_count][0]
@@ -1316,20 +1319,21 @@ class RL_UR16eManipualtion(VecTask):
                     action_temp = actions.clone().detach()
 
                     # Split arm and gripper command
-                    u_arm_temp, u_gripper = action_temp[:, :-1], action_temp[:, -1]
+                    u_arm_temp, u_gripper = action_temp[:, :6], action_temp[:, 6]
                     u_arm_temp = u_arm_temp.to(self.device)
                     u_arm_temp = u_arm_temp * self.cmd_limit / self.action_scale
 
                     # Get target dist and prim
-                    self.prim = int(action_temp[:, -2].item())
-                    print("self.prim: ", self.prim)
-                    self.true_target_dist = action_temp[:, -1]
+                    self.prim = int(action_temp[env_count, 7].item())
+                    self.true_target_dist = action_temp[env_count, 8]
 
                     if self.control_type == "osc":
-                        print('self.states["eef_pos"]', self.states["eef_pos"])
                         u_arm_temp[:, 0:3], self.action[self.prim] = self.primitives.move(self.action[self.prim], self.states["eef_pos"], self.target_dist[self.prim])
                         
-                        # if self.action[self.prim] == "done":
+                        if self.action[self.prim] == "done":
+                            self.RL_flag[env_count] = 0
+                            self.action[self.prim] = self.temp_action
+                        self.temp_action = self.action[self.prim]
                         #     if self.prim == 3:
                         #         self.prim = 0
                         #         self.action = ['right', 'down', 'left', 'up']
@@ -1339,8 +1343,10 @@ class RL_UR16eManipualtion(VecTask):
                         # u_arm_temp[:, 0:3] = torch.tensor([0.15, 0, 0])
                         # u_arm_temp[:, 3:6] = torch.tensor([0, 0, 0])
                         self.action_env = u_arm_temp.cpu()
+                        print("self.action_env: ", self.action_env)
+                        # append [1, 0, 0] to every row of action_env
                         self.action_env = torch.cat(
-                            (self.action_env, torch.tensor([[1]]).cpu()), dim=1)
+                            (self.action_env, torch.tensor([[1, 0, 0]]).repeat(self.action_env.shape[0], 1)), dim=1)
                         print("u_arm_temp: ", u_arm_temp)       
                     
                 else:
@@ -1457,7 +1463,7 @@ class RL_UR16eManipualtion(VecTask):
                                                         pose_factor *
                                                         T_ee_pose_to_pre_grasp_pose[2][3], ori_factor *
                                                         action_orientation[0],
-                                                        ori_factor*action_orientation[1], ori_factor*action_orientation[2], 1]], dtype=torch.float)
+                                                        ori_factor*action_orientation[1], ori_factor*action_orientation[2], 1, 0, 0]], dtype=torch.float)
                     else:
                         # Transformation for grasp pose (wg --> wo*og)
                         rotation_matrix_grasp_pose = euler_angles_to_matrix(torch.tensor(
@@ -1494,7 +1500,7 @@ class RL_UR16eManipualtion(VecTask):
                                                         action_orientation[0],
                                                         self.speed[env_count]*100 *
                                                         action_orientation[1],
-                                                        self.speed[env_count]*100*action_orientation[2], 1]], dtype=torch.float)
+                                                        self.speed[env_count]*100*action_orientation[2], 1, 0, 0]], dtype=torch.float)
 
                         current_object_pose = self._root_state[env_count, self._object_model_id[self.object_target_id[env_count]-1], :][:3].type(
                             torch.float).detach().clone()
@@ -1795,7 +1801,7 @@ class RL_UR16eManipualtion(VecTask):
 
             if (self.frame_count[env_count] <= torch.tensor(self.cooldown_frames)):
                 self.action_env = torch.tensor(
-                    [[0, 0, 0, 0, 0, 0, 1]], dtype=torch.float)
+                    [[0, 0, 0, 0, 0, 0, 1, 0, 0]], dtype=torch.float)
             # Get action from policy
             self.actions = torch.cat([self.actions, self.action_env])
             self.frame_count[env_count] += torch.tensor(1)
@@ -1847,7 +1853,7 @@ class RL_UR16eManipualtion(VecTask):
         self.actions = self.actions.clone().detach().to(self.device)
 
         # Split arm and gripper command
-        u_arm, u_gripper = self.actions[:, :-1], self.actions[:, -1]
+        u_arm, u_gripper = self.actions[:, :6], self.actions[:, 6]
 
         # Control arm (scale value first)
         u_arm = u_arm * self.cmd_limit / self.action_scale

@@ -18,7 +18,13 @@ print("Observation space is", envs.observation_space)
 print("Action space is", envs.action_space)
 obs = envs.reset()
 while True:
-	action = torch.tensor(ne * [[0.0001, 0., 0., 0., 0., 0., 0.3]])
+	# action is specified by forces (6 dof) and gripper (1 dof)
+	# the last two values are motion primitive parameters
+	# -2 index: 0 = right, 1 = down, 2 = left, 3 = up
+	# -1 index: distance to move (in meters)
+
+	# TODO: Pass RL flag in to envs.step() so that the RL flag is on for i time steps
+	action = torch.tensor(ne * [[0.0001, 0., 0., 0., 0., 0., 0.3, 0., 0.3]])
 	obs, reward, done, info = envs.step(
 		action
 		)
