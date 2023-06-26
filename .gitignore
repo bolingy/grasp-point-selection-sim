@@ -156,3 +156,8 @@ isaacgymenvs/tasks/__pycache__/ant.cpython-37.pyc
 .vscode/launch.json
 .vscode/tasks.json
 *.pyc
+assets/urdf/Aurmar_description/meshes/pod/texture_1001.png
+assets/urdf/Aurmar_description/meshes/pod/texture_1002.png
+assets/urdf/Aurmar_description/meshes/pod/texture_1003.png
+assets/urdf/Aurmar_description/meshes/pod/texture_1004.png
+assets/urdf/Aurmar_description/meshes/pod/untitled.dae

@@ -373,10 +373,16 @@ class UR16eManipualtion(VecTask):
                 cube = self.world_params['world_model']['coll_objs']['cube']
                 for obj in cube.keys():
                     count += 1
-                    dims = cube[obj]['dims']
-                    pose = cube[obj]['pose']
-                    self.add_table(dims, pose, ur16e_start_pose,
-                                   env_ptr, i, color=[0.6, 0.6, 0.6])
+                    if(int(obj[4:]) >= 100):
+                        dims = cube[obj]['dims']
+                        pose = cube[obj]['pose']
+                        self.add_table(dims, pose, ur16e_start_pose,
+                                    env_ptr, i, color=[1.0, 0.96, 0.18])
+                    else:
+                        dims = cube[obj]['dims']
+                        pose = cube[obj]['pose']
+                        self.add_table(dims, pose, ur16e_start_pose,
+                                    env_ptr, i, color=[0.6, 0.6, 0.6])
 
             if self.aggregate_mode == 1:
                 self.gym.begin_aggregate(
@@ -453,6 +459,15 @@ class UR16eManipualtion(VecTask):
             self.gym.attach_camera_to_body(
                 camera_handle_gripper, env_ptr, ur16e_hand_link_handle, local_transform, gymapi.FOLLOW_TRANSFORM)
             self.camera_handles[i].append(camera_handle_gripper)
+
+            l_color = gymapi.Vec3(1, 1, 1)
+            l_ambient = gymapi.Vec3(0.1, 0.1, 0.1)
+            l_direction = gymapi.Vec3(-1, -1, 1)
+            self.gym.set_light_parameters(
+                self.sim, 0, l_color, l_ambient, l_direction)
+            l_direction = gymapi.Vec3(-1, 1, 1)
+            self.gym.set_light_parameters(
+                self.sim, 1, l_color, l_ambient, l_direction)
 
         # Setup data
         self.init_data()
@@ -1055,7 +1070,7 @@ class UR16eManipualtion(VecTask):
                         self.dexnet_score_temp = torch.Tensor()
                         max_num_grasps = len(self.grasps_and_predictions)
                         top_grasps = max_num_grasps if max_num_grasps <= 10 else 7
-                        
+                        max_num_grasps = 1
                         for i in range(max_num_grasps):
                             grasp_point = torch.tensor(
                                 [self.grasps_and_predictions[i][0].center.x, self.grasps_and_predictions[i][0].center.y])
