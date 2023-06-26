@@ -5,6 +5,27 @@
   <!-- Placeholder for ros2_control transmission which don't yet exist -->
   <!-- links -  main serial chain -->
   <link name="base_link"/>
+  <joint name="base_link-pod_base_link" type="fixed">
+    <parent link="base_link"/>
+    <child link="pod_base_link"/>
+    <origin rpy="0 0 0" xyz="0.0 0 0"/>
+  </joint>
+
+  <link name="pod_base_link">
+    <visual>
+      <origin rpy="3.14 0 1.57" xyz="0.305 0.065 0.517"/>
+      <geometry>
+        <mesh filename="package://Aurmar_description/meshes/pod/untitled.dae"/>
+      </geometry>
+    </visual>
+    <!-- <collision>
+      <origin rpy="-1.57 0 1.57" xyz="0.305 0.065 0.517"/>
+      <geometry>
+        <mesh filename="package://Aurmar_description/meshes/pod/untitled.dae"/>
+      </geometry>
+    </collision> -->
+  </link>
+  
   <joint name="base_link-base_link_inertia" type="fixed">
     <parent link="base_link"/>
     <child link="base_link_inertia"/>
@@ -34,6 +55,9 @@
       <inertia ixx="0.0061063308908" ixy="0.0" ixz="0.0" iyy="0.0061063308908" iyz="0.0" izz="0.01125"/>
     </inertial>
   </link>
+  
+
+
   <joint name="shoulder_pan_joint" type="revolute">
     <parent link="base_link_inertia"/>
     <child link="shoulder_link"/>
