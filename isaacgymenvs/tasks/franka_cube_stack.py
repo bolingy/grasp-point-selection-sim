@@ -195,6 +195,7 @@ class FrankaCubeStack(VecTask):
         self.track_save = torch.zeros(self.num_envs)
         self.config_env_count = torch.zeros(self.num_envs)
         self.force_list_save = {}
+        self.target_object_disp_save= {}
         self.depth_image_save = {}
         self.segmask_save = {}
         self.rgb_save = {}
@@ -755,6 +756,7 @@ class FrankaCubeStack(VecTask):
 
         for env_count in env_ids:
             self.force_list_save[env_count.item()] = None
+            self.target_object_disp_save[env_count.item()] = None
             self.all_objects_last_pose[env_count.item()] = {}
 
         # setting the objects with randomly generated poses
@@ -1097,7 +1099,7 @@ class FrankaCubeStack(VecTask):
                         top_grasps = max_num_grasps if max_num_grasps <= 10 else 7
 
                         # top_grasps = 2
-                        # max_num_grasps = 5
+                        max_num_grasps = 1
                         print(max_num_grasps)
                         for i in range(max_num_grasps):
                             grasp_point = torch.tensor(
@@ -1237,6 +1239,7 @@ class FrankaCubeStack(VecTask):
                         success = False
                         json_save = {
                             "force_array": [],
+                            "object_disp": [],
                             "grasp point": self.grasp_point[env_count].tolist(),
                             "grasp_angle": self.grasp_angle[env_count].tolist(),
                             "dexnet_score": self.dexnet_score[env_count].item(),
@@ -1283,6 +1286,13 @@ class FrankaCubeStack(VecTask):
                         force_list_env = torch.cat(
                             (force_list_env, torch.tensor([self.force_pre_physics])))
                         self.force_list_save[env_count] = force_list_env
+
+                    target_object_current_pose = self._root_state[env_count, self._object_model_id[self.object_target_id[env_count]], :][:3].type(
+                        torch.float).detach().clone()
+                    target_object_disp_env = self.target_object_disp_save[env_count]
+                    target_object_current_pose = torch.cat(
+                                [target_object_current_pose, target_object_disp_env.unsqueeze(0)], dim=0)
+                    self.target_object_disp_save[env_count] = target_object_disp_env
                 '''
                 Transformation for static links
                 '''
@@ -1469,6 +1479,7 @@ class FrankaCubeStack(VecTask):
                             success = False
                             json_save = {
                                 "force_array": [],
+                                "object_disp": [],
                                 "grasp point": self.grasp_point[env_count].tolist(),
                                 "grasp_angle": self.grasp_angle[env_count].tolist(),
                                 "dexnet_score": self.dexnet_score[env_count].item(),
@@ -1519,6 +1530,7 @@ class FrankaCubeStack(VecTask):
                         success = False
                         json_save = {
                             "force_array": [],
+                            "object_disp": [],
                             "grasp point": self.grasp_point[env_count].tolist(),
                             "grasp_angle": self.grasp_angle[env_count].tolist(),
                             "dexnet_score": self.dexnet_score[env_count].item(),
@@ -1655,6 +1667,7 @@ class FrankaCubeStack(VecTask):
                             penetration = True
                         json_save = {
                             "force_array": self.force_list_save[env_count].tolist(),
+                            "object_disp": self.target_object_disp_save[env_count].tolist(),
                             "grasp point": self.grasp_point[env_count].tolist(),
                             "grasp_angle": self.grasp_angle[env_count].tolist(),
                             "dexnet_score": self.dexnet_score[env_count].item(),
@@ -1688,6 +1701,7 @@ class FrankaCubeStack(VecTask):
                         success = False
                         json_save = {
                             "force_array": [],
+                            "object_disp": [],
                             "grasp point": self.grasp_point[env_count].tolist(),
                             "grasp_angle": self.grasp_angle[env_count].tolist(),
                             "dexnet_score": self.dexnet_score[env_count].item(),
@@ -1800,6 +1814,7 @@ class FrankaCubeStack(VecTask):
                     success = False
                     json_save = {
                         "force_array": self.force_list_save[env_count].tolist(),
+                        "object_disp": self.target_object_disp_save[env_count].tolist(),
                         "grasp point": self.grasp_point[env_count].tolist(),
                         "grasp_angle": self.grasp_angle[env_count].tolist(),
                         "dexnet_score": self.dexnet_score[env_count].item(),
