@@ -12,7 +12,7 @@ import numpy as np
 
 import gym
 # import roboschool
-import pybullet_envs
+# import pybullet_envs
 
 class RolloutBuffer:
     def __init__(self):
