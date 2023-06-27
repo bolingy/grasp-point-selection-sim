@@ -30,6 +30,8 @@ from .motion_primitives import Primitives
 from pathlib import Path
 cur_path = str(Path(__file__).parent.absolute())
 
+import einops
+
 class RL_UR16eManipualtion(VecTask):
 
     def __init__(self, cfg, rl_device, sim_device, graphics_device_id, headless, virtual_screen_capture, force_render):
@@ -46,8 +48,12 @@ class RL_UR16eManipualtion(VecTask):
             "Invalid control type specified. Must be one of: {osc, joint_tor}"
 
         # dimensions
-        # obs include: cubeA_pose (7) + cubeB_pos (3) + eef_pose (7) + q_gripper (2)
-        self.cfg["env"]["numObservations"] = 9 if self.control_type == "osc" else 27
+        # # obs include: cubeA_pose (7) + cubeB_pos (3) + eef_pose (7) + q_gripper (2)
+        # self.cfg["env"]["numObservations"] = 9 if self.control_type == "osc" else 27
+
+        # image obs include: depth dim = 1, segmask dim = 1
+        self.cfg["env"]["numObservations"] = 614400
+
         # actions include: delta EEF if OSC (6) or joint torques (7) + bool gripper (1)
         self.cfg["env"]["numActions"] = 6 if self.control_type == "osc" else 7
 
@@ -908,8 +914,18 @@ class RL_UR16eManipualtion(VecTask):
         # plt.imshow(self.rgb_buf[-1].cpu().numpy())
         # plt.show()
 
-        self.obs_buf = torch.cat((self.depth_buf, self.seg_buf), dim=-1)
-        return self.rgb_buf
+        # print("rgb_buf shape: ", self.rgb_buf.shape)
+        # print("depth_buf shape: ", self.depth_buf.shape)
+        # print("seg_buf shape: ", self.seg_buf.shape)
+        # use  einops.rearrange() to reshape the tensor to one dimension
+        self.depth_buf = einops.rearrange(self.depth_buf, 'b h w -> b (h w)')
+        self.seg_buf = einops.rearrange(self.seg_buf, 'b h w -> b (h w)')
+        # print("depth_buf shape: ", self.depth_buf.shape)
+        # print("seg_buf shape: ", self.seg_buf.shape)
+
+        self.obs_buf = torch.cat((self.depth_buf, self.seg_buf), dim=1)
+        # print("obs_buf shape: ", self.obs_buf.shape)
+        return self.obs_buf
     
     def compute_reward(self):
         # suction score
