@@ -1287,11 +1287,13 @@ class FrankaCubeStack(VecTask):
                             (force_list_env, torch.tensor([self.force_pre_physics])))
                         self.force_list_save[env_count] = force_list_env
 
-                    target_object_current_pose = self._root_state[env_count, self._object_model_id[self.object_target_id[env_count]], :][:3].type(
+                    target_object_current_pose = self._root_state[env_count, self._object_model_id[self.object_target_id[env_count]], :][:7].type(
                         torch.float).detach().clone()
                     target_object_disp_env = self.target_object_disp_save[env_count]
-                    target_object_current_pose = torch.cat(
-                                [target_object_current_pose, target_object_disp_env.unsqueeze(0)], dim=0)
+                    if(target_object_disp_env == None):
+                        target_object_disp_env = torch.empty((0, 7)).to(self.device)
+                    target_object_disp_env = torch.cat(
+                                [target_object_disp_env, target_object_current_pose.unsqueeze(0)], dim=0)
                     self.target_object_disp_save[env_count] = target_object_disp_env
                 '''
                 Transformation for static links
