@@ -47,15 +47,11 @@ class RL_UR16eManipualtion(VecTask):
         assert self.control_type in {"osc", "joint_tor"},\
             "Invalid control type specified. Must be one of: {osc, joint_tor}"
 
-        # dimensions
-        # # obs include: cubeA_pose (7) + cubeB_pos (3) + eef_pose (7) + q_gripper (2)
-        # self.cfg["env"]["numObservations"] = 9 if self.control_type == "osc" else 27
-
         # image obs include: depth dim = 1, segmask dim = 1
         self.cfg["env"]["numObservations"] = 614400
 
         # actions include: delta EEF if OSC (6) or joint torques (7) + bool gripper (1)
-        self.cfg["env"]["numActions"] = 6 if self.control_type == "osc" else 7
+        self.cfg["env"]["numActions"] = 2 if self.control_type == "osc" else 7
 
         # Values to be filled in at runtime
         # will be dict filled with relevant states to use for reward calculation
@@ -194,7 +190,7 @@ class RL_UR16eManipualtion(VecTask):
         self.env_reset_id_env = torch.ones(self.num_envs)
         self.bootup_reset = torch.ones(self.num_envs)
 
-        self.RL_flag = torch.ones(self.num_envs)
+        self.RL_flag = torch.zeros(self.num_envs)
 
         # Set control limits
         self.cmd_limit = to_torch([0.1, 0.1, 0.1, 0.5, 0.5, 0.5], device=self.device).unsqueeze(0) if \
@@ -683,7 +679,7 @@ class RL_UR16eManipualtion(VecTask):
     def reset_init_arm_pose(self, env_ids):
         for env_count in env_ids:
             env_count = env_count.item()
-            self.RL_flag[env_count] = 1
+            self.RL_flag[env_count] = 0
             # How many objects should we spawn 2 or 3
             random_number = random.choice([2, 3])
             object_list_env = {}
@@ -1046,6 +1042,8 @@ class RL_UR16eManipualtion(VecTask):
         '''
         Commands to the arm for eef control
         '''
+        actions = torch.concat((torch.tensor([[0.0001, 0., 0., 0., 0., 0., 0.3]]), actions), dim=1)
+        # print(actions)
 
         self.actions = torch.zeros(0, 9)
         # Before each loop this will track all the environments where a condition for reset has been called
