@@ -2,7 +2,7 @@ import isaacgym
 import isaacgymenvs
 import torch
 
-ne = 50
+ne = 1
 
 envs = isaacgymenvs.make(
 	seed=0,
