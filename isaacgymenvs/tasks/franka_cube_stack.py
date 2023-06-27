@@ -727,7 +727,7 @@ class FrankaCubeStack(VecTask):
             self.frame_count_contact_object[env_id] = 0
             self.frame_count[env_id] = 0
             self.free_envs_list[env_id] = torch.tensor(1)
-            self.object_pose_check_list[env_id] = torch.tensor(1)
+            self.object_pose_check_list[env_id] = torch.tensor(3)
             self.speed[env_id] = torch.tensor(0.1)
 
         self.progress_buf[env_ids] = 0
@@ -949,7 +949,7 @@ class FrankaCubeStack(VecTask):
             self.cmd_limit = to_torch(
                 [0.1, 0.1, 0.1, 0.5, 0.5, 0.5], device=self.device).unsqueeze(0)
             
-            if ((self.frame_count[env_count] == self.cooldown_frames) and (self.object_pose_check_list[env_count] == torch.tensor(1))):
+            if ((self.frame_count[env_count] == self.cooldown_frames) and (self.object_pose_check_list[env_count] >= torch.tensor(1))):
                 # setting the pose of the object after cool down period
                 bin_objects_current_pose = {}
                 for object_id in self.selected_object_env[env_count]:
@@ -959,7 +959,7 @@ class FrankaCubeStack(VecTask):
                 self.object_pose_check_list[env_count] == torch.tensor(0)
                 env_list_reset_objects = torch.cat(
                     (env_list_reset_objects, torch.tensor([env_count])), axis=0)
-                self.object_pose_check_list[env_count] = torch.tensor(0)
+                self.object_pose_check_list[env_count] -= torch.tensor(1)
 
             if ((self.frame_count[env_count] == self.cooldown_frames) and (self.object_pose_check_list[env_count] == torch.tensor(0))):
                 mask_camera_tensor = self.gym.get_camera_image_gpu_tensor(

@@ -61,7 +61,7 @@ def seed_everything(seed):
     torch.backends.cudnn.deterministic = True
 
 seed_everything(seed)
-device = 'cuda'
+device = 'cuda:0'
 
 # augmentation
 train_transforms = transforms.Compose(
@@ -194,7 +194,7 @@ class inference:
         return point_cloud
     
     def run_model(self, depth_image, segmask, target_id):
-        self.model.load_state_dict(torch.load("vit_model/models/conv2d_large_dataMon Jun 5 19 36 57 2023.pth"))
+        self.model.load_state_dict(torch.load("vit_model/models/conv2d_large_dataFri Jun 23 22_10_39 2023.pth", map_location='cuda:0'))
         self.model.eval()
       
         id = target_id.item()
@@ -269,10 +269,10 @@ class inference:
                 dist = min_dist
                 grasp_point = temp_second_point.astype(np.int16)
 
-        plt.Circle((grasp_point[1], grasp_point[0]), 10, fill=True)
-        plt.figure(0)
-        plt.imshow(output)
-        plt.show()
+        # plt.Circle((grasp_point[1], grasp_point[0]), 10, fill=True)
+        # plt.figure(0)
+        # plt.imshow(output)
+        # plt.show()
 
         return torch.tensor(grasp_point), centroid
 
