@@ -11,6 +11,7 @@ from torch.distributions import Categorical
 import numpy as np
 
 import gym
+from models import ResidualBlock, ResNet
 # import roboschool
 # import pybullet_envs
 
@@ -45,14 +46,15 @@ class ActorCritic(nn.Module):
 
         # actor
         if has_continuous_action_space :
-            self.actor = nn.Sequential(
-                            nn.Linear(state_dim, 64),
-                            nn.Tanh(),
-                            nn.Linear(64, 64),
-                            nn.Tanh(),
-                            nn.Linear(64, action_dim),
-                            nn.Tanh()
-                        )
+            # self.actor = nn.Sequential(
+            #                 nn.Linear(state_dim, 64),
+            #                 nn.Tanh(),
+            #                 nn.Linear(64, 64),
+            #                 nn.Tanh(),
+            #                 nn.Linear(64, action_dim),
+            #                 nn.Tanh()
+            #             )
+            self.actor = ResNet(ResidualBlock, [3, 4, 6, 3], num_classes=self.action_dim)
         else:
             self.actor = nn.Sequential(
                             nn.Linear(state_dim, 64),
@@ -65,13 +67,14 @@ class ActorCritic(nn.Module):
 
         
         # critic
-        self.critic = nn.Sequential(
-                        nn.Linear(state_dim, 64),
-                        nn.Tanh(),
-                        nn.Linear(64, 64),
-                        nn.Tanh(),
-                        nn.Linear(64, 1)
-                    )
+        # self.critic = nn.Sequential(
+        #                 nn.Linear(state_dim, 64),
+        #                 nn.Tanh(),
+        #                 nn.Linear(64, 64),
+        #                 nn.Tanh(),
+        #                 nn.Linear(64, 1)
+        #             )
+        self.critic = ResNet(ResidualBlock, [3, 4, 6, 3], num_classes=1)
         
     def set_action_std(self, new_action_std):
 
