@@ -194,7 +194,7 @@ class inference:
         return point_cloud
     
     def run_model(self, depth_image, segmask, target_id):
-        self.model.load_state_dict(torch.load("vit_model/models/conv2d_large_dataFri Jun 23 22_10_39 2023.pth", map_location='cuda:0'))
+        self.model.load_state_dict(torch.load("vit_model/models/conv2d_large_dataMon Jun 26 22_10_36 2023.pth", map_location='cuda:0'))
         self.model.eval()
       
         id = target_id.item()
