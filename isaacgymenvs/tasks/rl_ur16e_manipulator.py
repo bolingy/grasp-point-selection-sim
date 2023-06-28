@@ -190,7 +190,7 @@ class RL_UR16eManipualtion(VecTask):
         self.env_reset_id_env = torch.ones(self.num_envs)
         self.bootup_reset = torch.ones(self.num_envs)
 
-        self.RL_flag = torch.zeros(self.num_envs)
+        self.RL_flag = torch.ones(self.num_envs)
 
         # Set control limits
         self.cmd_limit = to_torch([0.1, 0.1, 0.1, 0.5, 0.5, 0.5], device=self.device).unsqueeze(0) if \
@@ -204,11 +204,13 @@ class RL_UR16eManipualtion(VecTask):
         # Primitives
         self.primitives = Primitives(self.num_envs, self.states['eef_pos'], device=self.device)
         self.counter = 0
-        self.action = ["right", "down", "left", "up"]
+        self.action = ["in", "right", "up", "out", "left", "down"]
         # Axis are inverted TODO Fix it
         self.true_target_dist = 0.3
-        self.target_dist = [torch.tensor([0., self.true_target_dist, 0.], device=self.device),
+        self.target_dist = [torch.tensor([self.true_target_dist, 0., 0.], device=self.device),
+                            torch.tensor([0., self.true_target_dist, 0.], device=self.device),
                             torch.tensor([0., 0., self.true_target_dist], device=self.device),
+                            torch.tensor([-self.true_target_dist, 0., 0.], device=self.device),
                             torch.tensor([0., -self.true_target_dist, 0.], device=self.device),
                             torch.tensor([0., 0., -self.true_target_dist], device=self.device)]
         self.prim = 0
@@ -679,7 +681,7 @@ class RL_UR16eManipualtion(VecTask):
     def reset_init_arm_pose(self, env_ids):
         for env_count in env_ids:
             env_count = env_count.item()
-            self.RL_flag[env_count] = 0
+            # self.RL_flag[env_count] = 0
             # How many objects should we spawn 2 or 3
             random_number = random.choice([2, 3])
             object_list_env = {}
@@ -1341,6 +1343,11 @@ class RL_UR16eManipualtion(VecTask):
                     # Get target dist and prim
                     self.prim = int(action_temp[env_count, 7].item())
                     self.true_target_dist = action_temp[env_count, 8]
+                    if self.true_target_dist > 0.0:
+                        self.target_dist[self.prim] = self.true_target_dist
+                    else:
+                        self.prim += 3
+                        self.target_dist[self.prim] = -self.true_target_dist
 
                     if self.control_type == "osc":
                         u_arm_temp[:, 0:3], self.action[self.prim] = self.primitives.move(self.action[self.prim], self.states["eef_pos"], self.target_dist[self.prim])

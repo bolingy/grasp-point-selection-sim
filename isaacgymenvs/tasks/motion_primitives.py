@@ -2,8 +2,8 @@ from isaacgym import gymapi
 import torch
 import numpy as np
 
-DEFAULT_OSC_DIST = 0.03
-DEFAULT_MIN_DIST_MUL = 3
+DEFAULT_OSC_DIST = 0.02
+DEFAULT_MIN_DIST_MUL = 1
 
 class Primitives():
     def __init__(self, num_envs, init_pose, device):
@@ -11,22 +11,26 @@ class Primitives():
         self.current_pose = init_pose
         self.min_distance_to_goal = torch.full_like(init_pose, DEFAULT_OSC_DIST * DEFAULT_MIN_DIST_MUL)
         self.num_envs = num_envs
-        self.moves = {"right": torch.tensor(num_envs * [[0, -DEFAULT_OSC_DIST, 0]], device=device),
-                      "left":  torch.tensor(num_envs * [[0, DEFAULT_OSC_DIST, 0]], device=device),
-                      "up":    torch.tensor(num_envs * [[0, 0, DEFAULT_OSC_DIST]], device=device),
-                      "down":  torch.tensor(num_envs * [[0, 0, -DEFAULT_OSC_DIST]], device=device)}
+        self.moves = {
+                    "in": torch.tensor(num_envs * [[DEFAULT_OSC_DIST, 0, 0]], device=device),
+                    "right": torch.tensor(num_envs * [[0, DEFAULT_OSC_DIST, 0]], device=device),
+                    "up": torch.tensor(num_envs * [[0, 0, DEFAULT_OSC_DIST]], device=device),
+                    "out": torch.tensor(num_envs * [[-DEFAULT_OSC_DIST, 0, 0]], device=device),
+                    "left": torch.tensor(num_envs * [[0, -DEFAULT_OSC_DIST, 0]], device=device),
+                    "down": torch.tensor(num_envs * [[0, 0, -DEFAULT_OSC_DIST]], device=device),}
+
         self.executing = False
 
     def move(self, action, current_pose, target_dist):
         self.current_pose = current_pose
         if self.executing == False:
-            # print("resetting target")
             self.target_pose = self.current_pose - target_dist
             self.executing = True
+           
         # Get error
         pose_diff = torch.clone(self.target_pose - self.current_pose)
         print('pose_diff', pose_diff)
-        # Check if done
+        # # Check if done
         if torch.all(torch.abs(pose_diff) < self.min_distance_to_goal):
             self.executing = False
             print("done")
