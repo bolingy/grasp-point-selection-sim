@@ -11,7 +11,7 @@ from torch.distributions import Categorical
 import numpy as np
 
 import gym
-from models import ResidualBlock, ResNet
+from .models import ResidualBlock, ResNet
 # import roboschool
 # import pybullet_envs
 
