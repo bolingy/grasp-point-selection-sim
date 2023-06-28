@@ -20,8 +20,14 @@ import gym
 from rl.ppo import *
 
 
-def rearrange_state(state, h=480, w=640):
-    depth_img, seg_mask = state[:, :307200], state[:, 307200:]
-    depth_img = einops.rearrange(depth_img, 'b (h w) -> b h w', h=h, w=w)
-    seg_mask = einops.rearrange(seg_mask, 'b (h w) -> b h w', h=h, w=w)
-    return torch.cat((depth_img, seg_mask), axis=0)
+def rearrange_state(state, b=2, h=480, w=640):
+    # state is a tensor of shape (batch_size, 307200 + 307200)
+    # 307200 = 640 * 480
+    # rearrange such that the depth image and seg mask are separate, and the batch dimension is first
+    # (batch_size, 307200 + 307200) -> (batch_size, 2, 480, 640)
+
+    # input: (ne, 614400)
+    # output: (ne, 2, 480, 640)
+    state = einops.rearrange(state, 'ne (b h w) -> ne b h w', b=2, h=h, w=w)
+    # print(state)
+    return state
