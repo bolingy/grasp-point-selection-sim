@@ -163,6 +163,7 @@ class UR16eManipualtion(VecTask):
         self.last_object_pose = {}
         self.all_objects_last_pose = {}
         self.object_pose_store = {}
+        self.target_object_disp_save= {}
 
         self.selected_object_env = {}
 
@@ -748,6 +749,7 @@ class UR16eManipualtion(VecTask):
 
         for env_count in env_ids:
             self.force_list_save[env_count.item()] = None
+            self.target_object_disp_save[env_count.item()] = None
             self.all_objects_last_pose[env_count.item()] = {}
 
         # setting the objects with randomly generated poses
@@ -1163,6 +1165,7 @@ class UR16eManipualtion(VecTask):
                         # saving all the properties of a single pick
                         json_save = {
                             "force_array": [],
+                            "object_disp": [],
                             "grasp point": self.grasp_point[env_count].tolist(),
                             "grasp_angle": self.grasp_angle[env_count].tolist(),
                             "dexnet_score": self.dexnet_score[env_count].item(),
@@ -1209,6 +1212,15 @@ class UR16eManipualtion(VecTask):
                         force_list_env = torch.cat(
                             (force_list_env, torch.tensor([self.force_pre_physics])))
                         self.force_list_save[env_count] = force_list_env
+
+                    target_object_current_pose = self._root_state[env_count, self._object_model_id[self.object_target_id[env_count]-1], :][:7].type(
+                        torch.float).detach().clone()
+                    target_object_disp_env = self.target_object_disp_save[env_count]
+                    if(target_object_disp_env == None):
+                        target_object_disp_env = torch.empty((0, 7)).to(self.device)
+                    target_object_disp_env = torch.cat(
+                                [target_object_disp_env, target_object_current_pose.unsqueeze(0)], dim=0)
+                    self.target_object_disp_save[env_count] = target_object_disp_env
                 '''
                 Transformation for static links
                 '''
@@ -1394,6 +1406,7 @@ class UR16eManipualtion(VecTask):
                             success = False
                             json_save = {
                                 "force_array": [],
+                                "object_disp": [],
                                 "grasp point": self.grasp_point[env_count].tolist(),
                                 "grasp_angle": self.grasp_angle[env_count].tolist(),
                                 "dexnet_score": self.dexnet_score[env_count].item(),
@@ -1443,6 +1456,7 @@ class UR16eManipualtion(VecTask):
                         success = False
                         json_save = {
                             "force_array": [],
+                            "object_disp": [],
                             "grasp point": self.grasp_point[env_count].tolist(),
                             "grasp_angle": self.grasp_angle[env_count].tolist(),
                             "dexnet_score": self.dexnet_score[env_count].item(),
@@ -1570,6 +1584,7 @@ class UR16eManipualtion(VecTask):
                         # saving the grasp point ad its properties if it was a successfull grasp
                         json_save = {
                             "force_array": self.force_list_save[env_count].tolist(),
+                            "object_disp": self.target_object_disp_save[env_count].tolist(),
                             "grasp point": self.grasp_point[env_count].tolist(),
                             "grasp_angle": self.grasp_angle[env_count].tolist(),
                             "dexnet_score": self.dexnet_score[env_count].item(),
@@ -1604,6 +1619,7 @@ class UR16eManipualtion(VecTask):
                         success = False
                         json_save = {
                             "force_array": [],
+                            "object_disp": [],
                             "grasp point": self.grasp_point[env_count].tolist(),
                             "grasp_angle": self.grasp_angle[env_count].tolist(),
                             "dexnet_score": self.dexnet_score[env_count].item(),
@@ -1714,6 +1730,7 @@ class UR16eManipualtion(VecTask):
                     success = False
                     json_save = {
                         "force_array": self.force_list_save[env_count].tolist(),
+                        "object_disp": self.target_object_disp_save[env_count].tolist(),
                         "grasp point": self.grasp_point[env_count].tolist(),
                         "grasp_angle": self.grasp_angle[env_count].tolist(),
                         "dexnet_score": self.dexnet_score[env_count].item(),
