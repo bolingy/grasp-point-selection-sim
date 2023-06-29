@@ -2,8 +2,8 @@ from isaacgym import gymapi
 import torch
 import numpy as np
 
-DEFAULT_OSC_DIST = 0.03
-DEFAULT_MIN_DIST_MUL = 1
+DEFAULT_OSC_DIST = 0.05
+DEFAULT_MIN_DIST_MUL = 0.2
 
 class Primitives():
     def __init__(self, num_envs, init_pose, device):
@@ -36,7 +36,7 @@ class Primitives():
         # # Check if done
         if torch.all(torch.abs(pose_diff) < self.min_distance_to_goal):
             self.executing = False
-            print("done")
+            # print("done")
             return torch.tensor(self.num_envs * [[0., 0., 0.]]), "done"
 
         # Zero out if less than level

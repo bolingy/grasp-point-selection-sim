@@ -208,7 +208,7 @@ while time_step <= max_training_timesteps:
         action = torch.tensor([[0.0001, 0., 0., 0., 0., 0., 0.3, 0., 0.3]])
         state, reward, done, _ = env.step(action)
         state = rearrange_state(state['obs'])
-        print(state.shape)
+        # print(state.shape)
 
 #         # saving reward and is_terminals
 #         ppo_agent.buffer.rewards.append(reward)

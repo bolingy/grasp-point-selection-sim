@@ -29,5 +29,5 @@ def rearrange_state(state, b=2, h=480, w=640):
     # input: (ne, 614400)
     # output: (ne, 2, 480, 640)
     state = einops.rearrange(state, 'ne (b h w) -> ne b h w', b=2, h=h, w=w)
-    # print(state)
+    print(state)
     return state

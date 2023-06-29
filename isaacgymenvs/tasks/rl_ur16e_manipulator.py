@@ -208,16 +208,26 @@ class RL_UR16eManipualtion(VecTask):
         # Primitives
         self.primitives = Primitives(self.num_envs, self.states['eef_pos'], device=self.device)
         self.counter = 0
-        self.action = ["in", "right", "up", "out", "left", "down"]
+        self.action = [self.num_envs * ["in", "right", "up", "out", "left", "down"]]
         # Axis are inverted TODO Fix it
         self.true_target_dist = 0.3
-        self.target_dist = [torch.tensor([self.true_target_dist, 0., 0.], device=self.device),
+        
+        self.target_dist = (torch.stack((torch.tensor([self.true_target_dist, 0., 0.], device=self.device),
                             torch.tensor([0., self.true_target_dist, 0.], device=self.device),
                             torch.tensor([0., 0., self.true_target_dist], device=self.device),
                             torch.tensor([-self.true_target_dist, 0., 0.], device=self.device),
                             torch.tensor([0., -self.true_target_dist, 0.], device=self.device),
-                            torch.tensor([0., 0., -self.true_target_dist], device=self.device)]
-        self.prim = 0
+                            torch.tensor([0., 0., -self.true_target_dist], device=self.device))))
+
+        # make a target_dist for each env
+        self.target_dist = self.target_dist.repeat(self.num_envs, 1, 1)
+
+
+        print("######################self.target_dist.shape, ", self.target_dist.shape)
+        print("######################self.target_dist, ", self.target_dist)
+        self.prim = torch.zeros(self.num_envs)
+        self.primitive_count = torch.ones(self.num_envs)
+        self.num_primtive_actions = self.cfg["env"]["numPrimitiveActions"]
         self.current_directory = os.getcwd()
         self.go_to_start = torch.ones(self.num_envs)
 
@@ -1052,7 +1062,7 @@ class RL_UR16eManipualtion(VecTask):
         '''
         Commands to the arm for eef control
         '''
-        actions = torch.concat((torch.tensor([[0.0001, 0., 0., 0., 0., 0., 0.3]]), actions), dim=1)
+        actions = torch.concat((torch.tensor(self.num_envs*[[0.0001, 0., 0., 0., 0., 0., 0.3]]), actions), dim=1)
         # print(actions)
 
         _dof_states = self.gym.acquire_dof_state_tensor(self.sim)
@@ -1114,11 +1124,11 @@ class RL_UR16eManipualtion(VecTask):
                             (env_complete_reset, torch.tensor([env_count])), axis=0)
                 _all_object_position_error = torch.abs(
                     _all_object_position_error)
-                if (_all_object_position_error > torch.tensor(0.0055) and self.run_dexnet[env_count] == torch.tensor(0)):
-                    print(env_count, " object moved inside bin error")
-                    env_complete_reset = torch.cat(
-                        (env_complete_reset, torch.tensor([env_count])), axis=0)
-                    total_objects = 1000
+                # if (_all_object_position_error > torch.tensor(0.0055) and self.run_dexnet[env_count] == torch.tensor(0)):
+                #     print(env_count, " object moved inside bin error")
+                #     env_complete_reset = torch.cat(
+                #         (env_complete_reset, torch.tensor([env_count])), axis=0)
+                #     total_objects = 1000
 
                 # check if the environment returned from reset and the frame for that enviornment is 30 or not
                 # 30 frames is for cooldown period at the start for the simualtor to settle down
@@ -1141,8 +1151,8 @@ class RL_UR16eManipualtion(VecTask):
 
                     self.rgb_save[env_count] = rgb_image_copy[180:660,
                                                                 410:1050].clone().detach().cpu().numpy()
-                    plt.imshow(self.rgb_save[env_count])
-                    plt.show()
+                    # plt.imshow(self.rgb_save[env_count])
+                    # plt.show()
                     depth_camera_tensor = self.gym.get_camera_image_gpu_tensor(
                         self.sim, self.envs[env_count], self.camera_handles[env_count][0], gymapi.IMAGE_DEPTH)
                     torch_depth_tensor = gymtorch.wrap_tensor(
@@ -1349,6 +1359,7 @@ class RL_UR16eManipualtion(VecTask):
                 # TODO: add flag for RL agent to take action or execute pregrasp and grasp from dexnet
                 # executing policy from RL agent or from DexNet 3.0
                 if (self.RL_flag[env_count] == 1):
+                    
                     action_temp = actions.clone().detach()
 
                     # Split arm and gripper command
@@ -1361,7 +1372,9 @@ class RL_UR16eManipualtion(VecTask):
                     self.prim_z = action_temp[env_count, 8]
                     self.prim_target_dist_x = action_temp[env_count, 9]
                     self.prim_target_dist_y = action_temp[env_count, 10]
-                    if(self.go_to_start):
+                    if(self.go_to_start[env_count]):
+                        print("#######################################################################weeeeeeeeeeeeeeeeeeeeeeeeeeeeeee")
+
                         '''
                         Transformation for static links
                         '''
@@ -1425,67 +1438,78 @@ class RL_UR16eManipualtion(VecTask):
                                                         action_orientation[0],
                                                         ori_factor*action_orientation[1], ori_factor*action_orientation[2], 0, 0, 0, 0, 0]], dtype=torch.float)
                         if ((torch.max(torch.abs(self.action_env[0][:3]))) <= 0.001 and (torch.max(torch.abs(self.action_env[0][3:6]))) <= 0.001):
-                            self.go_to_start = False
+                            self.go_to_start[env_count] = False
                         
                     else:
                         # go in by self.prim_target_dist_x -> swipe by self.prim_target_dist_y -> out by self.prim_target_dist_x
                         # Set primitive to opposite if target dist is negative
                         actions = [0, 1, 3]
-
-                        if self.prim == 1:
+                        curr_prim = int(self.prim[env_count].item())
+                        # print("self.target_dist", self.target_dist[env_count])
+                        if curr_prim == 1:
                             self.true_target_dist = self.prim_target_dist_y
+                            
                         else:
                             self.true_target_dist = self.prim_target_dist_x
-                        if self.true_target_dist < 0.0:
-                            self.target_dist[actions[self.prim] + 3] = -self.true_target_dist
-                        self.true_target_dist = abs(self.true_target_dist)
-                        self.target_dist = [torch.tensor([self.true_target_dist, 0., 0.], device=self.device),
+                        if self.true_target_dist < 0:
+                            action[curr_prim] = actions[curr_prim] + 3
+                            self.true_target_dist = abs(self.true_target_dist)
+                        
+                        new_target_dist = (torch.stack((torch.tensor([self.true_target_dist, 0., 0.], device=self.device),
                             torch.tensor([0., self.true_target_dist, 0.], device=self.device),
                             torch.tensor([0., 0., self.true_target_dist], device=self.device),
                             torch.tensor([-self.true_target_dist, 0., 0.], device=self.device),
                             torch.tensor([0., -self.true_target_dist, 0.], device=self.device),
-                            torch.tensor([0., 0., -self.true_target_dist], device=self.device)]
-                        if self.control_type == "osc":
-                            # print("self.action[actions[self.prim]]", self.action[actions[self.prim]])
-                            # print("self.target_dist[actions[self.prim]]", self.target_dist[actions[self.prim]])
-                            u_arm_temp[:, 0:3], self.action[actions[self.prim]] = self.primitives.move(self.action[actions[self.prim]], self.states["eef_pos"], self.target_dist[actions[self.prim]])
-                            
-                            if self.true_target_dist < 0.1:
-                                self.temp_action = self.action[actions[self.prim]]
+                            torch.tensor([0., 0., -self.true_target_dist], device=self.device))))
+                        
+                        self.target_dist[env_count] = new_target_dist
 
-                            if self.action[actions[self.prim]] == "done":
-                                # self.RL_flag[env_count] = 0
-                                self.action[actions[self.prim]] = self.temp_action
-                                self.prim += 1
-                                print("#############NEXT PRIM")
-                                if self.prim == 3:
-                                    print("#############ALL DONE")
-                                    self.prim = 0
+                        u_arm_temp[:, 0:3], self.action[env_count][actions[curr_prim]] = self.primitives.move(self.action[env_count][actions[curr_prim]], self.states["eef_pos"], self.target_dist[env_count][actions[curr_prim]])
+                        # if self.true_target_dist < 0.1:
+                            # self.temp_action = self.action[env_count][actions[curr_prim]]
+
+                        if self.action[env_count][actions[curr_prim]] == "done":
+                            # self.RL_flag[env_count] = 0
+                            print(self.temp_action)
+                            self.action[env_count][actions[curr_prim]] = self.temp_action
+                            print(self.action[env_count][actions[curr_prim]])
+                            self.prim[env_count] += 1
+                            print("#############NEXT")
+                            if curr_prim == 2:
+                                self.prim[env_count] = 0
+                                # reset arm to init pose
+                                self.deploy_actions(env_count, self.ur16e_default_dof_pos)
+                                self.frame_count[env_count] = 0
+                                print("#############RESET ARM")
+                                self.primitive_count[env_count] += 1
+                                if self.primitive_count[env_count] >= self.num_primtive_actions + 1:
                                     self.RL_flag[env_count] = 0
-                                    self.run_dexnet[env_count] = True
-                                    # reset arm to init pose
-                                    self.deploy_actions(env_count, self.ur16e_default_dof_pos)
-                                    self.frame_count[env_count] = 0
-                                    print("#############RESET ARM")
+                                    self.primitive_count[env_count] = 1
+                                    self.run_dexnet[env_count] = 1
+                                    print("#############RESET PRIMITIVE COUNT")
+                                else:
+                                    self.run_dexnet[env_count] = 0
+                                    print("#############WAIT NEXT PRIM")
+                                    self.go_to_start[env_count] = True
 
 
-                            self.temp_action = self.action[actions[self.prim]]
+                        self.temp_action = self.action[env_count][actions[curr_prim]]
 
-                            #     if self.prim == 3:
-                            #         self.prim = 0
-                            #         self.action = ['right', 'down', 'left', 'up']
-                            #     else:
-                            #         self.prim += 1
-                            # u_arm_temp = self._compute_osc_torques(u_arm_temp)
-                            # u_arm_temp[:, 0:3] = torch.tensor([0.15, 0, 0])
-                            # u_arm_temp[:, 3:6] = torch.tensor([0, 0, 0])
+                        #     if self.prim == 3:
+                        #         self.prim = 0
+                        #         self.action = ['right', 'down', 'left', 'up']
+                        #     else:
+                        #         self.prim += 1
+                        # u_arm_temp = self._compute_osc_torques(u_arm_temp)
+                        # u_arm_temp[:, 0:3] = torch.tensor([0.15, 0, 0])
+                        # u_arm_temp[:, 3:6] = torch.tensor([0, 0, 0])
 
-                            self.action_env = u_arm_temp.cpu()
-                            # print("self.action_env: ", self.action_env)
-                            # append [1, 0, 0] to every row of action_env
-                            self.action_env = torch.cat(
-                                (self.action_env, torch.tensor([[1, 0, 0, 0, 0]]).repeat(self.action_env.shape[0], 1)), dim=1)
-                            # print("u_arm_temp: ", u_arm_temp)       
+                        self.action_env = u_arm_temp.cpu()
+                        # print("self.action_env: ", self.action_env)
+                        # append [1, 0, 0] to every row of action_env
+                        self.action_env = torch.cat(
+                            (self.action_env, torch.tensor([[1, 0, 0, 0, 0]]).repeat(self.action_env.shape[0], 1)), dim=1)
+                        # print("u_arm_temp: ", u_arm_temp)       
                     
                 else:
 

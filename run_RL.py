@@ -24,6 +24,6 @@ while True:
 	# -1 index: distance to move (in meters)
 
 	# TODO: Pass RL flag in to envs.step() so that the RL flag is on for i time steps
-	action = torch.tensor(ne * [[0.0, 0.0, 0.23, 0.05]])
+	action = torch.tensor(ne * [[0.0, 0.0, 0.15, 0.05]])
 	obs, reward, done, info = envs.step(action)
 	# print("Observation space is", obs)
