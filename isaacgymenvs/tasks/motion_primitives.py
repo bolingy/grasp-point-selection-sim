@@ -2,7 +2,7 @@ from isaacgym import gymapi
 import torch
 import numpy as np
 
-DEFAULT_OSC_DIST = 0.02
+DEFAULT_OSC_DIST = 0.03
 DEFAULT_MIN_DIST_MUL = 1
 
 class Primitives():
@@ -24,12 +24,15 @@ class Primitives():
     def move(self, action, current_pose, target_dist):
         self.current_pose = current_pose
         if self.executing == False:
-            self.target_pose = self.current_pose - target_dist
+            self.target_pose = self.current_pose + target_dist
             self.executing = True
            
         # Get error
         pose_diff = torch.clone(self.target_pose - self.current_pose)
-        print('pose_diff', pose_diff)
+        # print('current_pose', self.current_pose)
+        # print('target_pose', self.target_pose)
+        # print('pose_diff', pose_diff)
+        # print(self.target_pose)
         # # Check if done
         if torch.all(torch.abs(pose_diff) < self.min_distance_to_goal):
             self.executing = False
@@ -57,7 +60,7 @@ class Primitives():
         # Zero out where goal has been reached
         # pose_diff[pose_diff < DEFAULT_MIN_DIST] = 0
         osc_params[(ind_dominant[:,:1], ind_dominant[:, 1:2])] = 0 #pose_diff[(ind_dominant[:,:1], ind_dominant[:, 1:2])]
-        print('osc_params', osc_params)
+        # print('osc_params', osc_params)
         return osc_params, action
 
         # if action != "done" and self.action == False:
