@@ -229,7 +229,9 @@ class RL_UR16eManipualtion(VecTask):
         self.primitive_count = torch.ones(self.num_envs)
         self.num_primtive_actions = self.cfg["env"]["numPrimitiveActions"]
         self.current_directory = os.getcwd()
+        self.init_go_to_start = torch.ones(self.num_envs)
         self.go_to_start = torch.ones(self.num_envs)
+        self.finished_prim = torch.zeros(self.num_envs)
 
     def create_sim(self):
         self.sim_params.up_axis = gymapi.UP_AXIS_Z
@@ -937,7 +939,9 @@ class RL_UR16eManipualtion(VecTask):
         # print("depth_buf shape: ", self.depth_buf.shape)
         # print("seg_buf shape: ", self.seg_buf.shape)
 
-        self.obs_buf = torch.cat((self.depth_buf, self.seg_buf), dim=1)
+        self.obs_buf = torch.cat((self.depth_buf, self.seg_buf), dim=1).squeeze(0)
+
+        self.obs_buf = torch.cat((self.obs_buf,  self.finished_prim[env_count].unsqueeze(0).to(self.device)))
         # print("obs_buf shape: ", self.obs_buf.shape)
         return self.obs_buf
     
@@ -1373,6 +1377,10 @@ class RL_UR16eManipualtion(VecTask):
                     self.prim_target_dist_x = action_temp[env_count, 9]
                     self.prim_target_dist_y = action_temp[env_count, 10]
                     if(self.go_to_start[env_count]):
+                        if self.init_go_to_start[env_count] and self.primitive_count[env_count] > 1:
+                            self.finished_prim[env_count] = 1
+                            print("!!!!!!!!!!!!!!!!!!pass obs")
+                            self.init_go_to_start[env_count] = False
                         '''
                         Transformation for static links
                         '''
@@ -1468,9 +1476,9 @@ class RL_UR16eManipualtion(VecTask):
 
                         if self.action[env_count][actions[curr_prim]] == "done":
                             # self.RL_flag[env_count] = 0
-                            print(self.temp_action)
+                            # print(self.temp_action)
                             self.action[env_count][actions[curr_prim]] = self.temp_action
-                            print(self.action[env_count][actions[curr_prim]])
+                            # print(self.action[env_count][actions[curr_prim]])
                             self.prim[env_count] += 1
                             print("#############NEXT")
                             if curr_prim == 2:
@@ -1484,11 +1492,13 @@ class RL_UR16eManipualtion(VecTask):
                                     self.RL_flag[env_count] = 0
                                     self.primitive_count[env_count] = 1
                                     self.run_dexnet[env_count] = 1
-                                    print("#############RESET PRIMITIVE COUNT")
+                                    print("#############FINISH PRIMITIVE AND RESET COUNT")
                                 else:
                                     self.run_dexnet[env_count] = 0
                                     print("#############WAIT NEXT PRIM")
+                                    self.init_go_to_start[env_count] = True
                                     self.go_to_start[env_count] = True
+
 
 
                         self.temp_action = self.action[env_count][actions[curr_prim]]
@@ -1995,6 +2005,8 @@ class RL_UR16eManipualtion(VecTask):
                 env_list_reset_arm_pose.to(self.device).type(torch.long))
 
             env_ids = env_list_reset_arm_pose.to(self.device).type(torch.long)
+            self.finished_prim[env_ids] = True
+            print("#####################take obs")
             self.deploy_actions(env_ids, pos)
 
         elif (len(env_complete_reset) != 0):
@@ -2073,8 +2085,8 @@ class RL_UR16eManipualtion(VecTask):
 
         self.compute_observations()
         self.compute_reward()
+        self.finished_prim = torch.zeros(self.num_envs)
         # Compute resets
-
         self.reset_buf = torch.where(
             (self.progress_buf >= self.max_episode_length - 1), torch.ones_like(self.reset_buf), self.reset_buf)
 
