@@ -737,9 +737,6 @@ class UR16eManipualtion(VecTask):
                 else:
                     object_pose_env = torch.tensor(self.object_pose_store[env_count.item(
                     )][counter+1]).to(self.device)
-                    quat = euler_angles_to_quaternion(
-                        object_pose_env[3:6], "XYZ", degrees=False)
-                    object_pose_env = torch.cat([object_pose_env[:3], quat])
                     object_pose_env = object_pose_env.unsqueeze(0)
                 self.object_poses = torch.cat(
                     [self.object_poses, object_pose_env])
