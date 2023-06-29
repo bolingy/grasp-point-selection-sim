@@ -13,10 +13,10 @@ class Primitives():
         self.num_envs = num_envs
         self.moves = {
                     "in": torch.tensor(num_envs * [[DEFAULT_OSC_DIST, 0, 0]], device=device),
-                    "right": torch.tensor(num_envs * [[0, DEFAULT_OSC_DIST, 0]], device=device),
+                    "right": torch.tensor(num_envs * [[0, -DEFAULT_OSC_DIST, 0]], device=device),
                     "up": torch.tensor(num_envs * [[0, 0, DEFAULT_OSC_DIST]], device=device),
                     "out": torch.tensor(num_envs * [[-DEFAULT_OSC_DIST, 0, 0]], device=device),
-                    "left": torch.tensor(num_envs * [[0, -DEFAULT_OSC_DIST, 0]], device=device),
+                    "left": torch.tensor(num_envs * [[0, DEFAULT_OSC_DIST, 0]], device=device),
                     "down": torch.tensor(num_envs * [[0, 0, -DEFAULT_OSC_DIST]], device=device),}
 
         self.executing = False

@@ -213,10 +213,10 @@ class RL_UR16eManipualtion(VecTask):
         self.true_target_dist = 0.3
         
         self.target_dist = (torch.stack((torch.tensor([self.true_target_dist, 0., 0.], device=self.device),
-                            torch.tensor([0., self.true_target_dist, 0.], device=self.device),
+                            torch.tensor([0., -self.true_target_dist, 0.], device=self.device),
                             torch.tensor([0., 0., self.true_target_dist], device=self.device),
                             torch.tensor([-self.true_target_dist, 0., 0.], device=self.device),
-                            torch.tensor([0., -self.true_target_dist, 0.], device=self.device),
+                            torch.tensor([0., self.true_target_dist, 0.], device=self.device),
                             torch.tensor([0., 0., -self.true_target_dist], device=self.device))))
 
         # make a target_dist for each env
@@ -1373,8 +1373,6 @@ class RL_UR16eManipualtion(VecTask):
                     self.prim_target_dist_x = action_temp[env_count, 9]
                     self.prim_target_dist_y = action_temp[env_count, 10]
                     if(self.go_to_start[env_count]):
-                        print("#######################################################################weeeeeeeeeeeeeeeeeeeeeeeeeeeeeee")
-
                         '''
                         Transformation for static links
                         '''
@@ -1452,14 +1450,14 @@ class RL_UR16eManipualtion(VecTask):
                         else:
                             self.true_target_dist = self.prim_target_dist_x
                         if self.true_target_dist < 0:
-                            action[curr_prim] = actions[curr_prim] + 3
+                            actions[curr_prim] = actions[curr_prim] + 3
                             self.true_target_dist = abs(self.true_target_dist)
                         
                         new_target_dist = (torch.stack((torch.tensor([self.true_target_dist, 0., 0.], device=self.device),
-                            torch.tensor([0., self.true_target_dist, 0.], device=self.device),
+                            torch.tensor([0., -self.true_target_dist, 0.], device=self.device),
                             torch.tensor([0., 0., self.true_target_dist], device=self.device),
                             torch.tensor([-self.true_target_dist, 0., 0.], device=self.device),
-                            torch.tensor([0., -self.true_target_dist, 0.], device=self.device),
+                            torch.tensor([0., self.true_target_dist, 0.], device=self.device),
                             torch.tensor([0., 0., -self.true_target_dist], device=self.device))))
                         
                         self.target_dist[env_count] = new_target_dist
