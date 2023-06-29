@@ -668,11 +668,21 @@ class UR16eManipualtion(VecTask):
     '''
     Reset the arm pose for heading towards pre grasp pose
     '''
+    def random_number_with_probabilities(self, probabilities):
+        random_number = random.random()
+        for i, probability in enumerate(probabilities):
+            if random_number < probability:
+                return i
+        return len(probabilities) - 1
+
     def reset_init_arm_pose(self, env_ids):
         for env_count in env_ids:
             env_count = env_count.item()
             # How many objects should we spawn 2 or 3
-            random_number = random.choice([1, 1])
+            probabilities = [0.15, 0.5, 0.35]
+            random_number = self.random_number_with_probabilities(probabilities)
+            # random_number = random.choice([1, 2, 3])
+            random_number += 1
             object_list_env = {}
             object_set = range(1, self.object_count_unique+1)
             selected_object = random.sample(object_set, random_number)
@@ -1071,7 +1081,7 @@ class UR16eManipualtion(VecTask):
                         self.dexnet_score_temp = torch.Tensor()
                         max_num_grasps = len(self.grasps_and_predictions)
                         top_grasps = max_num_grasps if max_num_grasps <= 10 else 7
-                        max_num_grasps = 1
+                        # max_num_grasps = 1
                         for i in range(max_num_grasps):
                             grasp_point = torch.tensor(
                                 [self.grasps_and_predictions[i][0].center.x, self.grasps_and_predictions[i][0].center.y])
