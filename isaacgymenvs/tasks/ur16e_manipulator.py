@@ -678,11 +678,21 @@ class UR16eManipulation(VecTask):
     '''
     Reset the arm pose for heading towards pre grasp pose
     '''
+    def random_number_with_probabilities(self, probabilities):
+        random_number = random.random()
+        for i, probability in enumerate(probabilities):
+            if random_number < probability:
+                return i
+        return len(probabilities) - 1
+
     def reset_init_arm_pose(self, env_ids):
         for env_count in env_ids:
             env_count = env_count.item()
             # How many objects should we spawn 2 or 3
-            random_number = random.choice([2, 3])
+            probabilities = [0.05, 0.5, 1.0]
+            random_number = self.random_number_with_probabilities(probabilities)
+            # random_number = random.choice([1, 2, 3])
+            random_number += 1
             object_list_env = {}
             object_set = range(1, self.object_count_unique+1)
             selected_object = random.sample(object_set, random_number)
@@ -747,6 +757,9 @@ class UR16eManipulation(VecTask):
                 else:
                     object_pose_env = torch.tensor(self.object_pose_store[env_count.item(
                     )][counter+1]).to(self.device)
+                    # quat = self.object_pose_store[env_count.item(
+                    # )][counter+1][3:7]
+                    # object_pose_env = torch.cat([object_pose_env[:3], quat])
                     object_pose_env = object_pose_env.unsqueeze(0)
                 self.object_poses = torch.cat(
                     [self.object_poses, object_pose_env])
@@ -939,7 +952,6 @@ class UR16eManipulation(VecTask):
                     bin_objects_current_pose[int(object_id.item())] = self._root_state[env_count, self._object_model_id[int(object_id.item())-1], :][:7].type(
                         torch.float).clone().detach()
                 self.object_pose_store[env_count] = bin_objects_current_pose
-                self.object_pose_check_list[env_count] == torch.tensor(0)
                 env_list_reset_objects = torch.cat(
                     (env_list_reset_objects, torch.tensor([env_count])), axis=0)
                 self.object_pose_check_list[env_count] -= torch.tensor(1)
