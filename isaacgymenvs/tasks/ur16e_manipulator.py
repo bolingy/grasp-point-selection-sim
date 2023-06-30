@@ -679,7 +679,7 @@ class UR16eManipualtion(VecTask):
         for env_count in env_ids:
             env_count = env_count.item()
             # How many objects should we spawn 2 or 3
-            probabilities = [0.05, 0.5, 0.45]
+            probabilities = [0.05, 0.5, 1.0]
             random_number = self.random_number_with_probabilities(probabilities)
             # random_number = random.choice([1, 2, 3])
             random_number += 1
