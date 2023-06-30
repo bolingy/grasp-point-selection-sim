@@ -691,7 +691,7 @@ class UR16eManipualtion(VecTask):
                 domain_randomizer = random_number = random.choice(
                     [1, 2, 3, 4, 5])
                 offset_object = np.array([np.random.uniform(0.67, 0.7, 1).reshape(
-                    1,)[0], np.random.uniform(-0.22, -0.12, 1).reshape(1,)[0], 1.3, np.random.uniform(0.0, 3.14, 1).reshape(1,)[0],
+                    1,)[0], np.random.uniform(-0.22, -0.12, 1).reshape(1,)[0], 1.4, np.random.uniform(0.0, 3.14, 1).reshape(1,)[0],
                     np.random.uniform(0.0, 3.14, 1).reshape(1,)[0], np.random.uniform(0.0, 3.14, 1).reshape(1,)[0]])
                 # offset_object = np.array([np.random.uniform(0.67, 0.7, 1).reshape(
                 #     1,)[0], np.random.uniform(-0.22, -0.12, 1).reshape(1,)[0], 1.3, 0.0,

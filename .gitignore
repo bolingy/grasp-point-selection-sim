@@ -161,3 +161,9 @@ assets/urdf/Aurmar_description/meshes/pod/texture_1002.png
 assets/urdf/Aurmar_description/meshes/pod/texture_1003.png
 assets/urdf/Aurmar_description/meshes/pod/texture_1004.png
 assets/urdf/Aurmar_description/meshes/pod/untitled.dae
+isaacgymenvs/__pycache__/__init__.cpython-37.pyc
+isaacgymenvs/utils/__pycache__/rlgames_utils.cpython-37.pyc
+isaacgymenvs/utils/__pycache__/torch_jit_utils.cpython-37.pyc
+isaacgymenvs/utils/__pycache__/utils.cpython-37.pyc
+isaacgymenvs/utils/__pycache__/reformat.cpython-37.pyc
+isaacgymenvs/utils/__pycache__/dr_utils.cpython-37.pyc
