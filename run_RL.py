@@ -17,6 +17,17 @@ envs = isaacgymenvs.make(
 print("Observation space is", envs.observation_space)
 print("Action space is", envs.action_space)
 obs = envs.reset()
+
+def step_primitives(action):
+	while True:
+		obs, reward, done, info = envs.step(action)
+		info = (obs['obs'][614400:])
+		take_obs = info[0]
+		if take_obs == 1:
+			print("observation returned")
+			print(info)
+			return obs, reward, done, info
+
 while True:
 	# action is specified by forces (6 dof) and gripper (1 dof)
 	# the last two values are motion primitive parameters
@@ -25,5 +36,4 @@ while True:
 
 	# TODO: Pass RL flag in to envs.step() so that the RL flag is on for i time steps
 	action = torch.tensor(ne * [[0.0, -0.03, 0.17, 0.10]])
-	obs, reward, done, info = envs.step(action)
-	# print("Observation space is", obs)
+	obs, reward, done, info = step_primitives(action)

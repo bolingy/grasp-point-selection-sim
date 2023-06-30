@@ -201,6 +201,8 @@ class RL_UR16eManipualtion(VecTask):
             self.control_type == "osc" else self._ur16e_effort_limits[:6].unsqueeze(0)
         self.primitive_count = torch.ones(self.num_envs)
         self.done = torch.zeros(self.num_envs)
+        self.finished_prim = torch.zeros(self.num_envs)
+
 
         # Reset all environments
         self.reset_idx(torch.arange(self.num_envs, device=self.device))
@@ -232,7 +234,6 @@ class RL_UR16eManipualtion(VecTask):
         self.current_directory = os.getcwd()
         self.init_go_to_start = torch.ones(self.num_envs)
         self.go_to_start = torch.ones(self.num_envs)
-        self.finished_prim = torch.zeros(self.num_envs)
         self.success = torch.zeros(self.num_envs)
 
     def create_sim(self):
@@ -747,7 +748,9 @@ class RL_UR16eManipualtion(VecTask):
             self.speed[env_id] = torch.tensor(0.1)
             if self.done[env_count] == 1:
                 self.RL_flag[env_count] = torch.tensor(1)
+            self.finished_prim[env_count] = torch.tensor(0)
             self.done[env_id] = torch.tensor(0)
+            self.primitive_count[env_id.item()] = torch.tensor(1)
 
         self.progress_buf[env_ids] = 0
         self.reset_buf[env_ids] = 0
