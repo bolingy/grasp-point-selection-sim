@@ -949,6 +949,7 @@ class RL_UR16eManipualtion(VecTask):
         # use  einops.rearrange() to reshape the tensor to one dimension
         self.depth_buf = einops.rearrange(self.depth_buf, 'b h w -> b (h w)')
         self.seg_buf = einops.rearrange(self.seg_buf, 'b h w -> b (h w)')
+        # print(torch.unique(self.seg_buf))
         # print("depth_buf shape: ", self.depth_buf.shape)
         # print("seg_buf shape: ", self.seg_buf.shape)
 
@@ -1060,7 +1061,7 @@ class RL_UR16eManipualtion(VecTask):
             # or if want to start primitives inside the bin
             # go to [-0.3222, -1.6111, 1.2566, 0.3867, 1.4177, -0.4511]
             temp_pos = torch.tensor([-0.2578, -1.8044, 1.5144, 0.3867, 1.4177, -0.4511]).to(self.device)
-            print("temp_pose: ", temp_pos)
+            # print("temp_pose: ", temp_pos)
             # temp_pos = torch.tensor([])
             temp_pos = torch.reshape(temp_pos, (1, len(temp_pos)))
             temp_pos = torch.cat(
@@ -1455,7 +1456,7 @@ class RL_UR16eManipualtion(VecTask):
                         # Orientation error
                         action_orientation = matrix_to_euler_angles(
                             T_ee_pose_to_pre_grasp_pose[:3, :3], "XYZ")
-                        print("action_orientation: ", action_orientation)
+                        # print("action_orientation: ", action_orientation)
 
 
                         pose_factor, ori_factor = 1., 0.3
