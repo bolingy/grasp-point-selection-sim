@@ -1489,7 +1489,8 @@ class RL_UR16eManipualtion(VecTask):
                         
                         self.target_dist[env_count] = new_target_dist
 
-                        u_arm_temp[:, 0:3], self.action[env_count][actions[curr_prim]] = self.primitives.move(self.action[env_count][actions[curr_prim]], self.states["eef_pos"], self.target_dist[env_count][actions[curr_prim]])
+                        # u_arm_temp[:, 0:3], self.action[env_count][actions[curr_prim]] = self.primitives.move(self.action[env_count][actions[curr_prim]], self.states["eef_pos"], self.target_dist[env_count][actions[curr_prim]])
+                        u_arm_temp[:, 0:6], self.action[env_count][actions[curr_prim]] = self.primitives.move_w_ori(self.action[env_count][actions[curr_prim]], self.states["eef_pos"], self.states["eef_quat"], self.target_dist[env_count][actions[curr_prim]])
                         # if self.true_target_dist < 0.1:
                             # self.temp_action = self.action[env_count][actions[curr_prim]]
 

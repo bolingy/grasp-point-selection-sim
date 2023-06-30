@@ -3,7 +3,7 @@ import torch
 import numpy as np
 
 DEFAULT_OSC_DIST = 0.05
-DEFAULT_MIN_DIST_MUL = 0.2
+DEFAULT_MIN_DIST_MUL = 0.7
 
 class Primitives():
     def __init__(self, num_envs, init_pose, device):
@@ -20,7 +20,6 @@ class Primitives():
                     "down": torch.tensor(num_envs * [[0, 0, -DEFAULT_OSC_DIST]], device=device),}
 
         self.executing = False
-
     def move(self, action, current_pose, target_dist):
         self.current_pose = current_pose
         if self.executing == False:
@@ -31,7 +30,7 @@ class Primitives():
         pose_diff = torch.clone(self.target_pose - self.current_pose)
         # print('current_pose', self.current_pose)
         # print('target_pose', self.target_pose)
-        # print('pose_diff', pose_diff)
+        print('pose_diff', pose_diff)
         # print(self.target_pose)
         # # Check if done
         if torch.all(torch.abs(pose_diff) < self.min_distance_to_goal):
@@ -61,6 +60,72 @@ class Primitives():
         # pose_diff[pose_diff < DEFAULT_MIN_DIST] = 0
         osc_params[(ind_dominant[:,:1], ind_dominant[:, 1:2])] = 0 #pose_diff[(ind_dominant[:,:1], ind_dominant[:, 1:2])]
         # print('osc_params', osc_params)
+        return osc_params, action
+    
+
+    def move_w_ori(self, action, current_pose, current_quat, target_dist):
+        def quaternion_to_euler_angle_vectorized(w, x, y, z):
+            ysqr = y * y
+
+            t0 = +2.0 * (w * x + y * z)
+            t1 = +1.0 - 2.0 * (x * x + ysqr)
+            X = torch.arctan2(t0, t1)
+
+            t2 = +2.0 * (w * y - z * x)
+
+            t2 = torch.clip(t2, -1.0, 1.0)
+            Y = torch.arcsin(t2)
+
+            t3 = +2.0 * (w * z + x * y)
+            t4 = +1.0 - 2.0 * (ysqr + z * z)
+            Z = torch.arctan2(t3, t4)
+
+            # returns torch tensor of X Y Z
+            return torch.concat((X, Y, Z), 1)
+        current_quat = quaternion_to_euler_angle_vectorized(current_quat[:,[3]], current_quat[:,[0]], current_quat[:,[1]], current_quat[:,[2]])
+        self.current_pose = current_pose
+        self.current_quat = current_quat
+        if self.executing == False:
+            self.target_pose = self.current_pose + target_dist
+            self.target_quat = self.current_quat
+            self.executing = True
+           
+        # Get error
+        pose_diff = torch.clone(self.target_pose - self.current_pose)
+        ori_diff = torch.clone(self.current_quat - self.target_quat)
+        # print('pose_diff', pose_diff)
+        # print('ori_diff', ori_diff)
+        # # Check if done
+        if torch.all(torch.abs(pose_diff) < self.min_distance_to_goal):
+            self.executing = False
+            # print("done")
+            return torch.tensor(self.num_envs * [[0., 0., 0., 0., 0., 0.]]), "done"
+
+        # Zero out if less than level
+        #pose_diff[pose_diff < self.min_distance_to_goal] = 0
+        # Get new tensor
+        osc_params = torch.clone(self.moves[action])
+        # print(osc_params)
+        # Get indexes where zero
+        ind_non_dominant = (osc_params == 0).nonzero()
+        # print(ind_non_dominant)
+        # Get index where close to goal
+        # print((osc_params != 0))
+        # print(DEFAULT_OSC_DIST * DEFAULT_MIN_DIST_MUL)
+        # print((torch.abs(pose_diff) < (DEFAULT_OSC_DIST * DEFAULT_MIN_DIST_MUL)))
+        # print(((osc_params != 0) & (torch.abs(pose_diff) < (DEFAULT_OSC_DIST * DEFAULT_MIN_DIST_MUL))))
+        ind_dominant = ((osc_params != 0) & (torch.abs(pose_diff) < DEFAULT_OSC_DIST * DEFAULT_MIN_DIST_MUL)).nonzero()
+        # print(ind_dominant)
+        # Get diff into new tensor
+        osc_params[(ind_non_dominant[:,:1], ind_non_dominant[:, 1:2])] = pose_diff[(ind_non_dominant[:,:1], ind_non_dominant[:, 1:2])]
+        # print(osc_params)
+        # Zero out where goal has been reached
+        # pose_diff[pose_diff < DEFAULT_MIN_DIST] = 0
+        osc_params[(ind_dominant[:,:1], ind_dominant[:, 1:2])] = 0 #pose_diff[(ind_dominant[:,:1], ind_dominant[:, 1:2])]
+        # print('osc_params', osc_params)
+        # print('ori_diff', ori_diff)
+        # append orientation diff to osc_params
+        osc_params = torch.cat((osc_params, ori_diff * 0.1), 1)
         return osc_params, action
 
         # if action != "done" and self.action == False:
