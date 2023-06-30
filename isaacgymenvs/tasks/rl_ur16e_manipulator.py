@@ -937,9 +937,9 @@ class RL_UR16eManipualtion(VecTask):
         # self.seg_buf = self.seg_buf.unsqueeze(-1)
 
         # plot latest image from rgb_buf
-        if self.finished_prim[env_count] == 1:
-            plt.imshow(self.rgb_buf[-1].cpu().numpy())
-            plt.show()
+        # if self.finished_prim[env_count] == 1:
+            # plt.imshow(self.rgb_buf[-1].cpu().numpy())
+            # plt.show()
 
         
 
@@ -1455,6 +1455,8 @@ class RL_UR16eManipualtion(VecTask):
                         # Orientation error
                         action_orientation = matrix_to_euler_angles(
                             T_ee_pose_to_pre_grasp_pose[:3, :3], "XYZ")
+                        print("action_orientation: ", action_orientation)
+
 
                         pose_factor, ori_factor = 1., 0.3
                         self.action_env = torch.tensor([[pose_factor*T_ee_pose_to_pre_grasp_pose[0][3], pose_factor*T_ee_pose_to_pre_grasp_pose[1][3],
@@ -1535,7 +1537,7 @@ class RL_UR16eManipualtion(VecTask):
                         # print("self.action_env: ", self.action_env)
                         # append [1, 0, 0] to every row of action_env
                         self.action_env = torch.cat(
-                            (self.action_env, torch.tensor([[1, 0, 0, 0, 0]]).repeat(self.action_env.shape[0], 1)), dim=1)
+                            (self.action_env, torch.tensor([[0, 0, 0, 0, 0]]).repeat(self.action_env.shape[0], 1)), dim=1)
                         # print("u_arm_temp: ", u_arm_temp)       
                     
                 else:
@@ -1736,7 +1738,10 @@ class RL_UR16eManipualtion(VecTask):
                         if (contact_exist == torch.tensor(1) and self.action_contrib[env_count] == 0):
                             angle_error = quaternion_to_euler_angles(self._eef_state[env_count][3:7], "XYZ", degrees=False) - torch.tensor(
                                 [0, -self.grasp_angle[env_count][1], self.grasp_angle[env_count][0]]).to(self.device)
-                            if (torch.max(torch.abs(angle_error)) > torch.deg2rad(torch.tensor(10))):
+                            angle_error = torch.tensor([angle_error[0] + 1.57079632679, angle_error[1] - 1.57079632679, angle_error[2]])
+                            # print("angle_error: ", angle_error)
+                            # if (torch.max(torch.abs(angle_error)) > torch.deg2rad(torch.tensor(30))):
+                            if (False):
                                 # encountered the arm insertion constraint
                                 env_list_reset_arm_pose = torch.cat(
                                     (env_list_reset_arm_pose, torch.tensor([env_count])), axis=0)

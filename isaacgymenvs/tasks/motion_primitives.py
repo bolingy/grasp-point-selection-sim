@@ -81,20 +81,20 @@ class Primitives():
             Z = torch.arctan2(t3, t4)
 
             # returns torch tensor of X Y Z
-            return torch.concat((X, Y, Z), 1)
+            return torch.concat((Y, Z, X), 1)
         current_quat = quaternion_to_euler_angle_vectorized(current_quat[:,[3]], current_quat[:,[0]], current_quat[:,[1]], current_quat[:,[2]])
         self.current_pose = current_pose
         self.current_quat = current_quat
         if self.executing == False:
             self.target_pose = self.current_pose + target_dist
-            self.target_quat = self.current_quat
+            self.target_quat = torch.tensor(self.num_envs * [[0., -1.57, -1.57]], device="cuda:0")
             self.executing = True
-           
+        print(self.current_quat)
         # Get error
         pose_diff = torch.clone(self.target_pose - self.current_pose)
-        ori_diff = torch.clone(self.current_quat - self.target_quat)
+        ori_diff = torch.clone(self.target_quat - self.current_quat)
         # print('pose_diff', pose_diff)
-        # print('ori_diff', ori_diff)
+        print('ori_diff', ori_diff)
         # # Check if done
         if torch.all(torch.abs(pose_diff) < self.min_distance_to_goal):
             self.executing = False
@@ -125,7 +125,7 @@ class Primitives():
         # print('osc_params', osc_params)
         # print('ori_diff', ori_diff)
         # append orientation diff to osc_params
-        osc_params = torch.cat((osc_params, ori_diff * 0.1), 1)
+        osc_params = torch.cat((osc_params, ori_diff*0.3), 1)
         return osc_params, action
 
         # if action != "done" and self.action == False:
