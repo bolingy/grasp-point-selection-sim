@@ -199,6 +199,8 @@ class RL_UR16eManipualtion(VecTask):
         # Set control limits
         self.cmd_limit = to_torch([0.1, 0.1, 0.1, 0.5, 0.5, 0.5], device=self.device).unsqueeze(0) if \
             self.control_type == "osc" else self._ur16e_effort_limits[:6].unsqueeze(0)
+        self.primitive_count = torch.ones(self.num_envs)
+        self.done = torch.zeros(self.num_envs)
 
         # Reset all environments
         self.reset_idx(torch.arange(self.num_envs, device=self.device))
@@ -226,12 +228,12 @@ class RL_UR16eManipualtion(VecTask):
         print("######################self.target_dist.shape, ", self.target_dist.shape)
         print("######################self.target_dist, ", self.target_dist)
         self.prim = torch.zeros(self.num_envs)
-        self.primitive_count = torch.ones(self.num_envs)
         self.num_primtive_actions = self.cfg["env"]["numPrimitiveActions"]
         self.current_directory = os.getcwd()
         self.init_go_to_start = torch.ones(self.num_envs)
         self.go_to_start = torch.ones(self.num_envs)
         self.finished_prim = torch.zeros(self.num_envs)
+        self.success = torch.zeros(self.num_envs)
 
     def create_sim(self):
         self.sim_params.up_axis = gymapi.UP_AXIS_Z
@@ -743,6 +745,9 @@ class RL_UR16eManipualtion(VecTask):
             self.free_envs_list[env_id] = torch.tensor(1)
             self.object_pose_check_list[env_id] = torch.tensor(3)
             self.speed[env_id] = torch.tensor(0.1)
+            if self.done[env_count] == 1:
+                self.RL_flag[env_count] = torch.tensor(1)
+            self.done[env_id] = torch.tensor(0)
 
         self.progress_buf[env_ids] = 0
         self.reset_buf[env_ids] = 0
@@ -804,6 +809,11 @@ class RL_UR16eManipualtion(VecTask):
             self.speed[env_id] = 0.1
             self.force_contact_flag[env_id.item()] = torch.tensor(
                 0).type(torch.bool)
+            self.primitive_count[env_id.item()] = torch.tensor(1)
+            if self.done[env_count] == 1:
+                self.RL_flag[env_count] = torch.tensor(1)
+            self.done[env_id] = torch.tensor(0)
+            
 
         self.object_movement_enabled = 0
         self.cmd_limit = to_torch(
@@ -927,8 +937,11 @@ class RL_UR16eManipualtion(VecTask):
         # self.seg_buf = self.seg_buf.unsqueeze(-1)
 
         # plot latest image from rgb_buf
-        # plt.imshow(self.rgb_buf[-1].cpu().numpy())
-        # plt.show()
+        if self.finished_prim[env_count] == 1:
+            plt.imshow(self.rgb_buf[-1].cpu().numpy())
+            plt.show()
+
+        
 
         # print("rgb_buf shape: ", self.rgb_buf.shape)
         # print("depth_buf shape: ", self.depth_buf.shape)
@@ -942,6 +955,8 @@ class RL_UR16eManipualtion(VecTask):
         self.obs_buf = torch.cat((self.depth_buf, self.seg_buf), dim=1).squeeze(0)
 
         self.obs_buf = torch.cat((self.obs_buf,  self.finished_prim[env_count].unsqueeze(0).to(self.device)))
+        self.obs_buf = torch.cat((self.obs_buf,  self.success[env_count].unsqueeze(0).to(self.device)))
+        self.obs_buf = torch.cat((self.obs_buf,  self.done[env_count].unsqueeze(0).to(self.device)))
         # print("obs_buf shape: ", self.obs_buf.shape)
         return self.obs_buf
     
@@ -959,6 +974,7 @@ class RL_UR16eManipualtion(VecTask):
 
         # return reward
         reward = suction_deformation_score
+        # if done = self.RL_flag[env_id.item()] = torch.tensor(1)
         return reward
 
     def _reset_init_object_state(self, object, env_ids, offset):
@@ -1326,7 +1342,9 @@ class RL_UR16eManipualtion(VecTask):
                         env_list_reset_objects = torch.cat(
                             (env_list_reset_objects, torch.tensor([env_count])), axis=0)
                         oscillation = False
-                        success = False
+                        self.success[env_count] = False
+                        self.finished_prim[env_count] = 1
+                        self.done[env_count] = 1
                         # saving all the properties of a single pick
                         json_save = {
                             "force_array": [],
@@ -1336,12 +1354,12 @@ class RL_UR16eManipualtion(VecTask):
                             "suction_deformation_score": self.suction_deformation_score[env_count].item(),
                             "oscillation": oscillation,
                             "gripper_score": 0,
-                            "success": success,
+                            "success": self.success[env_count].item(),
                             "object_id": self.object_target_id[env_count].item(),
                             "penetration": False,
                             "unreachable": True
                         }
-                        print("success: ", success)
+                        print("success: ", self.success[env_count].item())
                         new_dir_name = str(
                             env_count)+"_"+str(self.track_save[env_count].type(torch.int).item())
                         save_dir_json = cur_path+"/../../System_Identification_Data/Parallelization-Data/" + \
@@ -1378,6 +1396,7 @@ class RL_UR16eManipualtion(VecTask):
                     self.prim_target_dist_y = action_temp[env_count, 10]
                     if(self.go_to_start[env_count]):
                         if self.init_go_to_start[env_count] and self.primitive_count[env_count] > 1:
+                            print(self.primitive_count[env_count])
                             self.finished_prim[env_count] = 1
                             print("!!!!!!!!!!!!!!!!!!pass obs")
                             self.init_go_to_start[env_count] = False
@@ -1490,7 +1509,6 @@ class RL_UR16eManipualtion(VecTask):
                                 self.primitive_count[env_count] += 1
                                 if self.primitive_count[env_count] >= self.num_primtive_actions + 1:
                                     self.RL_flag[env_count] = 0
-                                    self.primitive_count[env_count] = 1
                                     self.run_dexnet[env_count] = 1
                                     print("#############FINISH PRIMITIVE AND RESET COUNT")
                                 else:
@@ -1725,7 +1743,9 @@ class RL_UR16eManipualtion(VecTask):
                                     (env_list_reset_objects, torch.tensor([env_count])), axis=0)
                                 print(env_count, "reset because of arm angle errror")
                                 oscillation = False
-                                success = False
+                                self.success[env_count] = False
+                                self.finished_prim[env_count] = 1
+                                self.done[env_count] = 1
                                 json_save = {
                                     "force_array": [],
                                     "grasp point": self.grasp_point[env_count].tolist(),
@@ -1734,12 +1754,12 @@ class RL_UR16eManipualtion(VecTask):
                                     "suction_deformation_score": self.suction_deformation_score[env_count].item(),
                                     "oscillation": oscillation,
                                     "gripper_score": 0,
-                                    "success": success,
+                                    "success": self.success[env_count].item(),
                                     "object_id": self.object_target_id[env_count].item(),
                                     "penetration": False,
                                     "unreachable": True
                                 }
-                                print("success: ", success)
+                                print("success: ", self.success[env_count].item())
                                 new_dir_name = str(
                                     env_count)+"_"+str(self.track_save[env_count].type(torch.int).item())
                                 save_dir_json = cur_path+"/../../System_Identification_Data/Parallelization-Data/" + \
@@ -1776,7 +1796,9 @@ class RL_UR16eManipualtion(VecTask):
                             print(env_count, _all_object_pose_error,
                                 "reset because of object re placement check")
                             oscillation = False
-                            success = False
+                            self.success[env_count] = False
+                            self.finished_prim[env_count] = 1
+                            self.done[env_count] = 1
                             json_save = {
                                 "force_array": [],
                                 "grasp point": self.grasp_point[env_count].tolist(),
@@ -1785,12 +1807,12 @@ class RL_UR16eManipualtion(VecTask):
                                 "suction_deformation_score": self.suction_deformation_score[env_count].item(),
                                 "oscillation": oscillation,
                                 "gripper_score": 0,
-                                "success": success,
+                                "success": self.success[env_count].item(),
                                 "object_id": self.object_target_id[env_count].item(),
                                 "penetration": False,
                                 "unreachable": True
                             }
-                            print("success: ", success)
+                            print("success: ", self.success[env_count].item())
                             new_dir_name = str(
                                 env_count)+"_"+str(self.track_save[env_count].type(torch.int).item())
                             save_dir_json = cur_path+"/../../System_Identification_Data/Parallelization-Data/" + \
@@ -1898,12 +1920,14 @@ class RL_UR16eManipualtion(VecTask):
 
                             oscillation = self.detect_oscillation(
                                 self.force_list_save[env_count])
-                            success = False
+                            self.success[env_count] = False
                             if (score_gripper > torch.tensor(0.1) and oscillation == False):
-                                success = True
+                                self.success[env_count] = True
                             penetration = False
                             if (score_gripper == torch.tensor(0)):
                                 penetration = True
+                            self.finished_prim[env_count] = 1
+                            self.done[env_count] = 1
                             # saving the grasp point ad its properties if it was a successfull grasp
                             json_save = {
                                 "force_array": self.force_list_save[env_count].tolist(),
@@ -1913,12 +1937,12 @@ class RL_UR16eManipualtion(VecTask):
                                 "suction_deformation_score": self.suction_deformation_score[env_count].item(),
                                 "oscillation": oscillation,
                                 "gripper_score": score_gripper.item(),
-                                "success": success,
+                                "success": self.success[env_count].item(),
                                 "object_id": self.object_target_id[env_count].item(),
                                 "penetration": penetration,
                                 "unreachable": False
                             }
-                            print("success: ", success)
+                            print("success: ", self.success[env_count].item())
                             new_dir_name = str(
                                 env_count)+"_"+str(self.track_save[env_count].type(torch.int).item())
                             save_dir_json = cur_path+"/../../System_Identification_Data/Parallelization-Data/" + \
@@ -1939,7 +1963,9 @@ class RL_UR16eManipualtion(VecTask):
                             env_list_reset_objects = torch.cat(
                                 (env_list_reset_objects, torch.tensor([env_count])), axis=0)
                             oscillation = False
-                            success = False
+                            self.success[env_count] = False
+                            self.finished_prim[env_count] = 1
+                            self.done[env_count] = 1
                             json_save = {
                                 "force_array": [],
                                 "grasp point": self.grasp_point[env_count].tolist(),
@@ -1948,12 +1974,12 @@ class RL_UR16eManipualtion(VecTask):
                                 "suction_deformation_score": self.suction_deformation_score[env_count].item(),
                                 "oscillation": oscillation,
                                 "gripper_score": 0,
-                                "success": success,
+                                "success": self.success[env_count].item(),
                                 "object_id": self.object_target_id[env_count].item(),
                                 "penetration": False,
                                 "unreachable": True
                             }
-                            print("success: ", success)
+                            print("success: ", self.success[env_count].item())
                             new_dir_name = str(
                                 env_count)+"_"+str(self.track_save[env_count].type(torch.int).item())
                             save_dir_json = cur_path+"/../../System_Identification_Data/Parallelization-Data/" + \
@@ -2005,8 +2031,10 @@ class RL_UR16eManipualtion(VecTask):
                 env_list_reset_arm_pose.to(self.device).type(torch.long))
 
             env_ids = env_list_reset_arm_pose.to(self.device).type(torch.long)
-            self.finished_prim[env_ids] = True
-            print("#####################take obs")
+            for i in env_ids:
+                if self.primitive_count[i] == 1:
+                    self.finished_prim[i] = True
+                    print("#####################take obs")
             self.deploy_actions(env_ids, pos)
 
         elif (len(env_complete_reset) != 0):
@@ -2053,7 +2081,9 @@ class RL_UR16eManipualtion(VecTask):
                 if (self.force_list_save[env_count] != None and len(self.force_list_save[env_count]) > 10):
                     oscillation = self.detect_oscillation(
                         self.force_list_save[env_count])
-                    success = False
+                    self.success[env_count] = False
+                    self.finished_prim[env_count] = 1
+                    self.done[env_count] = 1
                     json_save = {
                         "force_array": self.force_list_save[env_count].tolist(),
                         "grasp point": self.grasp_point[env_count].tolist(),
@@ -2062,12 +2092,12 @@ class RL_UR16eManipualtion(VecTask):
                         "suction_deformation_score": self.suction_deformation_score[env_count].item(),
                         "oscillation": oscillation,
                         "gripper_score": 0,
-                        "success": success,
+                        "success": self.success[env_count].item(),
                         "object_id": self.object_target_id[env_count].item(),
                         "penetration": False,
                         "unreachable": False
                     }
-                    print("success: ", success)
+                    print("success: ", self.success[env_count].item())
                     new_dir_name = str(
                         env_count)+"_"+str(self.track_save[env_count].type(torch.int).item())
                     save_dir_json = cur_path+"/../../System_Identification_Data/Parallelization-Data/" + \
