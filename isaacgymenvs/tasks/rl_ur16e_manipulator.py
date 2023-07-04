@@ -1,3 +1,4 @@
+from copy import deepcopy
 import random
 import numpy as np
 import os
@@ -51,10 +52,10 @@ class RL_UR16eManipualtion(VecTask):
             "Invalid control type specified. Must be one of: {osc, joint_tor}"
 
         # image obs include: depth dim = 1, segmask dim = 1
-        self.cfg["env"]["numObservations"] = 614400
+        self.cfg["env"]["numObservations"] = 614403
 
         # actions include: delta EEF if OSC (6) or joint torques (7) + bool gripper (1)
-        self.cfg["env"]["numActions"] = 2 if self.control_type == "osc" else 7
+        self.cfg["env"]["numActions"] = 4
 
         # Values to be filled in at runtime
         # will be dict filled with relevant states to use for reward calculation
@@ -115,7 +116,7 @@ class RL_UR16eManipualtion(VecTask):
                          headless=headless, virtual_screen_capture=virtual_screen_capture, force_render=force_render)
 
         self.ur16e_default_dof_pos = to_torch(
-            [-1.57, 0, 0, 0, 0, 0, 0], device=self.device
+            [-1.57, 0, -1.57, 0, 0, 0, 0], device=self.device
         )
 
         self.cooldown_frames = 150
@@ -194,7 +195,7 @@ class RL_UR16eManipualtion(VecTask):
         self.bootup_reset = torch.ones(self.num_envs)
 
         self.RL_flag = torch.ones(self.num_envs)
-        self.run_dexnet = torch.zeros(self.num_envs)
+        self.run_dexnet = torch.ones(self.num_envs)
 
         # Set control limits
         self.cmd_limit = to_torch([0.1, 0.1, 0.1, 0.5, 0.5, 0.5], device=self.device).unsqueeze(0) if \
@@ -204,15 +205,11 @@ class RL_UR16eManipualtion(VecTask):
         self.finished_prim = torch.zeros(self.num_envs)
 
 
-        # Reset all environments
-        self.reset_idx(torch.arange(self.num_envs, device=self.device))
 
-        # Refresh tensors
-        self._refresh()
-        # Primitives
-        self.primitives = Primitives(self.num_envs, self.states['eef_pos'], device=self.device)
         self.counter = 0
-        self.action = [self.num_envs * ["in", "right", "up", "out", "left", "down"]]
+        self.action = np.concatenate(self.num_envs * [np.array(["in", "right", "up", "out", "left", "down"])])
+        self.action = np.reshape(self.action, (self.num_envs, 6))
+        # print("self.action", self.action)
         # Axis are inverted TODO Fix it
         self.true_target_dist = 0.3
         
@@ -227,14 +224,25 @@ class RL_UR16eManipualtion(VecTask):
         self.target_dist = self.target_dist.repeat(self.num_envs, 1, 1)
 
 
-        print("######################self.target_dist.shape, ", self.target_dist.shape)
-        print("######################self.target_dist, ", self.target_dist)
+        # print("######################self.target_dist.shape, ", self.target_dist.shape)
+        # print("######################self.target_dist, ", self.target_dist)
         self.prim = torch.zeros(self.num_envs)
         self.num_primtive_actions = self.cfg["env"]["numPrimitiveActions"]
         self.current_directory = os.getcwd()
         self.init_go_to_start = torch.ones(self.num_envs)
         self.go_to_start = torch.ones(self.num_envs)
         self.success = torch.zeros(self.num_envs)
+
+        # Reset all environments
+        self.reset_idx(torch.arange(self.num_envs, device=self.device))
+
+        # Refresh tensors
+        self._refresh()
+        # Primitives
+        primitives = Primitives(self.num_envs, self.states['eef_pos'], device=self.device)
+        # make an array of deep copies of Primitives for each env
+        self.primitives = np.array([deepcopy(primitives) for _ in range(self.num_envs)])
+        
 
     def create_sim(self):
         self.sim_params.up_axis = gymapi.UP_AXIS_Z
@@ -273,7 +281,7 @@ class RL_UR16eManipualtion(VecTask):
             self.sim, asset_root, ur16e_asset_file, asset_options)
 
         ur16e_dof_stiffness = to_torch(
-            [0, 0, 0, 0, 0, 0, 0], dtype=torch.float, device=self.device)
+            [0., 0., 0., 0., 0., 0., 0.], dtype=torch.float, device=self.device)
         ur16e_dof_damping = to_torch(
             [0., 0., 0., 0., 0., 0., 0.], dtype=torch.float, device=self.device)
 
@@ -738,14 +746,14 @@ class RL_UR16eManipualtion(VecTask):
             self.selected_object_env[env_count] = list_objects_domain_randomizer
             self.object_pose_store[env_count] = object_list_env
 
-        print(env_count, "objects spawned in each environemnt",
+        print(env_count, "objects spawned in each environment",
               self.selected_object_env)
         # pos = torch.tensor(np.random.uniform(low=-6.2832, high=6.2832, size=(6,))).to(self.device).type(torch.float)
         # pos = tensor_clamp(pos.unsqueeze(0), self.ur16e_dof_lower_limits.unsqueeze(0), self.ur16e_dof_upper_limits)
         pos = tensor_clamp(self.ur16e_default_dof_pos.unsqueeze(
             0), self.ur16e_dof_lower_limits.unsqueeze(0), self.ur16e_dof_upper_limits)
         pos = pos.repeat(len(env_ids), 1)
-        print("pos calucalte in init arm pose", pos)
+        # print("pos calucalte in init arm pose", pos)
 
         # reinitializing the variables
         for env_id in env_ids:
@@ -756,11 +764,13 @@ class RL_UR16eManipualtion(VecTask):
             self.free_envs_list[env_id] = torch.tensor(1)
             self.object_pose_check_list[env_id] = torch.tensor(3)
             self.speed[env_id] = torch.tensor(0.1)
-            if self.done[env_count] == 1:
-                self.RL_flag[env_count] = torch.tensor(1)
-            self.finished_prim[env_count] = torch.tensor(0)
-            self.done[env_id] = torch.tensor(0)
+            # if self.done[env_count] == 1:
+            self.run_dexnet[env_id] = torch.tensor(1)
+            self.RL_flag[env_id] = torch.tensor(1)
+            self.go_to_start[env_id] = torch.tensor(1)
+            self.init_go_to_start[env_id] = torch.tensor(1)
             self.primitive_count[env_id.item()] = torch.tensor(1)
+            # self.finished_prim[env_id] = torch.tensor(0)
 
         self.progress_buf[env_ids] = 0
         self.reset_buf[env_ids] = 0
@@ -823,13 +833,18 @@ class RL_UR16eManipualtion(VecTask):
             self.frame_count_contact_object[env_id] = 0
             self.frame_count[env_id] = 0
             self.env_reset_id_env[env_id] = 1
+            # self.free_envs_list[env_id] = torch.tensor(1)
             self.speed[env_id] = 0.1
             self.force_contact_flag[env_id.item()] = torch.tensor(
                 0).type(torch.bool)
+            # if self.done[env_count] == 1:
+            self.run_dexnet[env_id] = torch.tensor(1)
+            # self.RL_flag[env_count] = torch.tensor(1)
+            self.go_to_start[env_count] = torch.tensor(1)
+            self.init_go_to_start[env_count] = torch.tensor(1)
             self.primitive_count[env_id.item()] = torch.tensor(1)
-            if self.done[env_count] == 1:
-                self.RL_flag[env_count] = torch.tensor(1)
-            self.done[env_id] = torch.tensor(0)
+            # self.finished_prim[env_id] = torch.tensor(0)
+
             
 
         self.object_movement_enabled = 0
@@ -874,6 +889,10 @@ class RL_UR16eManipualtion(VecTask):
         self.rgb_buf = None
         self.depth_buf = None
         self.seg_buf = None
+        self.finished_prim_buf = None
+        self.success_buf = None 
+        self.done_buf = None
+
         for env_count in range(self.num_envs):
             mask_camera_tensor = self.gym.get_camera_image_gpu_tensor(
                 self.sim, self.envs[env_count], self.camera_handles[env_count][0], gymapi.IMAGE_SEGMENTATION)
@@ -939,7 +958,33 @@ class RL_UR16eManipualtion(VecTask):
             else:
                 self.seg_buf = torch.cat(
                     (self.seg_buf, torch_segmask_tensor), dim=0)
+                
+            torch_prim_tensor =  self.finished_prim[env_count].clone().unsqueeze(0)
+            if self.finished_prim_buf is None:
+                self.finished_prim_buf = torch_prim_tensor
+            else:
+                self.finished_prim_buf = torch.cat(
+                    (self.finished_prim_buf, torch_prim_tensor), dim=0)
 
+            torch_success_tensor =  self.success[env_count].clone().unsqueeze(0)
+            if self.success_buf is None:
+                self.success_buf = torch_success_tensor
+            else:
+                self.success_buf = torch.cat(
+                    (self.success_buf, torch_success_tensor), dim=0)
+            if self.success[env_count] == 1:
+                self.success[env_count] = 0
+                
+            torch_done_tensor =  self.done[env_count].clone().unsqueeze(0)
+            if self.done_buf is None:
+                self.done_buf = torch_done_tensor
+            else:
+                self.done_buf = torch.cat(
+                    (self.done_buf, torch_done_tensor), dim=0)
+            if self.done[env_count] == 1:
+                print("##############done")
+                self.done[env_count] = 0
+                
         # crop, scale and normalize image
         self.rgb_buf = self.rgb_buf[:, 180:660, 410:1050, :]
         self.rgb_buf = self.rgb_buf / 255.0
@@ -954,9 +999,9 @@ class RL_UR16eManipualtion(VecTask):
         # self.seg_buf = self.seg_buf.unsqueeze(-1)
 
         # plot latest image from rgb_buf
-        # if self.finished_prim[env_count] == 1:
-            # plt.imshow(self.rgb_buf[-1].cpu().numpy())
-            # plt.show()
+        # if torch.max(self.finished_prim_buf) == 1:
+        #     plt.imshow(self.rgb_buf[-1].cpu().numpy())
+        #     plt.show()
 
         
 
@@ -964,6 +1009,8 @@ class RL_UR16eManipualtion(VecTask):
         # print("depth_buf shape: ", self.depth_buf.shape)
         # print("seg_buf shape: ", self.seg_buf.shape)
         # use  einops.rearrange() to reshape the tensor to one dimension
+        # print("depth_buf shape: ", self.depth_buf.shape)
+        # print("seg_buf shape: ", self.seg_buf.shape)
         self.depth_buf = einops.rearrange(self.depth_buf, 'b h w -> b (h w)')
         self.seg_buf = einops.rearrange(self.seg_buf, 'b h w -> b (h w)')
         # print(torch.unique(self.seg_buf))
@@ -972,10 +1019,18 @@ class RL_UR16eManipualtion(VecTask):
 
         self.obs_buf = torch.cat((self.depth_buf, self.seg_buf), dim=1).squeeze(0)
 
-        self.obs_buf = torch.cat((self.obs_buf,  self.finished_prim[env_count].unsqueeze(0).to(self.device)))
-        self.obs_buf = torch.cat((self.obs_buf,  self.success[env_count].unsqueeze(0).to(self.device)))
-        self.obs_buf = torch.cat((self.obs_buf,  self.done[env_count].unsqueeze(0).to(self.device)))
         # print("obs_buf shape: ", self.obs_buf.shape)
+        # print("finished_prim shape: ", self.finished_prim_buf.T.shape)
+        if self.num_envs > 1:
+            self.obs_buf = torch.cat((self.obs_buf,  self.finished_prim_buf.unsqueeze(0).T.to(self.device)), dim=1)
+            self.obs_buf = torch.cat((self.obs_buf,  self.success_buf.unsqueeze(0).T.to(self.device)), dim=1)
+            self.obs_buf = torch.cat((self.obs_buf,  self.done_buf.unsqueeze(0).T.to(self.device)), dim=1)
+            # print("obs_buf shape: ", self.obs_buf.shape)
+        else:
+            self.obs_buf = torch.cat((self.obs_buf,  self.finished_prim_buf.to(self.device)), dim=0)
+            self.obs_buf = torch.cat((self.obs_buf,  self.success_buf.to(self.device)), dim=0)
+            self.obs_buf = torch.cat((self.obs_buf,  self.done_buf.to(self.device)), dim=0)
+
         return self.obs_buf
     
     def compute_reward(self):
@@ -1100,19 +1155,14 @@ class RL_UR16eManipualtion(VecTask):
         '''
         Commands to the arm for eef control
         '''
-        actions = torch.concat((torch.tensor(self.num_envs*[[0.0001, 0., 0., 0., 0., 0., 0.3]]), actions), dim=1)
-        # print(actions)
-
-        _dof_states = self.gym.acquire_dof_state_tensor(self.sim)
-        dof_states = gymtorch.wrap_tensor(_dof_states)
-
-        # print(dof_states)
-
+        actions = torch.concat((torch.tensor(self.num_envs*[[0.0001, 0., 0., 0., 0., 0., 0.3]]).to(self.device), actions), dim=1)
+        
         self.actions = torch.zeros(0, 11)
         # Before each loop this will track all the environments where a condition for reset has been called
         env_list_reset_objects = torch.tensor([])
         env_list_reset_arm_pose = torch.tensor([])
         env_complete_reset = torch.tensor([])
+        
         for env_count in range(self.num_envs):
             mask_camera_tensor = self.gym.get_camera_image_gpu_tensor(
                 self.sim, self.envs[env_count], self.camera_handles[env_count][0], gymapi.IMAGE_SEGMENTATION)
@@ -1136,7 +1186,8 @@ class RL_UR16eManipualtion(VecTask):
             ''' 
             Spawning objects until they acquire stable pose and also doesnt falls down
             '''
-            if ((self.frame_count[env_count] == self.cooldown_frames or (self.run_dexnet[env_count] == torch.tensor(1))) and (self.object_pose_check_list[env_count] == torch.tensor(0))):
+            if ((self.frame_count[env_count] == self.cooldown_frames) and (self.object_pose_check_list[env_count] == torch.tensor(0))) and (self.run_dexnet[env_count] == torch.tensor(1)):
+                # print('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!1z')
                 mask_camera_tensor = self.gym.get_camera_image_gpu_tensor(
                     self.sim, self.envs[env_count], self.camera_handles[env_count][0], gymapi.IMAGE_SEGMENTATION)
                 torch_mask_tensor = gymtorch.wrap_tensor(mask_camera_tensor)
@@ -1169,16 +1220,20 @@ class RL_UR16eManipualtion(VecTask):
 
                 # check if the environment returned from reset and the frame for that enviornment is 30 or not
                 # 30 frames is for cooldown period at the start for the simualtor to settle down
-                if (((self.free_envs_list[env_count] == torch.tensor(1)) and total_objects == objects_spawned) or (self.run_dexnet[env_count] == True and self.frame_count[env_count] == self.cooldown_frames)):
+                # print("first condition: ", (self.free_envs_list[env_count] == torch.tensor(1)))
+                # print("second condition: ", (total_objects == objects_spawned))
+                # print("third condition: ", (self.run_dexnet[env_count] == torch.tensor(1)))
+                if ((self.free_envs_list[env_count] == torch.tensor(1)) and total_objects == objects_spawned and (self.run_dexnet[env_count] == torch.tensor(1)) and (self.cooldown_frames == self.frame_count[env_count])):
                     '''
                     Running DexNet 3.0 after investigating the pose error after spawning
                     '''
                     print("!!!!!!!!!!!!!!!Running Dexnet 3.0")
-                    if (self.run_dexnet[env_count] == torch.tensor(0)):
-                        random_object_select = random.sample(
-                            self.selected_object_env[env_count].tolist(), 1)
-                        self.object_target_id[env_count] = torch.tensor(
-                            random_object_select).to(self.device).type(torch.int)
+                    # if (self.run_dexnet[env_count] == torch.tensor(0)):
+                    random_object_select = random.sample(
+                        self.selected_object_env[env_count].tolist(), 1)
+                    self.object_target_id[env_count] = torch.tensor(
+                        random_object_select).to(self.device).type(torch.int)
+                    # self.object_target_id[env_count] = 0
                     rgb_camera_tensor = self.gym.get_camera_image_gpu_tensor(
                         self.sim, self.envs[env_count], self.camera_handles[env_count][0], gymapi.IMAGE_COLOR)
                     torch_rgb_tensor = gymtorch.wrap_tensor(rgb_camera_tensor)
@@ -1190,6 +1245,7 @@ class RL_UR16eManipualtion(VecTask):
                                                                 410:1050].clone().detach().cpu().numpy()
                     # plt.imshow(self.rgb_save[env_count])
                     # plt.show()
+                    
                     depth_camera_tensor = self.gym.get_camera_image_gpu_tensor(
                         self.sim, self.envs[env_count], self.camera_handles[env_count][0], gymapi.IMAGE_DEPTH)
                     torch_depth_tensor = gymtorch.wrap_tensor(
@@ -1262,7 +1318,6 @@ class RL_UR16eManipualtion(VecTask):
                     try:
                         action, self.grasps_and_predictions, self.unsorted_grasps_and_predictions = self.dexnet_object.inference(
                             depth_img_dexnet, segmask_dexnet, None)
-                        self.run_dexnet[env_count] = False
                         self.suction_deformation_score_temp = torch.Tensor()
                         self.xyz_point_temp = torch.empty((0, 3))
                         self.grasp_angle_temp = torch.empty((0, 3))
@@ -1400,12 +1455,12 @@ class RL_UR16eManipualtion(VecTask):
                 if (self.RL_flag[env_count] == 1):
                     
                     action_temp = actions.clone().detach()
-
                     # Split arm and gripper command
-                    u_arm_temp, u_gripper = action_temp[:, :6], action_temp[:, 6]
+                    u_arm_temp, u_gripper = action_temp[env_count, :6], action_temp[env_count, 6]
                     u_arm_temp = u_arm_temp.to(self.device)
                     u_arm_temp = u_arm_temp * self.cmd_limit / self.action_scale
-
+                    # print("u_arm_temp: ", u_arm_temp)
+                    # print("u arm temp shape: ", u_arm_temp.shape)
                     # Get target dist and prim
                     self.prim_y = action_temp[env_count, 7]
                     self.prim_z = action_temp[env_count, 8]
@@ -1475,19 +1530,19 @@ class RL_UR16eManipualtion(VecTask):
                         # print("action_orientation: ", action_orientation)
 
 
-                        pose_factor, ori_factor = 1., 0.3
+                        pose_factor, ori_factor = 3.0, 1.0
                         self.action_env = torch.tensor([[pose_factor*T_ee_pose_to_pre_grasp_pose[0][3], pose_factor*T_ee_pose_to_pre_grasp_pose[1][3],
                                                         pose_factor *
                                                         T_ee_pose_to_pre_grasp_pose[2][3], ori_factor *
                                                         action_orientation[0],
                                                         ori_factor*action_orientation[1], ori_factor*action_orientation[2], 0, 0, 0, 0, 0]], dtype=torch.float)
-                        if ((torch.max(torch.abs(self.action_env[0][:3]))) <= 0.001 and (torch.max(torch.abs(self.action_env[0][3:6]))) <= 0.001):
+                        if ((torch.max(torch.abs(self.action_env[0][:3]))) <= 0.01 and (torch.max(torch.abs(self.action_env[0][3:6]))) <= 0.01):
                             self.go_to_start[env_count] = False
                         
                     else:
                         # go in by self.prim_target_dist_x -> swipe by self.prim_target_dist_y -> out by self.prim_target_dist_x
                         # Set primitive to opposite if target dist is negative
-                        actions = [0, 1, 3]
+                        act = [0, 1, 3]
                         curr_prim = int(self.prim[env_count].item())
                         # print("self.target_dist", self.target_dist[env_count])
                         if curr_prim == 1:
@@ -1496,7 +1551,7 @@ class RL_UR16eManipualtion(VecTask):
                         else:
                             self.true_target_dist = self.prim_target_dist_x
                         if self.true_target_dist < 0:
-                            actions[curr_prim] = actions[curr_prim] + 3
+                            act[curr_prim] = act[curr_prim] + 3
                             self.true_target_dist = abs(self.true_target_dist)
                         
                         new_target_dist = (torch.stack((torch.tensor([self.true_target_dist, 0., 0.], device=self.device),
@@ -1509,54 +1564,56 @@ class RL_UR16eManipualtion(VecTask):
                         self.target_dist[env_count] = new_target_dist
 
                         # u_arm_temp[:, 0:3], self.action[env_count][actions[curr_prim]] = self.primitives.move(self.action[env_count][actions[curr_prim]], self.states["eef_pos"], self.target_dist[env_count][actions[curr_prim]])
-                        u_arm_temp[:, 0:6], self.action[env_count][actions[curr_prim]] = self.primitives.move_w_ori(self.action[env_count][actions[curr_prim]], self.states["eef_pos"], self.states["eef_quat"], self.target_dist[env_count][actions[curr_prim]])
-                        # if self.true_target_dist < 0.1:
-                            # self.temp_action = self.action[env_count][actions[curr_prim]]
+                        action_str = self.action[env_count][act[curr_prim]]
+                        curr_eef_pos = self.states["eef_pos"][env_count].unsqueeze(0)
+                        curr_eef_quat = self.states["eef_quat"][env_count].unsqueeze(0)
+                        move_dist = self.target_dist[env_count][act[curr_prim]]
+                        # print("curr_eef_pos shape: ", curr_eef_pos.shape)
+                        # print("curr_eef_quat shape: ", curr_eef_quat.shape)
+                        # print("move_dist shape: ", move_dist.shape)
+                        u_arm_temp[0:6], action_str = self.primitives[env_count].move_w_ori(action_str, curr_eef_pos, curr_eef_quat, move_dist)
+                        # print("pose diff ", self.primitives[0].get_pose_diff())
 
-                        if self.action[env_count][actions[curr_prim]] == "done":
+                        if self.true_target_dist <= 0.05:
+                            self.temp_action = action_str
+
+                        if action_str == "done":
                             # self.RL_flag[env_count] = 0
                             # print(self.temp_action)
-                            self.action[env_count][actions[curr_prim]] = self.temp_action
+                            action_str = self.temp_action
                             # print(self.action[env_count][actions[curr_prim]])
                             self.prim[env_count] += 1
-                            print("#############NEXT")
+                            # print("#############NEXT")
                             if curr_prim == 2:
                                 self.prim[env_count] = 0
                                 # reset arm to init pose
                                 self.deploy_actions(env_count, self.ur16e_default_dof_pos)
                                 self.frame_count[env_count] = 0
-                                print("#############RESET ARM")
+                                # print("#############RESET ARM")
                                 self.primitive_count[env_count] += 1
                                 if self.primitive_count[env_count] >= self.num_primtive_actions + 1:
                                     self.RL_flag[env_count] = 0
                                     self.run_dexnet[env_count] = 1
+                                    self.free_envs_list[env_count] = torch.tensor(1)
+                                    bin_objects_current_pose = {}
+                                    for object_id in self.selected_object_env[env_count]:
+                                        bin_objects_current_pose[int(object_id.item())] = self._root_state[env_count, self._object_model_id[int(object_id.item())-1], :][:7].type(
+                                            torch.float).clone().detach()
+                                    self.object_pose_store[env_count] = bin_objects_current_pose
                                     print("#############FINISH PRIMITIVE AND RESET COUNT")
                                 else:
                                     self.run_dexnet[env_count] = 0
-                                    print("#############WAIT NEXT PRIM")
+                                    print("#############WAIT NEXT PRIM IN SEQUENCE")
                                     self.init_go_to_start[env_count] = True
                                     self.go_to_start[env_count] = True
-
-
-
-                        self.temp_action = self.action[env_count][actions[curr_prim]]
-
-                        #     if self.prim == 3:
-                        #         self.prim = 0
-                        #         self.action = ['right', 'down', 'left', 'up']
-                        #     else:
-                        #         self.prim += 1
-                        # u_arm_temp = self._compute_osc_torques(u_arm_temp)
-                        # u_arm_temp[:, 0:3] = torch.tensor([0.15, 0, 0])
-                        # u_arm_temp[:, 3:6] = torch.tensor([0, 0, 0])
+                        self.temp_action = action_str
 
                         self.action_env = u_arm_temp.cpu()
                         # print("self.action_env: ", self.action_env)
+                        # print("self.action_env shape", self.action_env.shape)
                         # append [1, 0, 0] to every row of action_env
-                        self.action_env = torch.cat(
-                            (self.action_env, torch.tensor([[0, 0, 0, 0, 0]]).repeat(self.action_env.shape[0], 1)), dim=1)
-                        # print("u_arm_temp: ", u_arm_temp)       
-                    
+                        self.action_env = torch.cat((self.action_env,  torch.tensor([0, 0, 0, 0, 0]).unsqueeze(0) ), dim=1)# .repeat(self.action_env.shape[0], 1)), dim=1)       
+                        # print("self.action_env: ", self.action_env)
                 else:
 
                     # force sensor update
@@ -1663,11 +1720,10 @@ class RL_UR16eManipualtion(VecTask):
                             (env_list_reset_arm_pose, torch.tensor([env_count])), axis=0)
                         env_list_reset_objects = torch.cat(
                             (env_list_reset_objects, torch.tensor([env_count])), axis=0)
-
                     self.distance = torch.tensor([1, 1, 1])
                     # Giving the error between pre grasp pose and the current end effector pose
                     if (self.action_contrib[env_count] >= torch.tensor(1)):
-                        pose_factor, ori_factor = 1., 0.3
+                        pose_factor, ori_factor = 2.0, 1.0
                         self.action_env = torch.tensor([[pose_factor*T_ee_pose_to_pre_grasp_pose[0][3], pose_factor*T_ee_pose_to_pre_grasp_pose[1][3],
                                                         pose_factor *
                                                         T_ee_pose_to_pre_grasp_pose[2][3], ori_factor *
@@ -1820,8 +1876,8 @@ class RL_UR16eManipualtion(VecTask):
                                 "reset because of object re placement check")
                             oscillation = False
                             self.success[env_count] = False
-                            self.finished_prim[env_count] = 1
                             self.done[env_count] = 1
+                            self.finished_prim[env_count] = 1
                             json_save = {
                                 "force_array": [],
                                 "grasp point": self.grasp_point[env_count].tolist(),
@@ -1867,7 +1923,7 @@ class RL_UR16eManipualtion(VecTask):
 
                     # If arm cross the force required to grasp the object
                     if (self.frame_count[env_count] > torch.tensor(self.cooldown_frames) and self.frame_count_contact_object[env_count] == torch.tensor(0)):
-                        if ((torch.max(torch.abs(self.action_env[0][:3]))) <= 0.001 and (torch.max(torch.abs(self.action_env[0][3:6]))) <= 0.001):
+                        if ((torch.max(torch.abs(self.action_env[0][:3]))) <= 0.01 and (torch.max(torch.abs(self.action_env[0][3:6]))) <= 0.01):
                             self.action_contrib[env_count] -= 1
                             rgb_camera_tensor = self.gym.get_camera_image_gpu_tensor(
                                 self.sim, self.envs[env_count], self.camera_handles[env_count][1], gymapi.IMAGE_COLOR)
@@ -1949,8 +2005,8 @@ class RL_UR16eManipualtion(VecTask):
                             penetration = False
                             if (score_gripper == torch.tensor(0)):
                                 penetration = True
-                            self.finished_prim[env_count] = 1
                             self.done[env_count] = 1
+                            self.finished_prim[env_count] = 1
                             # saving the grasp point ad its properties if it was a successfull grasp
                             json_save = {
                                 "force_array": self.force_list_save[env_count].tolist(),
@@ -1986,9 +2042,9 @@ class RL_UR16eManipualtion(VecTask):
                             env_list_reset_objects = torch.cat(
                                 (env_list_reset_objects, torch.tensor([env_count])), axis=0)
                             oscillation = False
-                            self.success[env_count] = False
-                            self.finished_prim[env_count] = 1
+                            self.success[env_count] = 0
                             self.done[env_count] = 1
+                            self.finished_prim[env_count] = 1
                             json_save = {
                                 "force_array": [],
                                 "grasp point": self.grasp_point[env_count].tolist(),
@@ -2029,7 +2085,6 @@ class RL_UR16eManipualtion(VecTask):
         # Parallelizing multiple environments for resetting the arm for pre grasp pose or to reset the particular environment
         if (len(env_complete_reset) != 0 and len(env_list_reset_arm_pose) != 0):
             env_complete_reset = torch.unique(env_complete_reset)
-
             env_list_reset_objects = torch.cat(
                 (env_list_reset_objects, env_complete_reset), axis=0)
 
@@ -2055,7 +2110,7 @@ class RL_UR16eManipualtion(VecTask):
 
             env_ids = env_list_reset_arm_pose.to(self.device).type(torch.long)
             for i in env_ids:
-                if self.primitive_count[i] == 1:
+                if self.primitive_count[i] == 1 and self.RL_flag[i] == 1:
                     self.finished_prim[i] = True
                     print("#####################take obs")
             self.deploy_actions(env_ids, pos)
@@ -2075,9 +2130,10 @@ class RL_UR16eManipualtion(VecTask):
                 self.device).type(torch.long))
 
         self.actions = self.actions.clone().detach().to(self.device)
-
+        # print("actions: ", self.actions)
         # Split arm and gripper command
         u_arm, u_gripper = self.actions[:, :6], self.actions[:, 6]
+        # print("u_arm: ", u_arm)
 
         # Control arm (scale value first)
         u_arm = u_arm * self.cmd_limit / self.action_scale
@@ -2105,8 +2161,8 @@ class RL_UR16eManipualtion(VecTask):
                     oscillation = self.detect_oscillation(
                         self.force_list_save[env_count])
                     self.success[env_count] = False
-                    self.finished_prim[env_count] = 1
                     self.done[env_count] = 1
+                    self.finished_prim[env_count] = 1
                     json_save = {
                         "force_array": self.force_list_save[env_count].tolist(),
                         "grasp point": self.grasp_point[env_count].tolist(),
@@ -2139,6 +2195,8 @@ class RL_UR16eManipualtion(VecTask):
         self.compute_observations()
         self.compute_reward()
         self.finished_prim = torch.zeros(self.num_envs)
+        self.success = torch.zeros(self.num_envs)
+        self.done = torch.zeros(self.num_envs)
         # Compute resets
         self.reset_buf = torch.where(
             (self.progress_buf >= self.max_episode_length - 1), torch.ones_like(self.reset_buf), self.reset_buf)

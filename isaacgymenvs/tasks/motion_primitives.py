@@ -2,41 +2,45 @@ from isaacgym import gymapi
 import torch
 import numpy as np
 
-DEFAULT_OSC_DIST = 0.05
-DEFAULT_MIN_DIST_MUL = 0.7
-
+DEFAULT_OSC_DIST = 0.3
+DEFAULT_MIN_DIST_MUL = 0.2
 class Primitives():
     def __init__(self, num_envs, init_pose, device):
         self.target_pose = init_pose
         self.current_pose = init_pose
+        self.prev_pose = torch.tensor([[0., 0., 0.]], device=device)
         self.min_distance_to_goal = torch.full_like(init_pose, DEFAULT_OSC_DIST * DEFAULT_MIN_DIST_MUL)
         self.num_envs = num_envs
         self.moves = {
-                    "in": torch.tensor(num_envs * [[DEFAULT_OSC_DIST, 0, 0]], device=device),
-                    "right": torch.tensor(num_envs * [[0, -DEFAULT_OSC_DIST, 0]], device=device),
-                    "up": torch.tensor(num_envs * [[0, 0, DEFAULT_OSC_DIST]], device=device),
-                    "out": torch.tensor(num_envs * [[-DEFAULT_OSC_DIST, 0, 0]], device=device),
-                    "left": torch.tensor(num_envs * [[0, DEFAULT_OSC_DIST, 0]], device=device),
-                    "down": torch.tensor(num_envs * [[0, 0, -DEFAULT_OSC_DIST]], device=device),}
+                    "in": torch.tensor([[DEFAULT_OSC_DIST, 0, 0]], device=device),
+                    "right": torch.tensor([[0, -DEFAULT_OSC_DIST, 0]], device=device),
+                    "up": torch.tensor([[0, 0, DEFAULT_OSC_DIST]], device=device),
+                    "out": torch.tensor([[-DEFAULT_OSC_DIST, 0, 0]], device=device),
+                    "left": torch.tensor([[0, DEFAULT_OSC_DIST, 0]], device=device),
+                    "down": torch.tensor([[0, 0, -DEFAULT_OSC_DIST]], device=device),}
 
         self.executing = False
+        self.stuck_counter = 0
+        self.counter = 0
+
     def move(self, action, current_pose, target_dist):
         self.current_pose = current_pose
         if self.executing == False:
+            self.counter = 0
             self.target_pose = self.current_pose + target_dist
             self.executing = True
            
         # Get error
-        pose_diff = torch.clone(self.target_pose - self.current_pose)
+        self.pose_diff = torch.clone(self.target_pose - self.current_pose)
         # print('current_pose', self.current_pose)
         # print('target_pose', self.target_pose)
         # print('pose_diff', pose_diff)
         # print(self.target_pose)
         # # Check if done
-        if torch.all(torch.abs(pose_diff) < self.min_distance_to_goal):
+        if torch.all(torch.abs(self.pose_diff) < self.min_distance_to_goal):
             self.executing = False
             # print("done")
-            return torch.tensor(self.num_envs * [[0., 0., 0.]]), "done"
+            return torch.tensor([[0., 0., 0.]]), "done"
 
         # Zero out if less than level
         #pose_diff[pose_diff < self.min_distance_to_goal] = 0
@@ -51,10 +55,10 @@ class Primitives():
         # print(DEFAULT_OSC_DIST * DEFAULT_MIN_DIST_MUL)
         # print((torch.abs(pose_diff) < (DEFAULT_OSC_DIST * DEFAULT_MIN_DIST_MUL)))
         # print(((osc_params != 0) & (torch.abs(pose_diff) < (DEFAULT_OSC_DIST * DEFAULT_MIN_DIST_MUL))))
-        ind_dominant = ((osc_params != 0) & (torch.abs(pose_diff) < DEFAULT_OSC_DIST * DEFAULT_MIN_DIST_MUL)).nonzero()
+        ind_dominant = ((osc_params != 0) & (torch.abs(self.pose_diff) < DEFAULT_OSC_DIST * DEFAULT_MIN_DIST_MUL)).nonzero()
         # print(ind_dominant)
         # Get diff into new tensor
-        osc_params[(ind_non_dominant[:,:1], ind_non_dominant[:, 1:2])] = pose_diff[(ind_non_dominant[:,:1], ind_non_dominant[:, 1:2])]
+        osc_params[(ind_non_dominant[:,:1], ind_non_dominant[:, 1:2])] = self.pose_diff[(ind_non_dominant[:,:1], ind_non_dominant[:, 1:2])]
         # print(osc_params)
         # Zero out where goal has been reached
         # pose_diff[pose_diff < DEFAULT_MIN_DIST] = 0
@@ -64,6 +68,10 @@ class Primitives():
     
 
     def move_w_ori(self, action, current_pose, current_quat, target_dist):
+        # print("action", action)
+        # print("current_quat", current_quat)
+        # print("current_pose", current_pose)
+        # print("target_dist", target_dist)
         def quaternion_to_euler_angle_vectorized(w, x, y, z):
             ysqr = y * y
 
@@ -87,24 +95,49 @@ class Primitives():
         self.current_quat = current_quat
         if self.executing == False:
             self.target_pose = self.current_pose + target_dist
-            self.target_quat = torch.tensor(self.num_envs * [[0., 1.57, -1.57]], device="cuda:0")
+            self.target_quat = torch.tensor([[0., 1.57, -1.57]], device="cuda:0")
             self.executing = True
+            self.stuck_counter = 0
         # print(self.current_quat)
         # Get error
-        pose_diff = torch.clone(self.target_pose - self.current_pose)
+        self.pose_diff = torch.clone(self.target_pose - self.current_pose)
         ori_diff = torch.clone(self.target_quat - self.current_quat)
-        # print('pose_diff', pose_diff)
+        # print('current_pose', self.current_pose)
+        # print('target_pose', self.target_pose)
+        # print('pose_diff', self.pose_diff)
         # print('ori_diff', ori_diff)
-        # # Check if done
-        if torch.all(torch.abs(pose_diff) < self.min_distance_to_goal):
+
+        # update prev_pose with current_pose every 10 steps
+        if self.counter % 20 == 0:
+            self.prev_pose = torch.clone(self.current_pose)
+        self.counter += 1
+
+        # check if current pose is stuck for more than 10 steps
+        # print("current_pose", self.current_pose)
+        # print("prev_pose", self.prev_pose)
+        # print("pose_diff", torch.max(torch.abs(self.current_pose - self.prev_pose)))
+        if torch.max(torch.abs(self.current_pose - self.prev_pose)) < 0.001:
+            self.stuck_counter += 1
+        else:
+            self.stuck_counter = 0
+
+        if self.stuck_counter > 10:
+            print("stuck")
+            self.executing = False
+            return torch.tensor([[0., 0., 0., 0., 0., 0.]]), "done"
+
+
+        # Check if done
+        if torch.all(torch.abs(self.pose_diff) < self.min_distance_to_goal):
             self.executing = False
             # print("done")
-            return torch.tensor(self.num_envs * [[0., 0., 0., 0., 0., 0.]]), "done"
+            return torch.tensor([[0., 0., 0., 0., 0., 0.]]), "done"
 
         # Zero out if less than level
         #pose_diff[pose_diff < self.min_distance_to_goal] = 0
         # Get new tensor
         osc_params = torch.clone(self.moves[action])
+        # print("osc_params", osc_params)
         # print(osc_params)
         # Get indexes where zero
         ind_non_dominant = (osc_params == 0).nonzero()
@@ -114,10 +147,11 @@ class Primitives():
         # print(DEFAULT_OSC_DIST * DEFAULT_MIN_DIST_MUL)
         # print((torch.abs(pose_diff) < (DEFAULT_OSC_DIST * DEFAULT_MIN_DIST_MUL)))
         # print(((osc_params != 0) & (torch.abs(pose_diff) < (DEFAULT_OSC_DIST * DEFAULT_MIN_DIST_MUL))))
-        ind_dominant = ((osc_params != 0) & (torch.abs(pose_diff) < DEFAULT_OSC_DIST * DEFAULT_MIN_DIST_MUL)).nonzero()
+        ind_dominant = ((osc_params != 0) & (torch.abs(self.pose_diff) < DEFAULT_OSC_DIST * DEFAULT_MIN_DIST_MUL)).nonzero()
         # print(ind_dominant)
+        # print(ind_non_dominant)
         # Get diff into new tensor
-        osc_params[(ind_non_dominant[:,:1], ind_non_dominant[:, 1:2])] = pose_diff[(ind_non_dominant[:,:1], ind_non_dominant[:, 1:2])]
+        osc_params[(ind_non_dominant[:,:1], ind_non_dominant[:, 1:2])] = self.pose_diff[(ind_non_dominant[:,:1], ind_non_dominant[:, 1:2])]
         # print(osc_params)
         # Zero out where goal has been reached
         # pose_diff[pose_diff < DEFAULT_MIN_DIST] = 0
@@ -125,8 +159,10 @@ class Primitives():
         # print('osc_params', osc_params)
         # print('ori_diff', ori_diff)
         # append orientation diff to osc_params
-        osc_params = torch.cat((osc_params, ori_diff*0.2), 1)
+        osc_params = torch.cat((osc_params, ori_diff*5), 1)
+        # print("osc_params", osc_params)
         return osc_params, action
+    
 
         # if action != "done" and self.action == False:
         #     self.action = True
@@ -257,6 +293,8 @@ class Primitives():
 
     # strain VERB
     # to push against something very hard
+    def get_pose_diff(self):
+        return self.target_pose - self.current_pose
 
     def get_gymapi_transform(self, pose: list) -> gymapi.Transform:
         tmp = gymapi.Transform()

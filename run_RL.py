@@ -1,8 +1,9 @@
 import isaacgym
 import isaacgymenvs
 import torch
+import rl.rl_utils
 
-ne = 1
+ne = 2
 
 envs = isaacgymenvs.make(
 	seed=0,
@@ -21,10 +22,10 @@ obs = envs.reset()
 def step_primitives(action):
 	while True:
 		obs, reward, done, info = envs.step(action)
-		info = (obs['obs'][614400:])
+		info = (obs['obs'][:, 614400:])
 		take_obs = info[0]
-		if take_obs == 1:
-			print("observation returned")
+		if take_obs[0] == 1:
+			print("@@@@@@@@@@@@observation returned")
 			print(info)
 			return obs, reward, done, info
 
@@ -35,5 +36,6 @@ while True:
 	# -1 index: distance to move (in meters)
 
 	# TODO: Pass RL flag in to envs.step() so that the RL flag is on for i time steps
-	action = torch.tensor(ne * [[0.0, -0.03, 0.17, 0.10]])
+	action = torch.tensor(ne * [[0.11, 0., 0.28, 0.22]]).to("cuda:0")
 	obs, reward, done, info = step_primitives(action)
+	# obs, reward, done, info = envs.step(action)
