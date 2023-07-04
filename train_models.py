@@ -67,7 +67,7 @@ print("training environment name : " + env_name)
 env = isaacgymenvs.make(
 	seed=0,
 	task="RL_UR16eManipualtion",
-	num_envs=1,
+	num_envs=2,
 	sim_device="cuda:0", # cpu cuda:0
 	rl_device="cuda:0", # cpu cuda:0
 	multi_gpu=False,
@@ -199,14 +199,25 @@ i_episode = 0
 # training loop
 while time_step <= max_training_timesteps:
 
-    state = rearrange_state(env.reset()['obs']) # is this a usable state????
+    # state = rearrange_state(env.reset()['obs']) # is this a usable state????
+    state, reward, done = step_primitives_env_0(torch.tensor(2 * [[0.11, 0., 0.28, 0.22]]).to(device), env) #env.reset()
+
+    state, reward, done = state[None,:], reward[None, :], done[None, :] # remove when parallelized
+    state = rearrange_state(state)
     current_ep_reward = 0
     
     for t in range(1, max_ep_len+1):
         # select action with policy
         action = ppo_agent.select_action(state)
         action = clip_actions(action)
-        state, reward, done, _ = step_primitives(action, env)#env.step(action)
+
+        ''' hacky way to demonstrate multi env, but only actuallly training from env 0'''
+        # print("action shape", action.shape)
+        # copy action from policy to all envs
+        action = action.repeat(2, 1)
+        # print("action shape", action.shape)
+
+        state, reward, done = step_primitives_env_0(action, env)#env.step(action)
         state, reward, done = state[None,:], reward[None, :], done[None, :] # remove when parallelized
         state = rearrange_state(state)
 
