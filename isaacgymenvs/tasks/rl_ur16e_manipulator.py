@@ -281,7 +281,7 @@ class RL_UR16eManipualtion(VecTask):
             self.sim, asset_root, ur16e_asset_file, asset_options)
 
         ur16e_dof_stiffness = to_torch(
-            [0., 0., 0., 0., 0., 0., 0.], dtype=torch.float, device=self.device)
+            [0., 0., 0., 1e-3, 1e-3, 1e-4, 0.], dtype=torch.float, device=self.device)
         ur16e_dof_damping = to_torch(
             [0., 0., 0., 0., 0., 0., 0.], dtype=torch.float, device=self.device)
 
@@ -1376,6 +1376,8 @@ class RL_UR16eManipualtion(VecTask):
                     self.grasp_point_env[env_count] = self.grasp_point_temp
                     self.dexnet_score_env[env_count] = self.dexnet_score_temp
                     self.free_envs_list[env_count] = torch.tensor(0)
+                    if self.RL_flag[env_count] == torch.tensor(1):
+                        self.finished_prim[env_count] = 1
                 elif (total_objects != objects_spawned and (self.free_envs_list[env_count] == torch.tensor(1))):
                     print(f"Object falled down in environment {env_count}")
                     env_complete_reset = torch.cat(
@@ -1389,7 +1391,7 @@ class RL_UR16eManipualtion(VecTask):
                 self.action_env = torch.tensor(
                     [[0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0]], dtype=torch.float)
 
-                if ((env_count in self.grasp_angle_env) and (len(self.grasp_angle_env[env_count]) != 0)):
+                if ((env_count in self.grasp_angle_env) and (len(self.grasp_angle_env[env_count]) != 0)):                    
                     self.suction_deformation_score[env_count] = self.suction_deformation_score_env[env_count][0]
                     self.suction_deformation_score_env[env_count] = self.suction_deformation_score_env[env_count][1:]
                     self.grasp_angle[env_count] = self.grasp_angle_env[env_count][0]
@@ -1415,7 +1417,7 @@ class RL_UR16eManipualtion(VecTask):
                             (env_list_reset_objects, torch.tensor([env_count])), axis=0)
                         oscillation = False
                         self.success[env_count] = False
-                        self.finished_prim[env_count] = 1
+                        # self.finished_prim[env_count] = 1
                         self.done[env_count] = 1
                         # saving all the properties of a single pick
                         json_save = {
@@ -1530,13 +1532,13 @@ class RL_UR16eManipualtion(VecTask):
                         # print("action_orientation: ", action_orientation)
 
 
-                        pose_factor, ori_factor = 3.0, 1.0
+                        pose_factor, ori_factor = 1.5, 0.3
                         self.action_env = torch.tensor([[pose_factor*T_ee_pose_to_pre_grasp_pose[0][3], pose_factor*T_ee_pose_to_pre_grasp_pose[1][3],
                                                         pose_factor *
                                                         T_ee_pose_to_pre_grasp_pose[2][3], ori_factor *
                                                         action_orientation[0],
                                                         ori_factor*action_orientation[1], ori_factor*action_orientation[2], 0, 0, 0, 0, 0]], dtype=torch.float)
-                        if ((torch.max(torch.abs(self.action_env[0][:3]))) <= 0.01 and (torch.max(torch.abs(self.action_env[0][3:6]))) <= 0.01):
+                        if ((torch.max(torch.abs(self.action_env[0][:3]))) <= 0.005 and (torch.max(torch.abs(self.action_env[0][3:6]))) <= 0.005):
                             self.go_to_start[env_count] = False
                         
                     else:
@@ -1923,7 +1925,7 @@ class RL_UR16eManipualtion(VecTask):
 
                     # If arm cross the force required to grasp the object
                     if (self.frame_count[env_count] > torch.tensor(self.cooldown_frames) and self.frame_count_contact_object[env_count] == torch.tensor(0)):
-                        if ((torch.max(torch.abs(self.action_env[0][:3]))) <= 0.01 and (torch.max(torch.abs(self.action_env[0][3:6]))) <= 0.01):
+                        if ((torch.max(torch.abs(self.action_env[0][:3]))) <= 0.005 and (torch.max(torch.abs(self.action_env[0][3:6]))) <= 0.005):
                             self.action_contrib[env_count] -= 1
                             rgb_camera_tensor = self.gym.get_camera_image_gpu_tensor(
                                 self.sim, self.envs[env_count], self.camera_handles[env_count][1], gymapi.IMAGE_COLOR)
@@ -2109,10 +2111,6 @@ class RL_UR16eManipualtion(VecTask):
                 env_list_reset_arm_pose.to(self.device).type(torch.long))
 
             env_ids = env_list_reset_arm_pose.to(self.device).type(torch.long)
-            for i in env_ids:
-                if self.primitive_count[i] == 1 and self.RL_flag[i] == 1:
-                    self.finished_prim[i] = True
-                    print("#####################take obs")
             self.deploy_actions(env_ids, pos)
 
         elif (len(env_complete_reset) != 0):
