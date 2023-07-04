@@ -3,7 +3,7 @@ import torch
 import numpy as np
 
 DEFAULT_OSC_DIST = 0.3
-DEFAULT_MIN_DIST_MUL = 0.2
+DEFAULT_MIN_DIST_MUL = 0.05
 class Primitives():
     def __init__(self, num_envs, init_pose, device):
         self.target_pose = init_pose
