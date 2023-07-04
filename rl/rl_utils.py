@@ -44,6 +44,16 @@ def step_primitives(action, envs):
 			print(obs.shape)
 			print(info.shape)
 			return obs, reward, done, info
+		
+def step_primitives_env_0(action, envs):
+	while True:
+		obs, reward, done, info = envs.step(action)
+		imgs = obs['obs'][:, :614400]
+		info = obs['obs'][:, 614400:]
+		take_obs = info[0]
+		if take_obs[0] == 1:
+			print("@@@@@@@@@@@@observation returned")
+			return imgs[0], torch.tensor([info[0][1]]), torch.tensor([info[0][2]])
 
 def clip_actions(action):
 	action[:, 0] = action[:, 0] * 0.22 - 0.11
