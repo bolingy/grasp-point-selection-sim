@@ -70,17 +70,12 @@ class ResNet(nn.Module):
     
     def forward(self, x):
         x = self.conv1(x)
-        print('forward -0',torch.sum(torch.isnan(x)))
         x = self.maxpool(x)
-        print('forward 0',torch.sum(torch.isnan(x)))
         x = self.layer0(x)
         x = self.layer1(x)
         x = self.layer2(x)
         x = self.layer3(x)
-        print('forward 1',torch.sum(torch.isnan(x)))
         x = self.avgpool(x)
-        print('forward 2',torch.sum(torch.isnan(x)))
         x = x.view(x.size(0), -1)
         x = self.fc(x)
-        print('forward 3',torch.sum(torch.isnan(x)))
         return x

@@ -109,7 +109,6 @@ class ActorCritic(nn.Module):
 
         if self.has_continuous_action_space:
             action_mean = self.actor(state)
-            print('nan in state',torch.sum(torch.isnan(action_mean)))
             action_var = self.action_var.expand_as(action_mean)
             cov_mat = torch.diag_embed(action_var).to(self.device)
             dist = MultivariateNormal(action_mean, cov_mat)
@@ -191,7 +190,6 @@ class PPO:
             with torch.no_grad():
                 #state = torch.FloatTensor(state)#.to(self.device)
                 action, action_logprob, state_val = self.policy_old.act(state)
-            print('select action state shape',state.shape)
             self.buffer.states.append(state)
             self.buffer.actions.append(action)
             self.buffer.logprobs.append(action_logprob)
