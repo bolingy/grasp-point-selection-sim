@@ -17,17 +17,35 @@ envs = isaacgymenvs.make(
 # Observation space is eef_pos, eef_quat, q_gripper/q
 print("Observation space is", envs.observation_space)
 print("Action space is", envs.action_space)
-obs = envs.reset()
+
+def step_primitives_env_0(action):
+	while True:
+		obs, reward, done, info = envs.step(action)
+		imgs = obs['obs'][:, :614400]
+		info = obs['obs'][:, 614400:]
+		take_obs = info[0]
+		if take_obs[0] == 1:
+			print("@@@@@@@@@@@@observation returned")
+			return imgs[0], torch.tensor([info[0][1]]), torch.tensor([info[0][2]])
 
 def step_primitives(action):
 	while True:
 		obs, reward, done, info = envs.step(action)
-		info = (obs['obs'][:, 614400:])
-		take_obs = info[0]
-		if take_obs[0] == 1:
-			print("@@@@@@@@@@@@observation returned")
-			print(info)
-			return obs, reward, done, info
+		imgs = obs['obs'][:, :614400]
+		info = obs['obs'][:, 614400:]
+		# return all imgs that has info[env, 0] == 1
+		# if all info[env, 0] == 0, then don't return anything
+		indicies = torch.where(info[:, 0] == 1)
+		# select and return imgs with the selected indicies
+		imgs = imgs[indicies]
+		if imgs.shape[0] > 0:
+			# print("info indicies", info[indicies])
+			reward_temp = info[indicies][:, 1]
+			done_temp = info[indicies][:, 2]
+			# print("@@@@@@@@@@@@@@@")
+			# print("imgs, reward, done", imgs.shape, reward_temp.shape, done_temp.shape)
+			return imgs, reward_temp, done_temp
+			
 
 while True:
 	# action is specified by forces (6 dof) and gripper (1 dof)
@@ -37,5 +55,5 @@ while True:
 
 	# TODO: Pass RL flag in to envs.step() so that the RL flag is on for i time steps
 	action = torch.tensor(ne * [[0.11, 0., 0.28, 0.22]]).to("cuda:0")
-	obs, reward, done, info = step_primitives(action)
+	obs, reward, done = step_primitives_env_0(action)
 	# obs, reward, done, info = envs.step(action)
