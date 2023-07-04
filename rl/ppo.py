@@ -55,6 +55,7 @@ class ActorCritic(nn.Module):
             #                 nn.Tanh()
             #             )
             self.actor = ResNet(ResidualBlock, [3, 4, 6, 3], num_classes=self.action_dim)
+
         else:
             self.actor = nn.Sequential(
                             nn.Linear(state_dim, 64),
@@ -97,7 +98,7 @@ class ActorCritic(nn.Module):
             action_probs = self.actor(state)
             dist = Categorical(action_probs)
 
-        action = dist.sample()
+        action = torch.clamp(dist.sample(), min=0.0, max=1.0)
         action_logprob = dist.log_prob(action)
         state_val = self.critic(state)
 
@@ -108,6 +109,7 @@ class ActorCritic(nn.Module):
 
         if self.has_continuous_action_space:
             action_mean = self.actor(state)
+            print('nan in state',torch.sum(torch.isnan(action_mean)))
             action_var = self.action_var.expand_as(action_mean)
             cov_mat = torch.diag_embed(action_var).to(self.device)
             dist = MultivariateNormal(action_mean, cov_mat)
@@ -187,21 +189,19 @@ class PPO:
 
         if self.has_continuous_action_space:
             with torch.no_grad():
-                state = torch.FloatTensor(state).to(self.device)
+                #state = torch.FloatTensor(state)#.to(self.device)
                 action, action_logprob, state_val = self.policy_old.act(state)
-
+            print('select action state shape',state.shape)
             self.buffer.states.append(state)
             self.buffer.actions.append(action)
             self.buffer.logprobs.append(action_logprob)
             self.buffer.state_values.append(state_val)
-
-            return action.detach().cpu().numpy().flatten()
+            return action.detach()#.cpu().numpy().flatten()
 
         else:
             with torch.no_grad():
                 state = torch.FloatTensor(state).to(self.device)
                 action, action_logprob, state_val = self.policy_old.act(state)
-            
             self.buffer.states.append(state)
             self.buffer.actions.append(action)
             self.buffer.logprobs.append(action_logprob)
@@ -226,7 +226,9 @@ class PPO:
         rewards = (rewards - rewards.mean()) / (rewards.std() + 1e-7)
 
         # convert list to tensor
-        old_states = torch.squeeze(torch.stack(self.buffer.states, dim=0)).detach().to(self.device)
+
+        print('torch squeeze shape', torch.cat(self.buffer.states, dim=0).shape)
+        old_states = torch.cat(self.buffer.states, dim=0).detach().to(self.device)
         old_actions = torch.squeeze(torch.stack(self.buffer.actions, dim=0)).detach().to(self.device)
         old_logprobs = torch.squeeze(torch.stack(self.buffer.logprobs, dim=0)).detach().to(self.device)
         old_state_values = torch.squeeze(torch.stack(self.buffer.state_values, dim=0)).detach().to(self.device)

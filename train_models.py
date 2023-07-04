@@ -33,10 +33,10 @@ else:
 env_name = "robo_push"
 has_continuous_action_space = True
 
-max_ep_len = 400                    # max timesteps in one episode
+max_ep_len = 2                    # max timesteps in one episode
 max_training_timesteps = int(1e5)   # break training loop if timeteps > max_training_timesteps
 
-print_freq = max_ep_len * 4     # print avg reward in the interval (in num timesteps)
+print_freq = max_ep_len * 5     # print avg reward in the interval (in num timesteps)
 log_freq = max_ep_len * 2       # log avg reward in the interval (in num timesteps)
 save_model_freq = int(2e4)      # save model frequency (in num timesteps)
 
@@ -51,7 +51,7 @@ action_std = 0.01
 
 ################ PPO hyperparameters ################
 
-update_timestep = max_ep_len * 4      # update policy every n timesteps
+update_timestep = max_ep_len * 1      # update policy every n timesteps
 K_epochs = 40               # update policy for K epochs
 eps_clip = 0.2              # clip parameter for PPO
 gamma = 0.99                # discount factor
@@ -199,27 +199,28 @@ i_episode = 0
 # training loop
 while time_step <= max_training_timesteps:
 
-    state = rearrange_state(env.reset()['obs'].to('cpu'))
+    state = rearrange_state(env.reset()['obs']) # is this a usable state????
     current_ep_reward = 0
     
     for t in range(1, max_ep_len+1):
         # select action with policy
-        #action = ppo_agent.select_action(state)
-        action = torch.tensor([[0.0001, 0., 0., 0., 0., 0., 0.3, 0., 0.3]])
-        state, reward, done, _ = env.step(action)
-        state = rearrange_state(state['obs'])
-        # print(state.shape)
+        action = ppo_agent.select_action(state)
+        action = clip_actions(action)
+        state, reward, done, _ = step_primitives(action, env)#env.step(action)
+        state, reward, done = state[None,:], reward[None, :], done[None, :] # remove when parallelized
+        state = rearrange_state(state)
 
-#         # saving reward and is_terminals
-#         ppo_agent.buffer.rewards.append(reward)
-#         ppo_agent.buffer.is_terminals.append(done)
+        # saving reward and is_terminals
+        ppo_agent.buffer.rewards.append(reward)
+        ppo_agent.buffer.is_terminals.append(done)
         
-#         time_step +=1
-#         current_ep_reward += reward
+        time_step +=1
+        current_ep_reward += reward
 
-#         # update PPO agent
-#         if time_step % update_timestep == 0:
-#             ppo_agent.update()
+        # update PPO agent
+        if time_step % update_timestep == 0:
+            print('training ppo')
+            ppo_agent.update()
 
 #         # if continuous action space; then decay action std of ouput action distribution
 #         # if has_continuous_action_space and time_step % action_std_decay_freq == 0:

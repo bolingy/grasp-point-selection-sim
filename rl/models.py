@@ -40,7 +40,7 @@ class ResNet(nn.Module):
         super(ResNet, self).__init__()
         self.inplanes = 64
         self.conv1 = nn.Sequential(
-                        nn.Conv2d(3, 64, kernel_size = 7, stride = 2, padding = 3),
+                        nn.Conv2d(2, 64, kernel_size = 7, stride = 2, padding = 3),
                         nn.BatchNorm2d(64),
                         nn.ReLU())
         self.maxpool = nn.MaxPool2d(kernel_size = 3, stride = 2, padding = 1)
@@ -49,7 +49,7 @@ class ResNet(nn.Module):
         self.layer2 = self._make_layer(block, 256, layers[2], stride = 2)
         self.layer3 = self._make_layer(block, 512, layers[3], stride = 2)
         self.avgpool = nn.AvgPool2d(7, stride=1)
-        self.fc = nn.Linear(512, num_classes)
+        self.fc = nn.Linear(64512, num_classes)
         
     def _make_layer(self, block, planes, blocks, stride=1):
         downsample = None
@@ -70,14 +70,17 @@ class ResNet(nn.Module):
     
     def forward(self, x):
         x = self.conv1(x)
+        print('forward -0',torch.sum(torch.isnan(x)))
         x = self.maxpool(x)
+        print('forward 0',torch.sum(torch.isnan(x)))
         x = self.layer0(x)
         x = self.layer1(x)
         x = self.layer2(x)
         x = self.layer3(x)
-
+        print('forward 1',torch.sum(torch.isnan(x)))
         x = self.avgpool(x)
+        print('forward 2',torch.sum(torch.isnan(x)))
         x = x.view(x.size(0), -1)
         x = self.fc(x)
-
+        print('forward 3',torch.sum(torch.isnan(x)))
         return x
