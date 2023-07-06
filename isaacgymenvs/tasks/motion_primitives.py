@@ -122,7 +122,7 @@ class Primitives():
             self.stuck_counter = 0
 
         if self.stuck_counter > 10:
-            print("stuck")
+            # print("stuck")
             self.executing = False
             return torch.tensor([[0., 0., 0., 0., 0., 0.]]), "done"
 

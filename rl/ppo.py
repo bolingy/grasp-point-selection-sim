@@ -16,6 +16,8 @@ from .models import ResidualBlock, ResNet
 # import roboschool
 # import pybullet_envs
 
+DEBUG = True
+
 class RolloutBuffer:
     def __init__(self):
         self.actions = []
@@ -219,6 +221,28 @@ class PPO:
     def update(self, buffer=None):
         if (buffer is not None):
             self.buffer = copy.deepcopy(buffer)
+
+        if DEBUG:
+            print("buffer size", len(self.buffer.states))
+            print("buffer", self.buffer)
+            print("self.buffer.rewards", self.buffer.rewards)
+            print("self.buffer.is_terminals", self.buffer.is_terminals)
+            print("self.buffer.states", self.buffer.states)
+            print("self.buffer.actions", self.buffer.actions)
+            print("self.buffer.logprobs", self.buffer.logprobs)
+            print("self.buffer.state_values", self.buffer.state_values)
+
+            # find nans in buffer state, action, logprobs, state_values
+            for i in range(len(self.buffer.states)):
+                if torch.isnan(self.buffer.states[i]).any():
+                    print("nan in buffer.states[{}]".format(i))
+                if torch.isnan(self.buffer.actions[i]).any():
+                    print("nan in buffer.actions[{}]".format(i))
+                if torch.isnan(self.buffer.logprobs[i]).any():
+                    print("nan in buffer.logprobs[{}]".format(i))
+                if torch.isnan(self.buffer.state_values[i]).any():
+                    print("nan in buffer.state_values[{}]".format(i))
+
         # Monte Carlo estimate of returns
         rewards = []
         discounted_reward = 0
@@ -239,16 +263,9 @@ class PPO:
         old_logprobs = torch.squeeze(torch.stack(self.buffer.logprobs, dim=0)).detach().to(self.device)
         old_state_values = torch.squeeze(torch.stack(self.buffer.state_values, dim=0)).detach().to(self.device)
 
-        print("rewards shape", rewards.shape)
-        print("self.buffer.rewards", self.buffer.rewards)
-        print("old_states shape", old_states.shape)
-        print("old_actions shape", old_actions.shape)
-        print("old_logprobs shape", old_logprobs.shape)
-        print("old_state_values shape", old_state_values.shape)
         # calculate advantages
         advantages = rewards.detach() - old_state_values.detach()
         
-
         # Optimize policy for K epochs
         for _ in range(self.K_epochs):
 

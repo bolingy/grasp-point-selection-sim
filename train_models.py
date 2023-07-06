@@ -66,7 +66,7 @@ print("training environment name : " + env_name)
 
 env = isaacgymenvs.make(
 	seed=0,
-	task="RL_UR16eManipualtion",
+	task="RL_UR16eManipulation",
 	num_envs=2,
 	sim_device="cuda:0", # cpu cuda:0
 	rl_device="cuda:0", # cpu cuda:0

@@ -31,10 +31,10 @@ if(torch.cuda.is_available()):
 else:
     print("Device set to : cpu")
 
-env_name = "robo_push"
+env_name = "bin_picking"
 has_continuous_action_space = True
 
-max_ep_len = 2                    # max timesteps in one episode
+max_ep_len = 2                     # max timesteps in one episode
 max_training_timesteps = int(1e5)   # break training loop if timeteps > max_training_timesteps
 
 print_freq = max_ep_len * 5     # print avg reward in the interval (in num timesteps)
@@ -62,13 +62,13 @@ lr_critic = 0.001       # learning rate for critic network
 
 random_seed = 0         # set random seed if required (0 = no random seed)
 
-ne = 2 # number of environments
+ne = 6 # number of environments
 
 print("training environment name : " + env_name)
 
 env = isaacgymenvs.make(
 	seed=0,
-	task="RL_UR16eManipualtion",
+	task="RL_UR16eManipulation",
 	num_envs=ne,
 	sim_device="cuda:0", # cpu cuda:0
 	rl_device="cuda:0", # cpu cuda:0
@@ -205,7 +205,7 @@ while time_step <= max_training_timesteps:
 
     # state = rearrange_state(env.reset()['obs']) # is this a usable state????
     state, reward, done, indicies = step_primitives(torch.tensor(ne * [[0.11, 0., 0.28, 0.22]]).to(device), env) #env.reset() by kickstarting w random action
-    print(state.shape, reward.shape, done.shape, indicies)
+    # print(state.shape, reward.shape, done.shape, indicies)
     # state, reward, done = state[None,:], reward[None, :], done[None, :] # remove when parallelized
     state = rearrange_state(state)
     current_ep_reward = 0
@@ -215,16 +215,15 @@ while time_step <= max_training_timesteps:
     for t in range(1, max_ep_len+1):
         for i in indicies[0].tolist():
             action, action_logprob, state_val = ppo_agent.select_action(state[i][None,:])
-            action = clip_actions(action)
-            actions[i] = action
-
             bufs[i].states.append(state[i][None,:].clone().detach())
             bufs[i].actions.append(action.clone().detach())
             bufs[i].logprobs.append(action_logprob.clone().detach())
             bufs[i].state_values.append(state_val.clone().detach())
+            action = clip_actions(action)
+            actions[i] = action
         state, reward, done, indicies = step_primitives(actions, env)#env.step(action)
         state = rearrange_state(state)
-        print("buf of env 0", str(bufs[0]))
+        # print("buf of env 0", str(bufs[0]))
 
         # indicies contains the indicies of the environments that have valid observations
         # saving reward and is_terminals
