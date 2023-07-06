@@ -35,15 +35,17 @@ def rearrange_state(state, b=2, h=480, w=640):
 def step_primitives(action, envs):
 	while True:
 		obs, reward, done, info = envs.step(action)
-		# print(obs['obs'][:, 614400:])
-		info = (obs['obs'][614400:])
-		obs = obs['obs'][:614400]
-		take_obs = info[0]
-		if take_obs == 1:
-			print("observation returned")
-			print(obs.shape)
-			print(info.shape)
-			return obs, reward, done, info
+		imgs = obs['obs'][:, :614400]
+		info = obs['obs'][:, 614400:]
+		# return all imgs that has info[env, 0] == 1
+		# if all info[env, 0] == 0, then don't return anything
+		# select and return imgs with the selected indicies
+		indicies = torch.where(info[:, 0] == 1)
+		# if indicies are not empty, then return the imgs
+		if indicies[0].shape[0] > 0:
+			reward_temp = info[:, 1]
+			done_temp = info[:, 2]
+			return imgs, reward_temp, done_temp, indicies
 		
 def step_primitives_env_0(action, envs):
 	while True:
@@ -61,3 +63,4 @@ def clip_actions(action):
 	action[:, 2] = action[:, 2] * 0.28
 	action[:, 3] = action[:, 3] * 0.44 - 0.22
 	return action
+	

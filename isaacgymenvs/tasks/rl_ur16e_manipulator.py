@@ -281,7 +281,7 @@ class RL_UR16eManipualtion(VecTask):
             self.sim, asset_root, ur16e_asset_file, asset_options)
 
         ur16e_dof_stiffness = to_torch(
-            [0., 0., 0., 1e-3, 1e-3, 1e-4, 0.], dtype=torch.float, device=self.device)
+            [0., 0., 0., 0., 0., 0., 0.], dtype=torch.float, device=self.device)
         ur16e_dof_damping = to_torch(
             [0., 0., 0., 0., 0., 0., 0.], dtype=torch.float, device=self.device)
 

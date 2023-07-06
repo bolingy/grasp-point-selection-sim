@@ -198,6 +198,8 @@ log_running_episodes = 0
 time_step = 0
 i_episode = 0
 
+bufs = [RolloutBuffer() for _ in range(ne)]
+
 # training loop
 while time_step <= max_training_timesteps:
 
@@ -209,35 +211,31 @@ while time_step <= max_training_timesteps:
     current_ep_reward = 0
     actions = torch.tensor(ne * [[0.11, 0., 0.28, 0.22]]).to(device)
 
-    bufs = [RolloutBuffer() for _ in range(ne)]
 
     for t in range(1, max_ep_len+1):
-        print("bufs", bufs)
-        print("buf of env 0", str(bufs[0]))
         for i in indicies[0].tolist():
             action, action_logprob, state_val = ppo_agent.select_action(state[i][None,:])
             action = clip_actions(action)
             actions[i] = action
 
-            bufs[i].states.append(state)
-            bufs[i].actions.append(action)
-            bufs[i].logprobs.append(action_logprob)
-            bufs[i].state_values.append(state_val)
+            bufs[i].states.append(state[i][None,:].clone().detach())
+            bufs[i].actions.append(action.clone().detach())
+            bufs[i].logprobs.append(action_logprob.clone().detach())
+            bufs[i].state_values.append(state_val.clone().detach())
         state, reward, done, indicies = step_primitives(actions, env)#env.step(action)
         state = rearrange_state(state)
-            
+        print("buf of env 0", str(bufs[0]))
+
         # indicies contains the indicies of the environments that have valid observations
         # saving reward and is_terminals
         for i in indicies[0].tolist():
-            bufs[i].rewards.append(reward[i])
-            bufs[i].is_terminals.append(done[i])
+            bufs[i].rewards.append(reward[i].clone().detach().unsqueeze(0))
+            bufs[i].is_terminals.append(done[i].clone().detach().unsqueeze(0))
 
         # update PPO agent if environment is ready to be updated
         for i in range(ne):
-            print("length of buffer", bufs[i].rewards)
             # print("is ready to update", bufs[i].is_ready_to_update(max_ep_len))
             if bufs[i].is_ready_to_update(max_ep_len):
-                print("training model")
                 ppo_agent.update(bufs[i])
                 bufs[i].clear()
 

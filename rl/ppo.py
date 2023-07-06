@@ -7,6 +7,7 @@ import torch
 import torch.nn as nn
 from torch.distributions import MultivariateNormal
 from torch.distributions import Categorical
+import copy
 
 import numpy as np
 
@@ -24,6 +25,8 @@ class RolloutBuffer:
         self.state_values = []
         self.is_terminals = []
     
+    def is_ready_to_update(self, max_ep_len):
+        return len(self.actions) >= max_ep_len and len(self.actions) == len(self.rewards)
 
     def clear(self):
         del self.actions[:]
@@ -32,6 +35,11 @@ class RolloutBuffer:
         del self.rewards[:]
         del self.state_values[:]
         del self.is_terminals[:]
+
+    def __str__(self) -> str:
+        return "RolloutBuffer(actions={}, states={}, logprobs={}, rewards={}, state_values={}, is_terminals={})".format(
+            len(self.actions), len(self.states), len(self.logprobs), len(self.rewards), len(self.state_values), len(self.is_terminals)
+        )
 
 
 class ActorCritic(nn.Module):
@@ -194,7 +202,7 @@ class PPO:
             self.buffer.actions.append(action)
             self.buffer.logprobs.append(action_logprob)
             self.buffer.state_values.append(state_val)
-            return action.detach()#.cpu().numpy().flatten()
+            return action.detach(), action_logprob.detach(), state_val.detach()
 
         else:
             with torch.no_grad():
@@ -208,8 +216,9 @@ class PPO:
             return action.item()
 
 
-    def update(self):
-
+    def update(self, buffer=None):
+        if (buffer is not None):
+            self.buffer = copy.deepcopy(buffer)
         # Monte Carlo estimate of returns
         rewards = []
         discounted_reward = 0
@@ -225,12 +234,17 @@ class PPO:
 
         # convert list to tensor
 
-        print('torch squeeze shape', torch.cat(self.buffer.states, dim=0).shape)
-        old_states = torch.cat(self.buffer.states, dim=0).detach().to(self.device)
+        old_states = torch.squeeze(torch.stack(self.buffer.states, dim=0)).detach().to(self.device)
         old_actions = torch.squeeze(torch.stack(self.buffer.actions, dim=0)).detach().to(self.device)
         old_logprobs = torch.squeeze(torch.stack(self.buffer.logprobs, dim=0)).detach().to(self.device)
         old_state_values = torch.squeeze(torch.stack(self.buffer.state_values, dim=0)).detach().to(self.device)
 
+        print("rewards shape", rewards.shape)
+        print("self.buffer.rewards", self.buffer.rewards)
+        print("old_states shape", old_states.shape)
+        print("old_actions shape", old_actions.shape)
+        print("old_logprobs shape", old_logprobs.shape)
+        print("old_state_values shape", old_state_values.shape)
         # calculate advantages
         advantages = rewards.detach() - old_state_values.detach()
         
