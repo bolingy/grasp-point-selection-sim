@@ -689,7 +689,7 @@ class UR16eManipulation(VecTask):
         for env_count in env_ids:
             env_count = env_count.item()
             # How many objects should we spawn 2 or 3
-            probabilities = [0.1, 0.5, 1.0]
+            probabilities = [0.05, 0.55, 1.0]
             random_number = self.random_number_with_probabilities(probabilities)
             # random_number = random.choice([1, 2, 3])
             random_number += 1
@@ -969,7 +969,10 @@ class UR16eManipulation(VecTask):
 
                 objects_spawned = len(torch.unique(segmask_object_count))
                 total_objects = len(self.selected_object_env[env_count])+1
+
+                segmask_object_coords = segmask[331:538, 642:852]
                 
+                object_coords_match = cv2.countNonZero(segmask.cpu().numpy()) == cv2.countNonZero(segmask_object_coords.cpu().numpy())
 
                 _all_objects_current_pose = {}
                 _all_object_position_error = torch.tensor(0.0).to(self.device)
@@ -992,7 +995,7 @@ class UR16eManipulation(VecTask):
 
                 # check if the environment returned from reset and the frame for that enviornment is 30 or not
                 # 30 frames is for cooldown period at the start for the simualtor to settle down
-                if ((self.free_envs_list[env_count] == torch.tensor(1)) and total_objects == objects_spawned):
+                if ((self.free_envs_list[env_count] == torch.tensor(1)) and total_objects == objects_spawned and object_coords_match):
                     '''
                     Running DexNet 3.0 after investigating the pose error after spawning
                     '''
