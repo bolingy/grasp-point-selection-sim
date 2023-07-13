@@ -26,9 +26,9 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-from .ur16e_manipulator import UR16eManipualtion
+from .ur16e_manipulator import UR16eManipulation
 
 # Mappings from strings to environments
 isaacgym_task_map = {
-    "UR16eManipualtion": UR16eManipualtion,
+    "UR16eManipulation": UR16eManipulation,
 }
