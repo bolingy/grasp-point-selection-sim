@@ -13,6 +13,7 @@ import numpy as np
 
 import gym
 from .models import ResidualBlock, ResNet
+from matplotlib import pyplot as plt
 # import roboschool
 # import pybullet_envs
 
@@ -27,8 +28,24 @@ class RolloutBuffer:
         self.state_values = []
         self.is_terminals = []
     
-    def is_ready_to_update(self, max_ep_len):
-        return len(self.actions) >= max_ep_len and len(self.actions) == len(self.rewards)
+    def is_done(self):
+        if len(self.is_terminals) == 0:
+            return False
+        return self.is_terminals[-1]
+
+    # def is_ready_to_update(self, max_ep_len):
+    #     return len(self.states) >= max_ep_len -1 and len(self.actions) == len(self.rewards)
+
+    def append(self, buf_to_append):
+        self.actions.extend(buf_to_append.actions)
+        self.states.extend(buf_to_append.states)
+        self.logprobs.extend(buf_to_append.logprobs)
+        self.rewards.extend(buf_to_append.rewards)
+        self.state_values.extend(buf_to_append.state_values)
+        self.is_terminals.extend(buf_to_append.is_terminals)
+
+    def size(self):
+        return len(self.states)
 
     def clear(self):
         del self.actions[:]
@@ -42,6 +59,12 @@ class RolloutBuffer:
         return "RolloutBuffer(actions={}, states={}, logprobs={}, rewards={}, state_values={}, is_terminals={})".format(
             len(self.actions), len(self.states), len(self.logprobs), len(self.rewards), len(self.state_values), len(self.is_terminals)
         )
+    
+    # print full buffer
+    def print_buffer(self):
+        print("RolloutBuffer(actions={}, logprobs={}, rewards={}, state_values={}, is_terminals={})".format(
+            self.actions, self.logprobs, self.rewards, self.state_values, self.is_terminals
+        ))
 
 
 class ActorCritic(nn.Module):
@@ -56,7 +79,9 @@ class ActorCritic(nn.Module):
 
         # actor
         if has_continuous_action_space :
+
             # self.actor = nn.Sequential(
+            #                 nn.Flatten(),
             #                 nn.Linear(state_dim, 64),
             #                 nn.Tanh(),
             #                 nn.Linear(64, 64),
@@ -118,9 +143,12 @@ class ActorCritic(nn.Module):
     def evaluate(self, state, action):
 
         if self.has_continuous_action_space:
+            # print("State is nan", torch.isnan(state).any())
             action_mean = self.actor(state)
             action_var = self.action_var.expand_as(action_mean)
             cov_mat = torch.diag_embed(action_var).to(self.device)
+            # print("action_mean", action_mean)
+            # print("cov_mat", cov_mat)
             dist = MultivariateNormal(action_mean, cov_mat)
             
             # for single action continuous environments
@@ -195,7 +223,7 @@ class PPO:
 
 
     def select_action(self, state):
-
+        
         if self.has_continuous_action_space:
             with torch.no_grad():
                 #state = torch.FloatTensor(state)#.to(self.device)
@@ -206,32 +234,14 @@ class PPO:
             self.buffer.state_values.append(state_val)
             return action.detach(), action_logprob.detach(), state_val.detach()
 
-        else:
-            with torch.no_grad():
-                state = torch.FloatTensor(state).to(self.device)
-                action, action_logprob, state_val = self.policy_old.act(state)
-            self.buffer.states.append(state)
-            self.buffer.actions.append(action)
-            self.buffer.logprobs.append(action_logprob)
-            self.buffer.state_values.append(state_val)
-
-            return action.item()
-
 
     def update(self, buffer=None):
+        # buffer = self.buffer
         if (buffer is not None):
             self.buffer = copy.deepcopy(buffer)
+        self.buffer.print_buffer()
 
         if DEBUG:
-            print("buffer size", len(self.buffer.states))
-            print("buffer", self.buffer)
-            print("self.buffer.rewards", self.buffer.rewards)
-            print("self.buffer.is_terminals", self.buffer.is_terminals)
-            print("self.buffer.states", self.buffer.states)
-            print("self.buffer.actions", self.buffer.actions)
-            print("self.buffer.logprobs", self.buffer.logprobs)
-            print("self.buffer.state_values", self.buffer.state_values)
-
             # find nans in buffer state, action, logprobs, state_values
             for i in range(len(self.buffer.states)):
                 if torch.isnan(self.buffer.states[i]).any():

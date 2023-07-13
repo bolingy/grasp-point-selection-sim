@@ -121,7 +121,7 @@ class RL_UR16eManipulation(VecTask):
             self.gym.viewer_camera_look_at(self.viewer, None, cam_pos, cam_target)
 
         self.ur16e_default_dof_pos = to_torch(
-            [1.57, 0, -1.57, 0, 1.57, 0, 0], device=self.device
+            [-1.57, 0, -1.57, 0, 0, 0, 0], device=self.device
         )
 
         self.cooldown_frames = 150
@@ -229,7 +229,6 @@ class RL_UR16eManipulation(VecTask):
         self.num_primtive_actions = self.cfg["env"]["numPrimitiveActions"]
         self.current_directory = os.getcwd()
         self.init_go_to_start = torch.ones(self.num_envs)
-        self.return_pre_grasp = torch.zeros(self.num_envs)
         self.go_to_start = torch.ones(self.num_envs)
         self.success = torch.zeros(self.num_envs)
 
@@ -769,7 +768,6 @@ class RL_UR16eManipulation(VecTask):
             self.RL_flag[env_id] = torch.tensor(1)
             self.go_to_start[env_id] = torch.tensor(1)
             self.init_go_to_start[env_id] = torch.tensor(1)
-            self.return_pre_grasp[env_id] = torch.tensor(0)
             self.primitive_count[env_id.item()] = torch.tensor(1)
             # self.finished_prim[env_id] = torch.tensor(0)
 
@@ -841,9 +839,8 @@ class RL_UR16eManipulation(VecTask):
             # if self.done[env_count] == 1:
             self.run_dexnet[env_id] = torch.tensor(1)
             # self.RL_flag[env_count] = torch.tensor(1)
-            self.go_to_start[env_id] = torch.tensor(1)
-            self.init_go_to_start[env_id] = torch.tensor(1)
-            self.return_pre_grasp[env_id] = torch.tensor(0)
+            self.go_to_start[env_count] = torch.tensor(1)
+            self.init_go_to_start[env_count] = torch.tensor(1)
             self.primitive_count[env_id.item()] = torch.tensor(1)
             # self.finished_prim[env_id] = torch.tensor(0)
 
@@ -1000,8 +997,8 @@ class RL_UR16eManipulation(VecTask):
         self.seg_buf = self.seg_buf[:, 180:660, 410:1050]
         # self.seg_buf = self.seg_buf.unsqueeze(-1)
 
-        # plot latest image from rgb_buf WRONG
-        # if self.finished_prim_buf[-1] == 1:
+        # plot latest image from rgb_buf
+        # if torch.max(self.finished_prim_buf) == 1:
         #     plt.imshow(self.rgb_buf[-1].cpu().numpy())
         #     plt.show()
 
@@ -1360,9 +1357,7 @@ class RL_UR16eManipulation(VecTask):
                     self.dexnet_score_env[env_count] = self.dexnet_score_temp
                     self.free_envs_list[env_count] = torch.tensor(0)
                     if self.RL_flag[env_count] == torch.tensor(1):
-                        # print("pass obs 1")
                         self.finished_prim[env_count] = 1
-                    
                 elif (total_objects != objects_spawned and (self.free_envs_list[env_count] == torch.tensor(1))):
                     # print(f"Object falled down in environment {env_count}")
                     env_complete_reset = torch.cat(
@@ -1455,14 +1450,9 @@ class RL_UR16eManipulation(VecTask):
                     self.prim_target_dist_y = action_temp[env_count, 10]
                     if(self.go_to_start[env_count]):
                         if self.init_go_to_start[env_count] and self.primitive_count[env_count] > 1:
-                            if self.return_pre_grasp[env_count] == 0:
-                                self.finished_prim[env_count] = 1
-                                self.return_pre_grasp[env_count] = 1
-                            else:
-                                self.deploy_actions(env_count, to_torch([-0.2578, -1.8044, 1.5144, 0.3867, 1.4177, -0.4511, 0.], device=self.device))
-                            # print("pass obs 2")
-                                self.return_pre_grasp[env_count] = 0
-                                self.init_go_to_start[env_count] = False
+                            self.finished_prim[env_count] = 1
+                            # print("!!!!!!!!!!!!!!!!!!pass obs")
+                            self.init_go_to_start[env_count] = False
                         '''
                         Transformation for static links
                         '''
@@ -2130,7 +2120,7 @@ class RL_UR16eManipulation(VecTask):
                         self.force_list_save[env_count])
                     self.success[env_count] = False
                     self.done[env_count] = 1
-                    # self.finished_prim[env_count] = 1
+                    self.finished_prim[env_count] = 1
                     json_save = {
                         "force_array": self.force_list_save[env_count].tolist(),
                         "grasp point": self.grasp_point[env_count].tolist(),
@@ -2168,13 +2158,6 @@ class RL_UR16eManipulation(VecTask):
         # Compute resets
         self.reset_buf = torch.where(
             (self.progress_buf >= self.max_episode_length - 1), torch.ones_like(self.reset_buf), self.reset_buf)
-        # add envs from reset_buf to finished_prim
-        self.finished_prim = torch.where(
-            self.reset_buf.detach().cpu() == 1, torch.ones_like(self.finished_prim), self.finished_prim)
-        self.success = torch.where(
-            self.reset_buf.detach().cpu() == 1, torch.zeros_like(self.finished_prim), self.finished_prim)
-        self.done = torch.where(
-            self.reset_buf.detach().cpu() == 1, torch.ones_like(self.finished_prim), self.finished_prim)
 
     def quaternion_conj(self, q):
         w, x, y, z = q

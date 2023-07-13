@@ -12,7 +12,7 @@ env:
 
   clipObservations: 255.0
   clipActions: 1.0
-  numPrimitiveActions: 2
+  numPrimitiveActions: 3
 
   startPositionNoise: 0.0
   startRotationNoise: 0.0

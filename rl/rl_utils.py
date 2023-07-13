@@ -37,14 +37,22 @@ def step_primitives(action, envs):
 		obs, reward, done, info = envs.step(action)
 		imgs = obs['obs'][:, :614400]
 		info = obs['obs'][:, 614400:]
-		# return all imgs that has info[env, 0] == 1
-		# if all info[env, 0] == 0, then don't return anything
-		# select and return imgs with the selected indicies
-		indicies = torch.where(info[:, 0] == 1)
+		# if imgs contain nan, then make it 0
+		# imgs[torch.isnan(imgs)] = 255
+
+		# vector  num_envs long of info[:, 0] called indicies
+		indicies = info[:, 0].bool()
+		# print('indicies: ', indicies)
 		# if indicies are not empty, then return the imgs
-		if indicies[0].shape[0] > 0:
+		if torch.sum(indicies) > 0:
 			reward_temp = info[:, 1]
 			done_temp = info[:, 2]
+			# print("observation returned")
+			# print all observations of env 0
+			# print('imgs: ', imgs[0])
+			# if indicies[0] == 1:
+				# print('reward: ', reward_temp[0])
+				# print('done: ', done_temp[0])
 			return imgs, reward_temp, done_temp, indicies
 		
 def step_primitives_env_0(action, envs):
@@ -57,10 +65,17 @@ def step_primitives_env_0(action, envs):
 			print("@@@@@@@@@@@@observation returned")
 			return imgs[0], torch.tensor([info[0][1]]), torch.tensor([info[0][2]])
 
-def clip_actions(action):
+def scale_actions(action):
 	action[:, 0] = action[:, 0] * 0.22 - 0.11
 	action[:, 1] = action[:, 1] * 0.12 - 0.02
 	action[:, 2] = action[:, 2] * 0.28
 	action[:, 3] = action[:, 3] * 0.44 - 0.22
 	return action
+
+def returns_to_device(state, reward, done, indicies, device):
+	state = state.to(device)
+	reward = reward.to(device)
+	done = done.to(device)
+	indicies = indicies.to(device)
+	return state, reward, done, indicies
 	

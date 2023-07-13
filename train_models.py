@@ -209,7 +209,7 @@ while time_step <= max_training_timesteps:
     for t in range(1, max_ep_len+1):
         # select action with policy
         action, _, _ = ppo_agent.select_action(state)
-        action = clip_actions(action)
+        action = scale_actions(action)
 
         ''' hacky way to demonstrate multi env, but only actuallly training from env 0'''
         # print("action shape", action.shape)
@@ -220,6 +220,7 @@ while time_step <= max_training_timesteps:
         state, reward, done = step_primitives_env_0(action, env)#env.step(action)
         state, reward, done = state[None,:], reward[None, :], done[None, :] # remove when parallelized
         state = rearrange_state(state)
+        print("state shape", state.shape)   
 
         # saving reward and is_terminals
         ppo_agent.buffer.rewards.append(reward)
