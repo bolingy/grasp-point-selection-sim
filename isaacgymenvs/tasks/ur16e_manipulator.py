@@ -1056,7 +1056,7 @@ class UR16eManipulation(VecTask):
                         1).type(torch.int)
 
                     env_number = env_count
-                    new_dir_path = os.path.join(self.data_path, f"env_{env_number}/")
+                    new_dir_path = os.path.join(self.data_path, f"{env_number}/")
 
                     env_config = self.config_env_count[env_count].type(torch.int).item()
 
