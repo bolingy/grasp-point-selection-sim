@@ -50,7 +50,9 @@ def get_rlgames_env_creator(
         multi_gpu: bool = False,
         post_create_hook: Callable = None,
         virtual_screen_capture: bool = False,
-        force_render: bool = False,
+        force_render: bool = False,        
+        data_path: str = None,
+
 ):
     """Parses the configuration parameters for the environment task and creates a VecTask
 
@@ -83,6 +85,7 @@ def get_rlgames_env_creator(
             headless=headless,
             virtual_screen_capture=virtual_screen_capture,
             force_render=force_render,
+            data_path=data_path,
         )
 
         if post_create_hook is not None:

@@ -13,6 +13,10 @@ from isaacgymenvs.tasks.base.vec_task import VecTask
 
 import math
 
+# For camera module
+from PIL import Image
+import matplotlib.pyplot as plt
+
 from suction_cup_modelling.suction_score_calcualtor import calcualte_suction_score
 from suction_cup_modelling.force_calculator import calcualte_force
 
@@ -24,12 +28,14 @@ import assets.urdf_models.models_data as md
 from homogeneous_trasnformation_and_conversion.rotation_conversions import *
 import pandas as pd
 
+import cv2
+
 from pathlib import Path
 cur_path = str(Path(__file__).parent.absolute())
 
-class UR16eManipualtion(VecTask):
+class UR16eManipulation(VecTask):
 
-    def __init__(self, cfg, rl_device, sim_device, graphics_device_id, headless, virtual_screen_capture, force_render):
+    def __init__(self, cfg, rl_device, sim_device, graphics_device_id, headless, virtual_screen_capture, force_render, data_path=None):
         self.cfg = cfg
 
         self.max_episode_length = self.cfg["env"]["episodeLength"]
@@ -112,7 +118,11 @@ class UR16eManipualtion(VecTask):
         self.cooldown_frames = 150
 
         # System IDentification data results
-        self.cur_path = str(Path(__file__).parent.absolute())
+        self.data_path = data_path or os.path.expanduser("~/temp/grasp_data_05/")
+        for env_number in range(self.num_envs):
+            new_dir_path = os.path.join(self.data_path, f"{env_number}/")
+            os.makedirs(new_dir_path, exist_ok=True)
+
         self.force_list = np.array([])
         self.rgb_camera_visualization = None
         self.dexnet_coordinates = np.array([])
@@ -679,7 +689,7 @@ class UR16eManipualtion(VecTask):
         for env_count in env_ids:
             env_count = env_count.item()
             # How many objects should we spawn 2 or 3
-            probabilities = [0.05, 0.5, 1.0]
+            probabilities = [0.05, 0.55, 1.0]
             random_number = self.random_number_with_probabilities(probabilities)
             # random_number = random.choice([1, 2, 3])
             random_number += 1
@@ -691,7 +701,7 @@ class UR16eManipualtion(VecTask):
                 domain_randomizer = random_number = random.choice(
                     [1, 2, 3, 4, 5])
                 offset_object = np.array([np.random.uniform(0.67, 0.7, 1).reshape(
-                    1,)[0], np.random.uniform(-0.22, -0.12, 1).reshape(1,)[0], 1.4, np.random.uniform(0.0, 3.14, 1).reshape(1,)[0],
+                    1,)[0], np.random.uniform(-0.22, -0.12, 1).reshape(1,)[0], 1.3, np.random.uniform(0.0, 3.14, 1).reshape(1,)[0],
                     np.random.uniform(0.0, 3.14, 1).reshape(1,)[0], np.random.uniform(0.0, 3.14, 1).reshape(1,)[0]])
                 # offset_object = np.array([np.random.uniform(0.67, 0.7, 1).reshape(
                 #     1,)[0], np.random.uniform(-0.22, -0.12, 1).reshape(1,)[0], 1.3, 0.0,
@@ -898,8 +908,8 @@ class UR16eManipualtion(VecTask):
     def reset_pre_grasp_pose(self, env_ids):
         pos = torch.zeros(0, self.num_ur16e_dofs).to(self.device)
         for _ in env_ids:
-            joint_poses_list = torch.load(
-                f"{cur_path}/../../misc/joint_poses.pt")
+            path = str(Path(__file__).parent.absolute())
+            joint_poses_list = torch.load(f"{path}/../../misc/joint_poses.pt")
             temp_pos = joint_poses_list[torch.randint(
                 0, len(joint_poses_list), (1,))[0]].to(self.device)
             temp_pos = torch.reshape(temp_pos, (1, len(temp_pos)))
@@ -959,7 +969,10 @@ class UR16eManipualtion(VecTask):
 
                 objects_spawned = len(torch.unique(segmask_object_count))
                 total_objects = len(self.selected_object_env[env_count])+1
+
+                segmask_object_coords = segmask[331:538, 642:852]
                 
+                object_coords_match = cv2.countNonZero(segmask.cpu().numpy()) == cv2.countNonZero(segmask_object_coords.cpu().numpy())
 
                 _all_objects_current_pose = {}
                 _all_object_position_error = torch.tensor(0.0).to(self.device)
@@ -982,7 +995,7 @@ class UR16eManipualtion(VecTask):
 
                 # check if the environment returned from reset and the frame for that enviornment is 30 or not
                 # 30 frames is for cooldown period at the start for the simualtor to settle down
-                if ((self.free_envs_list[env_count] == torch.tensor(1)) and total_objects == objects_spawned):
+                if ((self.free_envs_list[env_count] == torch.tensor(1)) and total_objects == objects_spawned and object_coords_match):
                     '''
                     Running DexNet 3.0 after investigating the pose error after spawning
                     '''
@@ -1033,30 +1046,27 @@ class UR16eManipualtion(VecTask):
                     # saving depth image, rgb image and segmentation mask
                     self.config_env_count[env_count] += torch.tensor(
                         1).type(torch.int)
-                    new_dir_name = str(
-                        env_count)
-                    try:
-                        os.mkdir(
-                            cur_path+"/../../../System_Identification_Data/Parallelization-Data/"+new_dir_name)
-                    except:
-                        pass
-                    save_dir_depth_npy = cur_path+"/../../../System_Identification_Data/Parallelization-Data/" + \
-                        new_dir_name+"/depth_image_"+new_dir_name+"_" + \
-                        str(self.config_env_count[env_count].type(
-                            torch.int).item())+".npy"
-                    save_dir_segmask_npy = cur_path+"/../../../System_Identification_Data/Parallelization-Data/" + \
-                        new_dir_name+"/segmask_"+new_dir_name+"_" + \
-                        str(self.config_env_count[env_count].type(
-                            torch.int).item())+".npy"
-                    save_dir_rgb_npy = cur_path+"/../../../System_Identification_Data/Parallelization-Data/" + \
-                        new_dir_name+"/rgb_"+new_dir_name+"_" + \
-                        str(self.config_env_count[env_count].type(
-                            torch.int).item())+".npy"
+                    
+                    env_number = env_count
+                    new_dir_path = os.path.join(self.data_path, f"{env_number}/")
 
-                    np.save(save_dir_depth_npy,
-                            self.depth_image_save[env_count])
-                    np.save(save_dir_segmask_npy, self.segmask_save[env_count])
-                    np.save(save_dir_rgb_npy, self.rgb_save[env_count])
+                    env_config = self.config_env_count[env_count].type(torch.int).item()
+
+                    save_dir_depth_npy = os.path.join(new_dir_path, f'depth_image_{env_number}_{env_config}.npy')
+                    save_dir_segmask_npy = os.path.join(new_dir_path, f'segmask_{env_number}_{env_config}.npy')
+                    save_dir_rgb_npy = os.path.join(new_dir_path, f'rgb_{env_number}_{env_config}.npy')
+                    save_dir_rgb_png = os.path.join(new_dir_path, f'rgb_{env_number}_{env_config}.png')
+
+                    Image.fromarray(self.rgb_save[env_count]).save(save_dir_rgb_png)
+
+                    with open(save_dir_depth_npy, 'wb') as f:
+                        np.save(f, self.depth_image_save[env_count])
+
+                    with open(save_dir_segmask_npy, 'wb') as f:
+                        np.save(f, self.segmask_save[env_count])
+
+                    with open(save_dir_rgb_npy, 'wb') as f:
+                        np.save(f, self.rgb_save[env_count])
 
                     # cropping the image and modifying depth to match the DexNet 3.0 input configuration
                     depth_image_dexnet -= 0.5
@@ -1188,7 +1198,7 @@ class UR16eManipualtion(VecTask):
                         }
                         new_dir_name = str(
                             env_count)+"_"+str(self.track_save[env_count].type(torch.int).item())
-                        save_dir_json = cur_path+"/../../../System_Identification_Data/Parallelization-Data/" + \
+                        save_dir_json = self.data_path + \
                             str(env_count)+"/json_data_"+new_dir_name+"_" + \
                             str(self.config_env_count[env_count].type(
                                 torch.int).item())+".json"
@@ -1429,7 +1439,7 @@ class UR16eManipualtion(VecTask):
                             }
                             new_dir_name = str(
                                 env_count)+"_"+str(self.track_save[env_count].type(torch.int).item())
-                            save_dir_json = cur_path+"/../../../System_Identification_Data/Parallelization-Data/" + \
+                            save_dir_json = self.data_path + \
                                 str(env_count)+"/json_data_"+new_dir_name+"_" + \
                                 str(self.config_env_count[env_count].type(
                                     torch.int).item())+".json"
@@ -1479,7 +1489,7 @@ class UR16eManipualtion(VecTask):
                         }
                         new_dir_name = str(
                             env_count)+"_"+str(self.track_save[env_count].type(torch.int).item())
-                        save_dir_json = cur_path+"/../../../System_Identification_Data/Parallelization-Data/" + \
+                        save_dir_json = self.data_path + \
                             str(env_count)+"/json_data_"+new_dir_name+"_" + \
                             str(self.config_env_count[env_count].type(
                                 torch.int).item())+".json"
@@ -1607,7 +1617,7 @@ class UR16eManipualtion(VecTask):
                         }
                         new_dir_name = str(
                             env_count)+"_"+str(self.track_save[env_count].type(torch.int).item())
-                        save_dir_json = cur_path+"/../../../System_Identification_Data/Parallelization-Data/" + \
+                        save_dir_json = self.data_path + \
                             str(env_count)+"/json_data_"+new_dir_name+"_" + \
                             str(self.config_env_count[env_count].type(
                                 torch.int).item())+".json"
@@ -1642,7 +1652,7 @@ class UR16eManipualtion(VecTask):
                         }
                         new_dir_name = str(
                             env_count)+"_"+str(self.track_save[env_count].type(torch.int).item())
-                        save_dir_json = cur_path+"/../../../System_Identification_Data/Parallelization-Data/" + \
+                        save_dir_json = self.data_path + \
                             str(env_count)+"/json_data_"+new_dir_name+"_" + \
                             str(self.config_env_count[env_count].type(
                                 torch.int).item())+".json"
@@ -1753,7 +1763,7 @@ class UR16eManipualtion(VecTask):
                     }
                     new_dir_name = str(
                         env_count)+"_"+str(self.track_save[env_count].type(torch.int).item())
-                    save_dir_json = cur_path+"/../../../System_Identification_Data/Parallelization-Data/" + \
+                    save_dir_json = self.data_path + \
                         str(env_count)+"/json_data_"+new_dir_name+"_" + \
                         str(self.config_env_count[env_count].type(
                             torch.int).item())+".json"
@@ -1784,4 +1794,3 @@ class UR16eManipualtion(VecTask):
         y = w1 * y2 + y1 * w2 + z1 * x2 - x1 * z2
         z = w1 * z2 + z1 * w2 + x1 * y2 - y1 * x2
         return torch.tensor([w, x, y, z])
-    
