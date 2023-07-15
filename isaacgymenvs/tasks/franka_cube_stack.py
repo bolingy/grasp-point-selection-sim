@@ -929,10 +929,13 @@ class FrankaCubeStack(VecTask):
         '''
         Camera access in the pre physics step to compute the force using suction cup deformation score
         '''
+        self.gym.simulate(self.sim)
+        self.gym.fetch_results(self.sim, True)
         # communicate physics to graphics system
         self.gym.step_graphics(self.sim)
         # render the camera sensors
         self.gym.render_all_camera_sensors(self.sim)
+        self.gym.start_access_image_tensors(self.sim)
         '''
         Commands to the arm for eef control
         '''

@@ -11,6 +11,7 @@ envs = isaacgymenvs.make(
 	sim_device="cuda:0",
 	rl_device="cuda:0",
 	multi_gpu=True,
+	headless=True,
 	graphics_device_id=0
 )
 print("Observation space is", envs.observation_space)
