@@ -953,129 +953,86 @@ class RL_UR16eManipulation(VecTask):
         self.finished_prim_buf = None
         self.success_buf = None 
         self.done_buf = None
+        self.indicies_buf = None
+        self.obs_buf = torch.zeros(614403).to(self.device)
+        if self.finished_prim.sum() > 0:
+            for env_count in range(self.num_envs):
+                torch_prim_tensor =  self.finished_prim[env_count].clone().unsqueeze(0)
+                if int(torch_prim_tensor.item()) == 1:
+                    if self.finished_prim_buf is None:
+                        self.finished_prim_buf = torch_prim_tensor
+                    else:
+                        self.finished_prim_buf = torch.cat(
+                            (self.finished_prim_buf, torch_prim_tensor), dim=0)
+                    torch_depth_tensor = self.depth_camera_tensors[env_count]
+                    depth_image = torch_depth_tensor.to(self.device)
+                    depth_image = -depth_image
+                    depth_image_dexnet = depth_image.clone().detach()
+                    noise_image = torch.normal(
+                        0, 0.0005, size=depth_image_dexnet.size()).to(self.device)
+                    depth_image_dexnet = depth_image_dexnet + noise_image
+                    torch_depth_dexnet_tensor = to_torch(
+                        depth_image_dexnet, dtype=torch.float, device=self.device).unsqueeze(0)
+                    depth_image_save_temp = depth_image_dexnet.clone().detach().cpu().numpy()
+                    self.depth_image_save[env_count] = depth_image_save_temp[180:660, 410:1050]
+                    if self.depth_buf is None:
+                        self.depth_buf = torch_depth_dexnet_tensor
+                    else:
+                        self.depth_buf = torch.cat(
+                            (self.depth_buf, torch_depth_dexnet_tensor), dim=0)
 
-        for env_count in range(self.num_envs):
+                    torch_mask_tensor = self.mask_camera_tensors[env_count]
+                    segmask = torch_mask_tensor.to(self.device)
+                    # segmask_dexnet = segmask.clone().detach()
+                    #     self.segmask_save[env_count] = segmask[180:660, 410:1050].clone(
+                    #     ).detach().cpu().numpy().astype(np.uint8)
+                    segmask_dexnet = segmask.clone().detach()
+                    self.segmask_save[env_count] = segmask[180:660, 410:1050].clone(
+                    ).detach().cpu().numpy().astype(np.uint8)
 
-            torch_prim_tensor =  self.finished_prim[env_count].clone().unsqueeze(0)
-            if self.finished_prim_buf is None:
-                self.finished_prim_buf = torch_prim_tensor
-            else:
-                self.finished_prim_buf = torch.cat(
-                    (self.finished_prim_buf, torch_prim_tensor), dim=0)
-            if torch_prim_tensor == 0:
-                # torch_rgb_tensor = torch.zeros(786, 1280).unsqueeze(0).to(self.device)
-                torch_depth_tensor = torch.zeros(786, 1280).unsqueeze(0).to(self.device)
-                torch_segmask_tensor = torch.zeros(786, 1280).unsqueeze(0).to(self.device)
-                torch_success_tensor = torch.tensor([0])
-                torch_done_tensor = torch.tensor([0])
-                # if self.rgb_buf is None:
-                #     self.rgb_buf = torch_rgb_tensor
-                # else:
-                #     self.rgb_buf = torch.cat(
-                #         (self.rgb_buf, torch_rgb_tensor), dim=0)
-                if self.depth_buf is None:
-                    self.depth_buf = torch_depth_tensor
-                else:
-                    self.depth_buf = torch.cat(
-                        (self.depth_buf, torch_depth_tensor), dim=0)
-                if self.seg_buf is None:
-                    self.seg_buf = torch_segmask_tensor
-                else:
-                    self.seg_buf = torch.cat(
-                        (self.seg_buf, torch_segmask_tensor), dim=0)
-                if self.success_buf is None:
-                    self.success_buf = torch_success_tensor
-                else:
-                    self.success_buf = torch.cat(
-                        (self.success_buf, torch_success_tensor), dim=0)
-                if self.done_buf is None:
-                    self.done_buf = torch_done_tensor
-                else:
-                    self.done_buf = torch.cat(
-                        (self.done_buf, torch_done_tensor), dim=0)
-            else:
-                
-                # add to rgb_buf
-                # get image tensor
-                # torch_rgb_tensor = self.rgb_camera_tensors[env_count]
-                # rgb_image = torch_rgb_tensor.to(self.device)
-                # rgb_image_copy = torch.reshape(
-                #     rgb_image, (rgb_image.shape[0], -1, 4))[..., :3]
-                # self.rgb_save[env_count] = rgb_image_copy[180:660,
-                #                                         410:1050].clone().detach().cpu().numpy()
-                # torch_rgb_tensor = to_torch(
-                #     torch_rgb_tensor, dtype=torch.float, device=self.device).unsqueeze(0)
-                # if self.rgb_buf is None:
-                #     self.rgb_buf = torch_rgb_tensor
-                # else:
-                #     self.rgb_buf = torch.cat(
-                #         (self.rgb_buf, torch_rgb_tensor), dim=0)
+                    segmask_numpy = np.zeros_like(
+                        segmask_dexnet.cpu().numpy().astype(np.uint8))
+                    segmask_numpy_temp = np.zeros_like(
+                        segmask_dexnet.cpu().numpy().astype(np.uint8))
+                    segmask_numpy_temp[segmask_dexnet.cpu().numpy().astype(
+                        np.uint8) == self.object_target_id[env_count].cpu().numpy()] = 1
+                    segmask_numpy[segmask_dexnet.cpu().numpy().astype(
+                        np.uint8) == self.object_target_id[env_count].cpu().numpy()] = 255
+                    torch_segmask_tensor = to_torch(
+                        segmask_numpy, dtype=torch.float, device=self.device).unsqueeze(0)
+                    if self.seg_buf is None:
+                        self.seg_buf = torch_segmask_tensor
+                    else:
+                        self.seg_buf = torch.cat(
+                            (self.seg_buf, torch_segmask_tensor), dim=0)
 
-                torch_depth_tensor = self.depth_camera_tensors[env_count]
-                depth_image = torch_depth_tensor.to(self.device)
-                depth_image = -depth_image
-                depth_image_dexnet = depth_image.clone().detach()
-                noise_image = torch.normal(
-                    0, 0.0005, size=depth_image_dexnet.size()).to(self.device)
-                depth_image_dexnet = depth_image_dexnet + noise_image
-                torch_depth_dexnet_tensor = to_torch(
-                    depth_image_dexnet, dtype=torch.float, device=self.device).unsqueeze(0)
-                depth_image_save_temp = depth_image_dexnet.clone().detach().cpu().numpy()
-                self.depth_image_save[env_count] = depth_image_save_temp[180:660, 410:1050]
-                if self.depth_buf is None:
-                    self.depth_buf = torch_depth_dexnet_tensor
-                else:
-                    self.depth_buf = torch.cat(
-                        (self.depth_buf, torch_depth_dexnet_tensor), dim=0)
+                    torch_success_tensor =  self.success[env_count].clone().unsqueeze(0)
+                    if self.success_buf is None:
+                        self.success_buf = torch_success_tensor
+                    else:
+                        self.success_buf = torch.cat(
+                            (self.success_buf, torch_success_tensor), dim=0)
+                    if self.success[env_count] == 1:
+                        self.success[env_count] = 0
+                        
+                    torch_done_tensor =  self.done[env_count].clone().unsqueeze(0)
+                    if self.done_buf is None:
+                        self.done_buf = torch_done_tensor
+                    else:
+                        self.done_buf = torch.cat(
+                            (self.done_buf, torch_done_tensor), dim=0)
+                    if self.done[env_count] == 1:
+                        # print("##############done")
+                        self.done[env_count] = 0
 
-                torch_mask_tensor = self.mask_camera_tensors[env_count]
-                segmask = torch_mask_tensor.to(self.device)
-                # segmask_dexnet = segmask.clone().detach()
-                #     self.segmask_save[env_count] = segmask[180:660, 410:1050].clone(
-                #     ).detach().cpu().numpy().astype(np.uint8)
-                segmask_dexnet = segmask.clone().detach()
-                self.segmask_save[env_count] = segmask[180:660, 410:1050].clone(
-                ).detach().cpu().numpy().astype(np.uint8)
-
-                segmask_numpy = np.zeros_like(
-                    segmask_dexnet.cpu().numpy().astype(np.uint8))
-                segmask_numpy_temp = np.zeros_like(
-                    segmask_dexnet.cpu().numpy().astype(np.uint8))
-                segmask_numpy_temp[segmask_dexnet.cpu().numpy().astype(
-                    np.uint8) == self.object_target_id[env_count].cpu().numpy()] = 1
-                segmask_numpy[segmask_dexnet.cpu().numpy().astype(
-                    np.uint8) == self.object_target_id[env_count].cpu().numpy()] = 255
-                torch_segmask_tensor = to_torch(
-                    segmask_numpy, dtype=torch.float, device=self.device).unsqueeze(0)
-                if self.seg_buf is None:
-                    self.seg_buf = torch_segmask_tensor
-                else:
-                    self.seg_buf = torch.cat(
-                        (self.seg_buf, torch_segmask_tensor), dim=0)
-
-                torch_success_tensor =  self.success[env_count].clone().unsqueeze(0)
-                if self.success_buf is None:
-                    self.success_buf = torch_success_tensor
-                else:
-                    self.success_buf = torch.cat(
-                        (self.success_buf, torch_success_tensor), dim=0)
-                if self.success[env_count] == 1:
-                    self.success[env_count] = 0
-                    
-                torch_done_tensor =  self.done[env_count].clone().unsqueeze(0)
-                if self.done_buf is None:
-                    self.done_buf = torch_done_tensor
-                else:
-                    self.done_buf = torch.cat(
-                        (self.done_buf, torch_done_tensor), dim=0)
-                if self.done[env_count] == 1:
-                    # print("##############done")
-                    self.done[env_count] = 0
-                
-        # crop, scale and normalize image
-        # self.rgb_buf = self.rgb_buf[:, 180:660, 410:1050, :]
-        # self.rgb_buf = self.rgb_buf / 255.0
-
+                    torch_indicies_tensor =  torch.tensor([env_count]).clone()
+                    if self.indicies_buf is None:
+                        self.indicies_buf = torch_indicies_tensor
+                    else:
+                        self.indicies_buf = torch.cat(
+                            (self.indicies_buf, torch_indicies_tensor), dim=0)
+        if self.finished_prim_buf is None:
+            return None
         # crop depth image
         self.depth_buf = self.depth_buf[:, 180:660, 410:1050]
         # add extra dimensions depth image such that it is the same size as the rgb image
@@ -1094,15 +1051,19 @@ class RL_UR16eManipulation(VecTask):
         self.seg_buf = einops.rearrange(self.seg_buf, 'b h w -> b (h w)')
         self.obs_buf = torch.cat((self.depth_buf, self.seg_buf), dim=1).squeeze(0)
 
-        if self.num_envs > 1:
-            self.obs_buf = torch.cat((self.obs_buf,  self.finished_prim_buf.unsqueeze(0).T.to(self.device)), dim=1)
+        if self.indicies_buf.shape[0] > 1:
+            # self.obs_buf = torch.cat((self.obs_buf,  self.finished_prim_buf.unsqueeze(0).T.to(self.device)), dim=1)
             self.obs_buf = torch.cat((self.obs_buf,  self.success_buf.unsqueeze(0).T.to(self.device)), dim=1)
             self.obs_buf = torch.cat((self.obs_buf,  self.done_buf.unsqueeze(0).T.to(self.device)), dim=1)
+            self.obs_buf = torch.cat((self.obs_buf,  self.indicies_buf.unsqueeze(0).T.to(self.device)), dim=1)
         else:
-            self.obs_buf = torch.cat((self.obs_buf,  self.finished_prim_buf.to(self.device)), dim=0)
+            # self.obs_buf = torch.cat((self.obs_buf,  self.finished_prim_buf.to(self.device)), dim=0)
             self.obs_buf = torch.cat((self.obs_buf,  self.success_buf.to(self.device)), dim=0)
             self.obs_buf = torch.cat((self.obs_buf,  self.done_buf.to(self.device)), dim=0)
-
+            self.obs_buf = torch.cat((self.obs_buf,  self.indicies_buf.to(self.device)), dim=0)
+        
+        if self.indicies_buf.shape[0] == 1:
+            self.obs_buf = self.obs_buf.unsqueeze(0)    
         return self.obs_buf
     
     def compute_reward(self):

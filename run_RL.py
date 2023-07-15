@@ -4,7 +4,7 @@ import torch
 import rl.rl_utils
 import matplotlib.pyplot as plt
 
-ne = 2
+ne = 20
 
 envs = isaacgymenvs.make(
 	seed=0,
@@ -14,7 +14,7 @@ envs = isaacgymenvs.make(
 	rl_device="cuda:0",
 	multi_gpu=False,
 	graphics_device_id=0, 
-	headless=True
+	headless=False
 )
 # Observation space is eef_pos, eef_quat, q_gripper/q
 print("Observation space is", envs.observation_space)
@@ -33,35 +33,38 @@ def step_primitives_env_0(action):
 def step_primitives(action):
 	while True:
 		obs, reward, done, info = envs.step(action)
+		# if obs['obs'] is all zeros, then continue
+		if torch.sum(obs['obs']) == 0:
+			continue
+		# print("obs", obs['obs'])
 		imgs = obs['obs'][:, :614400]
 		info = obs['obs'][:, 614400:]
 		# return all imgs that has info[env, 0] == 1
 		# if all info[env, 0] == 0, then don't return anything
-		indicies = torch.where(info[:, 0] == 1)
+		indicies = info[:, 2]
 		# select and return imgs with the selected indicies
-		imgs = imgs[indicies]
 		if imgs.shape[0] > 0:
 			# print("info indicies", info[indicies])
-			reward_temp = info[indicies][:, 1]
-			done_temp = info[indicies][:, 2]
-			# print("@@@@@@@@@@@@@@@")
+			reward_temp = info[:, 0]
+			done_temp = info[:, 1]
 			# print("imgs, reward, done", imgs.shape, reward_temp.shape, done_temp.shape)
-			return imgs, reward_temp, done_temp
+			return imgs, reward_temp, done_temp, indicies
 			
 action = torch.tensor(ne * [[0.11, 0., 0.28, 0.22]]).to("cuda:0")
-imgs, reward, done = step_primitives(action)
+# imgs, reward, done = step_primitives(action)
 # obs, reward, done, info = envs.step(action)
 
 import time 
 start = time.time()
-# for i in range(1000):
-while True:
+for i in range(1000):
+# while True:
+	obs, reward, done, info = envs.step(action)
 
-	imgs, reward, done = step_primitives(action)
-	img = imgs[:, :307200]
-	segmask = imgs[:, 307200:]
-	plt.imshow(segmask[0].cpu().numpy().reshape(480, 640))
-	plt.show()
-	# obs, reward, done, info = envs.step(action)
-# end = time.time()
-# print(f"Time taken to run the code was {end-start} seconds")
+	# imgs, reward, done, indicies = step_primitives(action)
+	# img = imgs[:, :307200]
+	# segmask = imgs[:, 307200:]
+	# print("segmask", segmask.shape)
+	# plt.imshow(segmask[0].cpu().numpy().reshape(480, 640))
+	# plt.show()
+end = time.time()
+print(f"Time taken to run the code was {end-start} seconds")

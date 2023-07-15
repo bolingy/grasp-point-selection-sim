@@ -10,6 +10,7 @@ import isaacgymenvs
 import torch
 torch.cuda.empty_cache()
 import torch.nn as nn
+import torch.nn.functional as F
 from torch.distributions import MultivariateNormal
 from torch.distributions import Categorical
 import matplotlib.pyplot as plt
@@ -43,7 +44,7 @@ env_name = "bin_picking"
 has_continuous_action_space = True
 
 max_ep_len = 2                     # max timesteps in one episode
-max_training_timesteps = 500   # break training loop if timeteps > max_training_timesteps
+max_training_timesteps = int(1e5)   # break training loop if timeteps > max_training_timesteps
 
 print_freq = 4     # print avg reward in the interval (in num timesteps)
 log_freq = max_ep_len * 2       # log avg reward in the interval (in num timesteps)
@@ -61,7 +62,7 @@ action_std = 0.1
 ################ PPO hyperparameters ################
 
 pick_len = 3
-update_size = pick_len * 5
+update_size = pick_len * 20
 K_epochs = 40               # update policy for K epochs
 eps_clip = 0.2              # clip parameter for PPO
 gamma = 0.99                # discount factor
@@ -71,7 +72,7 @@ lr_critic = 5e-7       # learning rate for critic network
 
 random_seed = 0         # set random seed if required (0 = no random seed)
 
-ne = 2 # number of environments
+ne = 20 # number of environments
 
 print("training environment name : " + env_name)
 
@@ -98,7 +99,8 @@ env = isaacgymenvs.make(
 	sim_device="cuda:0", # cpu cuda:0
 	rl_device="cuda:0", # cpu cuda:0
 	multi_gpu=False,
-	graphics_device_id=0
+	graphics_device_id=0,
+    headless=True
 )
 
 # state space dimension
@@ -226,9 +228,9 @@ buf_envs = [RolloutBuffer() for _ in range(ne)]
 buf_central = RolloutBuffer()
 actions = torch.tensor(ne * [[0.11, 0., 0.28, 0.22]]).to(sim_device)
 
-state, reward, done, indicies = step_primitives(actions, env) #env.reset() by kickstarting w random action
-state, reward, done, indicies = returns_to_device(state, reward, done, indicies, train_device)
-true_idx = torch.nonzero(indicies).squeeze(1)
+state, reward, done, true_indicies = step_primitives(actions, env) #env.reset() by kickstarting w random action
+state, reward, done, true_indicies = returns_to_device(state, reward, done, true_indicies, train_device)
+# true_idx = torch.nonzero(indicies).squeeze(1)
 
 # print(state.shape, reward.shape, done.shape, indicies)
 # state, reward, done = state[None,:], reward[None, :], done[None, :] # remove when parallelized
@@ -238,30 +240,32 @@ curr_rewards = 0
 # training loop
 while time_step <= max_training_timesteps: ## prim_step
     # state = rearrange_state(env.reset()['obs']) # is this a usable state????
-    action, action_logprob, state_val = ppo_agent.select_action(state[indicies])
-    for i, true_i in enumerate(true_idx):
-        buf_envs[true_i].states.append(state[true_i][:, None].clone().detach())
+    action, action_logprob, state_val = ppo_agent.select_action(state)
+    for i, true_i in enumerate(true_indicies):
+        buf_envs[true_i].states.append(state[i][:, None].clone().detach())
         buf_envs[true_i].actions.append(action[i].clone().detach())
         buf_envs[true_i].logprobs.append(action_logprob[i].clone().detach().unsqueeze(0))
         buf_envs[true_i].state_values.append(state_val[i].clone().detach())
     action = scale_actions(action).to(sim_device)
-    actions[indicies] = action
+    # true indicies to one hot
+    one_hot = F.one_hot(true_indicies, ne).to(sim_device)
+    actions[one_hot] = action
 
-    state, reward, done, indicies = step_primitives(actions, env)
-    state, reward, done, indicies = returns_to_device(state, reward, done, indicies, train_device)
+    state, reward, done, true_indicies = step_primitives(actions, env)
+    state, reward, done, true_indicies = returns_to_device(state, reward, done, true_indicies, train_device)
     state = rearrange_state(state)
-    true_idx = torch.nonzero(indicies).squeeze(1)
-    for true_i in true_idx:
-        if len(buf_envs[true_i].rewards) != len(buf_envs[true_i].states):
-            buf_envs[true_i].rewards.append(reward[true_i].clone().detach().unsqueeze(0))
-            buf_envs[true_i].is_terminals.append(done[true_i].clone().detach().unsqueeze(0))
+    # true_idx = torch.nonzero(indicies).squeeze(1)
+    for i, true_i in enumerate(true_indicies):
+        if len(buf_envs[i].rewards) != len(buf_envs[i].states):
+            buf_envs[true_i].rewards.append(reward[i].clone().detach().unsqueeze(0))
+            buf_envs[true_i].is_terminals.append(done[i].clone().detach().unsqueeze(0))
             time_step += 1
 
         # check picking in done
-        if buf_envs[true_i].is_done():
-            assert len(buf_envs[true_i].rewards) == len(buf_envs[true_i].states), "rewards and states are not the same length at env {}".format(true_i)
-            buf_central.append(copy.deepcopy(buf_envs[true_i]))
-            buf_envs[true_i].clear()
+        if buf_envs[i].is_done():
+            assert len(buf_envs[i].rewards) == len(buf_envs[i].states), "rewards and states are not the same length at env {}".format(i)
+            buf_central.append(copy.deepcopy(buf_envs[i]))
+            buf_envs[i].clear()
     
     if buf_central.size() >= update_size:
         def calc_avg_reward_per_update():
