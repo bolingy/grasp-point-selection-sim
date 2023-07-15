@@ -55,6 +55,7 @@ coverage.xml
 cover/
 IssacGymEnv/
 System_Identification_Data/
+wandb/
 
 # Translations
 *.mo

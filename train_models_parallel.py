@@ -9,6 +9,8 @@ import isaacgymenvs
 
 import torch
 torch.cuda.empty_cache()
+import gc
+gc.collect()
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.distributions import MultivariateNormal
@@ -30,7 +32,7 @@ import warnings
 warnings.filterwarnings("ignore")
 
 # check cuda
-train_device = torch.device('cuda:0')
+train_device = torch.device('cpu')
 sim_device = torch.device('cuda:0')
 
 # if(torch.cuda.is_available()): 
@@ -62,7 +64,7 @@ action_std = 0.1
 ################ PPO hyperparameters ################
 
 pick_len = 3
-update_size = pick_len * 20
+update_size = pick_len * 21
 K_epochs = 40               # update policy for K epochs
 eps_clip = 0.2              # clip parameter for PPO
 gamma = 0.99                # discount factor
@@ -72,7 +74,7 @@ lr_critic = 5e-7       # learning rate for critic network
 
 random_seed = 0         # set random seed if required (0 = no random seed)
 
-ne = 20 # number of environments
+ne = 25 # number of environments
 
 print("training environment name : " + env_name)
 
@@ -247,8 +249,9 @@ while time_step <= max_training_timesteps: ## prim_step
         buf_envs[true_i].logprobs.append(action_logprob[i].clone().detach().unsqueeze(0))
         buf_envs[true_i].state_values.append(state_val[i].clone().detach())
     action = scale_actions(action).to(sim_device)
-    # true indicies to one hot
-    one_hot = F.one_hot(true_indicies, ne).to(sim_device)
+    # true indicies to one hot flat vector
+    one_hot = torch.zeros(ne).bool().to(sim_device)
+    one_hot[true_indicies] = 1
     actions[one_hot] = action
 
     state, reward, done, true_indicies = step_primitives(actions, env)
@@ -256,17 +259,22 @@ while time_step <= max_training_timesteps: ## prim_step
     state = rearrange_state(state)
     # true_idx = torch.nonzero(indicies).squeeze(1)
     for i, true_i in enumerate(true_indicies):
-        if len(buf_envs[i].rewards) != len(buf_envs[i].states):
+        if len(buf_envs[true_i].rewards) != len(buf_envs[true_i].states):
             buf_envs[true_i].rewards.append(reward[i].clone().detach().unsqueeze(0))
             buf_envs[true_i].is_terminals.append(done[i].clone().detach().unsqueeze(0))
             time_step += 1
 
         # check picking in done
-        if buf_envs[i].is_done():
-            assert len(buf_envs[i].rewards) == len(buf_envs[i].states), "rewards and states are not the same length at env {}".format(i)
-            buf_central.append(copy.deepcopy(buf_envs[i]))
-            buf_envs[i].clear()
-    
+        if buf_envs[true_i].is_done():
+            if len(buf_envs[true_i].rewards) == len(buf_envs[true_i].states):
+                assert len(buf_envs[true_i].rewards) == len(buf_envs[true_i].states), "rewards and states are not the same length at env {}".format(i)
+                buf_central.append(copy.deepcopy(buf_envs[true_i]))
+                wandb.log({"Central buffer size": len(buf_central.states)})
+                buf_envs[true_i].clear()
+            else:
+                print("rewards and states are not the same length at env {}".format(true_i))
+                buf_envs[true_i].clear()
+
     if buf_central.size() >= update_size:
         def calc_avg_reward_per_update():
             total_reward = sum(buf_central.rewards)
@@ -275,6 +283,9 @@ while time_step <= max_training_timesteps: ## prim_step
         curr_rewards = calc_avg_reward_per_update()
         ppo_agent.update(buf_central)
         buf_central.clear()
+        #free up memory
+        torch.cuda.empty_cache()
+        gc.collect()
 
         print_running_reward += curr_rewards
         print_running_episodes += 1

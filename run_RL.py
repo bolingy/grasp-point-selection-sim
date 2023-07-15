@@ -4,7 +4,7 @@ import torch
 import rl.rl_utils
 import matplotlib.pyplot as plt
 
-ne = 20
+ne = 35
 
 envs = isaacgymenvs.make(
 	seed=0,
@@ -14,7 +14,7 @@ envs = isaacgymenvs.make(
 	rl_device="cuda:0",
 	multi_gpu=False,
 	graphics_device_id=0, 
-	headless=False
+	headless=True
 )
 # Observation space is eef_pos, eef_quat, q_gripper/q
 print("Observation space is", envs.observation_space)
