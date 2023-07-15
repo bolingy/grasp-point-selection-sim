@@ -153,14 +153,14 @@ class RL_UR16eManipulation(VecTask):
         # when action contrib is 0, go to pregrasp pose 
         # when action contrib is 1, adjust angle to be same with grasp pose 
         # when action contrib is 2, go to grasp pose by moving in x,y,z direction
-        self.action_contrib = torch.ones(self.num_envs)*2
-        self.frame_count_contact_object = torch.zeros(self.num_envs)
-        self.force_encounter = torch.zeros(self.num_envs)
-        self.frame_count = torch.zeros(self.num_envs)
-        self.free_envs_list = torch.ones(self.num_envs)
-        self.object_pose_check_list = torch.ones(self.num_envs)
-        self.object_target_id = torch.zeros(self.num_envs).type(torch.int)
-        self.speed = torch.ones(self.num_envs)*0.1
+        self.action_contrib = torch.ones(self.num_envs).to(self.device)*2
+        self.frame_count_contact_object = torch.zeros(self.num_envs).to(self.device)
+        self.force_encounter = torch.zeros(self.num_envs).to(self.device)
+        self.frame_count = torch.zeros(self.num_envs).to(self.device)
+        self.free_envs_list = torch.ones(self.num_envs).to(self.device)
+        self.object_pose_check_list = torch.ones(self.num_envs).to(self.device)
+        self.object_target_id = torch.zeros(self.num_envs).type(torch.int).to(self.device)
+        self.speed = torch.ones(self.num_envs).to(self.device)*0.1
         print("No. of environments: ", self.num_envs)
 
         # Parameter storage and Trackers for each environments
@@ -175,7 +175,7 @@ class RL_UR16eManipulation(VecTask):
         self.grasp_angle_env = {}
         self.force_SI_env = {}
         self.grasp_point_env = {}
-        self.force_contact_flag = torch.zeros(self.num_envs)
+        self.force_contact_flag = torch.zeros(self.num_envs).to(self.device)
 
         self.suction_deformation_score = {}
         self.xyz_point = {}
@@ -188,8 +188,8 @@ class RL_UR16eManipulation(VecTask):
 
         self.selected_object_env = {}
 
-        self.track_save = torch.zeros(self.num_envs)
-        self.config_env_count = torch.zeros(self.num_envs)
+        self.track_save = torch.zeros(self.num_envs).to(self.device)
+        self.config_env_count = torch.zeros(self.num_envs).to(self.device)
         self.force_list_save = {}
         self.depth_image_save = {}
         self.segmask_save = {}
@@ -199,18 +199,18 @@ class RL_UR16eManipulation(VecTask):
         self.suction_deformation_score_save = {}
         self.force_require_SI = {}
 
-        self.env_reset_id_env = torch.ones(self.num_envs)
-        self.bootup_reset = torch.ones(self.num_envs)
+        self.env_reset_id_env = torch.ones(self.num_envs).to(self.device)
+        self.bootup_reset = torch.ones(self.num_envs).to(self.device)
 
-        self.RL_flag = torch.ones(self.num_envs)
-        self.run_dexnet = torch.ones(self.num_envs)
+        self.RL_flag = torch.ones(self.num_envs).to(self.device)
+        self.run_dexnet = torch.ones(self.num_envs).to(self.device)
 
         # Set control limits
         self.cmd_limit = to_torch([0.1, 0.1, 0.1, 0.5, 0.5, 0.5], device=self.device).unsqueeze(0) if \
             self.control_type == "osc" else self._ur16e_effort_limits[:6].unsqueeze(0)
-        self.primitive_count = torch.ones(self.num_envs)
-        self.done = torch.zeros(self.num_envs)
-        self.finished_prim = torch.zeros(self.num_envs)
+        self.primitive_count = torch.ones(self.num_envs).to(self.device)
+        self.done = torch.zeros(self.num_envs).to(self.device)
+        self.finished_prim = torch.zeros(self.num_envs).to(self.device)
 
 
 
@@ -224,17 +224,17 @@ class RL_UR16eManipulation(VecTask):
                             torch.tensor([0., 0., self.true_target_dist], device=self.device),
                             torch.tensor([-self.true_target_dist, 0., 0.], device=self.device),
                             torch.tensor([0., self.true_target_dist, 0.], device=self.device),
-                            torch.tensor([0., 0., -self.true_target_dist], device=self.device))))
+                            torch.tensor([0., 0., -self.true_target_dist], device=self.device))).to(self.device))
 
         # make a target_dist for each env
-        self.target_dist = self.target_dist.repeat(self.num_envs, 1, 1)
-        self.prim = torch.zeros(self.num_envs)
+        self.target_dist = self.target_dist.repeat(self.num_envs, 1, 1).to(self.device)
+        self.prim = torch.zeros(self.num_envs).to(self.device)
         self.num_primtive_actions = self.cfg["env"]["numPrimitiveActions"]
         self.current_directory = os.getcwd()
-        self.init_go_to_start = torch.ones(self.num_envs)
-        self.return_pre_grasp = torch.zeros(self.num_envs)
-        self.go_to_start = torch.ones(self.num_envs)
-        self.success = torch.zeros(self.num_envs)
+        self.init_go_to_start = torch.ones(self.num_envs).to(self.device)
+        self.return_pre_grasp = torch.zeros(self.num_envs).to(self.device)
+        self.go_to_start = torch.ones(self.num_envs).to(self.device)
+        self.success = torch.zeros(self.num_envs).to(self.device)
 
         # Reset all environments
         self.reset_idx(torch.arange(self.num_envs, device=self.device))
@@ -638,7 +638,7 @@ class RL_UR16eManipulation(VecTask):
         # Initialize actions
         self._pos_control = torch.zeros(
             (self.num_envs, self.num_dofs), dtype=torch.float, device=self.device)
-        self._effort_control = torch.zeros_like(self._pos_control)
+        self._effort_control = torch.zeros_like(self._pos_control).to(self.device)
         # Initialize control
         self._arm_control = self._effort_control[:, :]
 
@@ -1451,7 +1451,7 @@ class RL_UR16eManipulation(VecTask):
                             (env_list_reset_objects, torch.tensor([env_count])), axis=0)
                         oscillation = False
                         self.success[env_count] = False
-                        # self.finished_prim[env_count] = 1
+                        self.finished_prim[env_count] = 1
                         self.done[env_count] = 1
                         # saving all the properties of a single pick
                         json_save = {
@@ -1485,8 +1485,6 @@ class RL_UR16eManipulation(VecTask):
 
             # Moving the arm to pre grasp pose
             elif (self.env_reset_id_env[env_count] == 0 and self.frame_count[env_count] > torch.tensor(self.cooldown_frames) and self.free_envs_list[env_count] == torch.tensor(0)):
-                # TODO: add flag for RL agent to take action or execute pregrasp and grasp from dexnet
-                # executing policy from RL agent or from DexNet 3.0
                 if (self.RL_flag[env_count] == 1):
                     
                     action_temp = actions.clone().detach()
@@ -1539,7 +1537,6 @@ class RL_UR16eManipulation(VecTask):
                         # Transformation for object from camera (wo --> wc*co)
                         rotation_matrix_camera_to_object = euler_angles_to_matrix(torch.tensor(
                             [0, 0, 0]).to(self.device), "XYZ", degrees=False)
-                        # TODO: TARGET POSE
                         T_camera_to_object = transformation_matrix(
                             rotation_matrix_camera_to_object, torch.tensor([1.1200, self.prim_y, self.prim_z]).to(self.device)) 
                         # Transformation from base link to object
@@ -2150,7 +2147,7 @@ class RL_UR16eManipulation(VecTask):
                         self.force_list_save[env_count])
                     self.success[env_count] = False
                     self.done[env_count] = 1
-                    # self.finished_prim[env_count] = 1
+                    self.finished_prim[env_count] = 1
                     json_save = {
                         "force_array": self.force_list_save[env_count].tolist(),
                         "grasp point": self.grasp_point[env_count].tolist(),
@@ -2173,7 +2170,7 @@ class RL_UR16eManipulation(VecTask):
                     with open(save_dir_json, 'w') as json_file:
                         json.dump(json_save, json_file)
                     self.track_save[env_count] = self.track_save[env_count] + \
-                        torch.tensor(1)
+                        torch.tensor(1).to(self.device)
             print(f"timeout reset for environment {env_ids}")
             pos = self.reset_pre_grasp_pose(env_ids)
             self.deploy_actions(env_ids, pos)
@@ -2181,19 +2178,19 @@ class RL_UR16eManipulation(VecTask):
 
         self.compute_observations()
         self.compute_reward()
-        self.finished_prim = torch.zeros(self.num_envs)
-        self.success = torch.zeros(self.num_envs)
-        self.done = torch.zeros(self.num_envs)
+        self.finished_prim = torch.zeros(self.num_envs).to(self.device)
+        self.success = torch.zeros(self.num_envs).to(self.device)
+        self.done = torch.zeros(self.num_envs).to(self.device)
         # Compute resets
         self.reset_buf = torch.where(
             (self.progress_buf >= self.max_episode_length - 1), torch.ones_like(self.reset_buf), self.reset_buf)
         # add envs from reset_buf to finished_prim
         self.finished_prim = torch.where(
-            self.reset_buf.detach().cpu() == 1, torch.ones_like(self.finished_prim), self.finished_prim)
+            (self.progress_buf >= self.max_episode_length - 1), torch.ones_like(self.finished_prim), self.finished_prim)
         self.success = torch.where(
-            self.reset_buf.detach().cpu() == 1, torch.zeros_like(self.finished_prim), self.finished_prim)
+            (self.progress_buf >= self.max_episode_length - 1), torch.zeros_like(self.success), self.success)
         self.done = torch.where(
-            self.reset_buf.detach().cpu() == 1, torch.ones_like(self.finished_prim), self.finished_prim)
+            (self.progress_buf >= self.max_episode_length - 1), torch.ones_like(self.done), self.done)
 
     def quaternion_conj(self, q):
         w, x, y, z = q
