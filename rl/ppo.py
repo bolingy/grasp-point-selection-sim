@@ -239,7 +239,7 @@ class PPO:
         # buffer = self.buffer
         if (buffer is not None):
             self.buffer = copy.deepcopy(buffer)
-        self.buffer.print_buffer()
+        # self.buffer.print_buffer()
 
         if DEBUG:
             # find nans in buffer state, action, logprobs, state_values

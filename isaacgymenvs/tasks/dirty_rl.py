@@ -169,12 +169,14 @@ class RL_UR16eManipulation(VecTask):
         self.grasp_angle_temp = torch.Tensor([])
         self.force_SI_temp = torch.Tensor()
         self.grasp_point_temp = torch.Tensor([])
+        self.dexnet_score_temp = torch.Tensor([])
 
         self.suction_deformation_score_env = {}
         self.xyz_point_env = {}
         self.grasp_angle_env = {}
         self.force_SI_env = {}
         self.grasp_point_env = {}
+        self.dexnet_score_env = {}
         self.force_contact_flag = torch.zeros(self.num_envs)
 
         self.suction_deformation_score = {}
@@ -182,6 +184,7 @@ class RL_UR16eManipulation(VecTask):
         self.grasp_angle = {}
         self.force_SI = {}
         self.grasp_point = {}
+        self.dexnet_score = {}
         self.last_object_pose = {}
         self.all_objects_last_pose = {}
         self.object_pose_store = {}
@@ -196,6 +199,7 @@ class RL_UR16eManipulation(VecTask):
         self.rgb_save = {}
         self.grasp_point_save = {}
         self.grasp_angle_save = {}
+        self.dexnet_score_save = {}
         self.suction_deformation_score_save = {}
         self.force_require_SI = {}
 
@@ -510,37 +514,6 @@ class RL_UR16eManipulation(VecTask):
             self.gym.attach_camera_to_body(
                 camera_handle_gripper, env_ptr, ur16e_hand_link_handle, local_transform, gymapi.FOLLOW_TRANSFORM)
             self.camera_handles[i].append(camera_handle_gripper)
-            ############
-            rgb_camera_tensor = self.gym.get_camera_image_gpu_tensor(
-                        self.sim, self.envs[i], self.camera_handles[i][0], gymapi.IMAGE_COLOR)
-            torch_rgb_cam_tensor = gymtorch.wrap_tensor(rgb_camera_tensor)
-            self.rgb_camera_tensors.append(torch_rgb_cam_tensor)
-
-            mask_camera_tensor = self.gym.get_camera_image_gpu_tensor(
-                    self.sim, self.envs[i], self.camera_handles[i][0], gymapi.IMAGE_SEGMENTATION)
-            torch_mask_tensor = gymtorch.wrap_tensor(mask_camera_tensor)
-            self.mask_camera_tensors.append(torch_mask_tensor)
-
-            depth_camera_tensor = self.gym.get_camera_image_gpu_tensor(
-                            self.sim, self.envs[i], self.camera_handles[i][0], gymapi.IMAGE_DEPTH)
-            torch_depth_tensor = gymtorch.wrap_tensor(depth_camera_tensor)
-            self.depth_camera_tensors.append(torch_depth_tensor)
-
-            eef_rgb_camera_tensor = self.gym.get_camera_image_gpu_tensor(
-                        self.sim, self.envs[i], self.camera_handles[i][1], gymapi.IMAGE_COLOR)
-            eef_torch_rgb_cam_tensor = gymtorch.wrap_tensor(eef_rgb_camera_tensor)
-            self.eef_rgb_camera_tensors.append(eef_torch_rgb_cam_tensor)
-
-            eef_mask_camera_tensor = self.gym.get_camera_image_gpu_tensor(
-                    self.sim, self.envs[i], self.camera_handles[i][1], gymapi.IMAGE_SEGMENTATION)
-            eef_torch_mask_tensor = gymtorch.wrap_tensor(eef_mask_camera_tensor)
-            self.eef_mask_camera_tensors.append(eef_torch_mask_tensor)
-
-            eef_depth_camera_tensor = self.gym.get_camera_image_gpu_tensor(
-                            self.sim, self.envs[i], self.camera_handles[i][1], gymapi.IMAGE_DEPTH)
-            eef_torch_depth_tensor = gymtorch.wrap_tensor(eef_depth_camera_tensor)
-            self.eef_depth_camera_tensors.append(eef_torch_depth_tensor)
-
 
         # Setup data
         self.init_data()
@@ -663,6 +636,8 @@ class RL_UR16eManipulation(VecTask):
                                                            height=self.height_back_cam, width=self.width_back_cam)
         self.suction_score_object = calcualte_suction_score(
             self.camera_intrinsics_back_cam)
+        self.dexnet_object = dexnet3(self.camera_intrinsics_back_cam)
+        self.dexnet_object.load_dexnet_model()
 
         print("focal length in x axis: ", self.fx_back_cam)
         print("focal length in y axis: ", self.fy_back_cam)
@@ -941,10 +916,10 @@ class RL_UR16eManipulation(VecTask):
         # pose state observations
         #   pose and quaternion of end effector and respective joint angles
 
-        # obs = ["eef_pos", "eef_quat"]
-        # obs += ["q_gripper"] if self.control_type == "osc" else ["q"]
-        # self.obs_buf = torch.cat([self.states[ob] for ob in obs], dim=-1)
-        # return self.obs_buf
+        obs = ["eef_pos", "eef_quat"]
+        obs += ["q_gripper"] if self.control_type == "osc" else ["q"]
+        self.obs_buf = torch.cat([self.states[ob] for ob in obs], dim=-1)
+        return self.obs_buf
 
         # image observations
         self.rgb_buf = None
@@ -955,7 +930,9 @@ class RL_UR16eManipulation(VecTask):
         self.done_buf = None
 
         for env_count in range(self.num_envs):
-            torch_mask_tensor = self.mask_camera_tensors[env_count]
+            mask_camera_tensor = self.gym.get_camera_image_gpu_tensor(
+                self.sim, self.envs[env_count], self.camera_handles[env_count][0], gymapi.IMAGE_SEGMENTATION)
+            torch_mask_tensor = gymtorch.wrap_tensor(mask_camera_tensor)
             segmask = torch_mask_tensor.to(self.device)
             # segmask_dexnet = segmask.clone().detach()
             #     self.segmask_save[env_count] = segmask[180:660, 410:1050].clone(
@@ -963,7 +940,9 @@ class RL_UR16eManipulation(VecTask):
 
             # add to rgb_buf
             # get image tensor
-            torch_rgb_tensor = self.rgb_camera_tensors[env_count]
+            rgb_camera_tensor = self.gym.get_camera_image_gpu_tensor(
+                self.sim, self.envs[env_count], self.camera_handles[env_count][0], gymapi.IMAGE_COLOR)
+            torch_rgb_tensor = gymtorch.wrap_tensor(rgb_camera_tensor)
             rgb_image = torch_rgb_tensor.to(self.device)
             rgb_image_copy = torch.reshape(
                 rgb_image, (rgb_image.shape[0], -1, 4))[..., :3]
@@ -977,7 +956,9 @@ class RL_UR16eManipulation(VecTask):
                 self.rgb_buf = torch.cat(
                     (self.rgb_buf, torch_rgb_tensor), dim=0)
 
-            torch_depth_tensor = self.depth_camera_tensors[env_count]
+            depth_camera_tensor = self.gym.get_camera_image_gpu_tensor(
+                self.sim, self.envs[env_count], self.camera_handles[env_count][0], gymapi.IMAGE_DEPTH)
+            torch_depth_tensor = gymtorch.wrap_tensor(depth_camera_tensor)
             depth_image = torch_depth_tensor.to(self.device)
             depth_image = -depth_image
             depth_image_dexnet = depth_image.clone().detach()
@@ -1189,13 +1170,7 @@ class RL_UR16eManipulation(VecTask):
         # communicate physics to graphics system
         self.gym.step_graphics(self.sim)
         # render the camera sensors
-        # self.gym.render_all_camera_sensors(self.sim)
-        def render_cameras():   
-            self.gym.render_all_camera_sensors(self.sim)
-            self.gym.start_access_image_tensors(self.sim)
-            # Updated in self.rgb_camera_tensors and self.depth_camera_tensors and self.mask_camera_tensors
-            self.gym.end_access_image_tensors(self.sim)
-        render_cameras()
+        self.gym.render_all_camera_sensors(self.sim)
         self.gym.refresh_dof_state_tensor(self.sim)
         '''
         Commands to the arm for eef control
@@ -1209,7 +1184,9 @@ class RL_UR16eManipulation(VecTask):
         env_complete_reset = torch.tensor([])
         
         for env_count in range(self.num_envs):
-            torch_mask_tensor = self.mask_camera_tensors[env_count]
+            mask_camera_tensor = self.gym.get_camera_image_gpu_tensor(
+                self.sim, self.envs[env_count], self.camera_handles[env_count][0], gymapi.IMAGE_SEGMENTATION)
+            torch_mask_tensor = gymtorch.wrap_tensor(mask_camera_tensor)
             segmask = torch_mask_tensor.to(self.device)
             segmask_check = segmask
             self.cmd_limit = to_torch(
@@ -1230,7 +1207,9 @@ class RL_UR16eManipulation(VecTask):
             Spawning objects until they acquire stable pose and also doesnt falls down
             '''
             if ((self.frame_count[env_count] == self.cooldown_frames) and (self.object_pose_check_list[env_count] == torch.tensor(0))) and (self.run_dexnet[env_count] == torch.tensor(1)):
-                torch_mask_tensor = self.mask_camera_tensors[env_count]
+                mask_camera_tensor = self.gym.get_camera_image_gpu_tensor(
+                    self.sim, self.envs[env_count], self.camera_handles[env_count][0], gymapi.IMAGE_SEGMENTATION)
+                torch_mask_tensor = gymtorch.wrap_tensor(mask_camera_tensor)
                 segmask = torch_mask_tensor.to(self.device)
                 # segmask_check = segmask[180:660, 410:1050]
                 segmask_object_count = segmask[278:466, 510:774]
@@ -1271,7 +1250,9 @@ class RL_UR16eManipulation(VecTask):
                         self.object_target_id[env_count] = torch.tensor(
                             random_object_select).to(self.device).type(torch.int)
                     # self.object_target_id[env_count] = 0
-                    torch_rgb_tensor = self.rgb_camera_tensors[env_count]
+                    rgb_camera_tensor = self.gym.get_camera_image_gpu_tensor(
+                        self.sim, self.envs[env_count], self.camera_handles[env_count][0], gymapi.IMAGE_COLOR)
+                    torch_rgb_tensor = gymtorch.wrap_tensor(rgb_camera_tensor)
                     rgb_image = torch_rgb_tensor.to(self.device)
                     rgb_image_copy = torch.reshape(
                         rgb_image, (rgb_image.shape[0], -1, 4))[..., :3]
@@ -1281,7 +1262,10 @@ class RL_UR16eManipulation(VecTask):
                     # plt.imshow(self.rgb_save[env_count])
                     # plt.show()
                     
-                    torch_depth_tensor = self.depth_camera_tensors[env_count]
+                    depth_camera_tensor = self.gym.get_camera_image_gpu_tensor(
+                        self.sim, self.envs[env_count], self.camera_handles[env_count][0], gymapi.IMAGE_DEPTH)
+                    torch_depth_tensor = gymtorch.wrap_tensor(
+                        depth_camera_tensor)
                     depth_image = torch_depth_tensor.to(self.device)
                     depth_image = -depth_image
 
@@ -1299,8 +1283,8 @@ class RL_UR16eManipulation(VecTask):
                         np.uint8) == self.object_target_id[env_count].cpu().numpy()] = 255
                     segmask_dexnet = BinaryImage(
                         segmask_numpy[180:660, 410:1050], frame=self.camera_intrinsics_back_cam.frame)
-
-
+                    
+                    
 
                     depth_image_dexnet = depth_image.clone().detach()
                     noise_image = torch.normal(
@@ -1349,33 +1333,25 @@ class RL_UR16eManipulation(VecTask):
                     max_num_grasps = 0
 
                     # Storing all the sampled grasp point and its properties
-                    if True:
-                        y, x = np.where(segmask_numpy[180:660, 410:1050] == 255)
-                        center_x, center_y = int(np.mean(x)), int(np.mean(y))
-                        # print(center_x, center_y)
-
-                        import cv2
-                        rgb_image_vis = rgb_image.cpu().numpy()[180:660, 410:1050]
-
-                        # action, self.grasps_and_predictions, self.unsorted_grasps_and_predictions = self.dexnet_object.inference(
-                        #     depth_img_dexnet, segmask_dexnet, None)
-                        
-
+                    try:
+                        action, self.grasps_and_predictions, self.unsorted_grasps_and_predictions = self.dexnet_object.inference(
+                            depth_img_dexnet, segmask_dexnet, None)
                         self.suction_deformation_score_temp = torch.Tensor()
                         self.xyz_point_temp = torch.empty((0, 3))
                         self.grasp_angle_temp = torch.empty((0, 3))
                         self.grasp_point_temp = torch.empty((0, 2))
                         self.force_SI_temp = torch.Tensor()
-                        # max_num_grasps = len(self.grasps_and_predictions)
-                        max_num_grasps = 1
+                        self.dexnet_score_temp = torch.Tensor()
+                        max_num_grasps = len(self.grasps_and_predictions)
                         top_grasps = max_num_grasps if max_num_grasps <= 10 else 7
+                        max_num_grasps = 1
                         for i in range(max_num_grasps):
                             grasp_point = torch.tensor(
-                                [center_x, center_y])
+                                [self.grasps_and_predictions[i][0].center.x, self.grasps_and_predictions[i][0].center.y])
 
                             depth_image_suction = depth_image
                             suction_deformation_score, xyz_point, grasp_angle = self.suction_score_object.calculator(
-                                depth_image_suction, segmask, rgb_image_copy, grasp_point, self.object_target_id[env_count])
+                                depth_image_suction, segmask, rgb_image_copy, self.grasps_and_predictions[i][0], self.object_target_id[env_count])
                             self.suction_deformation_score_temp = torch.cat(
                                 (self.suction_deformation_score_temp, torch.tensor([suction_deformation_score]))).type(torch.float)
                             self.xyz_point_temp = torch.cat(
@@ -1394,6 +1370,8 @@ class RL_UR16eManipulation(VecTask):
 
                             self.force_SI_temp = torch.cat(
                                 (self.force_SI_temp, torch.tensor([force_SI])))
+                            self.dexnet_score_temp = torch.cat(
+                                (self.dexnet_score_temp, torch.tensor([self.grasps_and_predictions[i][1]])))
 
                         if (top_grasps > 0):
                             env_list_reset_arm_pose = torch.cat(
@@ -1401,26 +1379,27 @@ class RL_UR16eManipulation(VecTask):
                             env_list_reset_objects = torch.cat(
                                 (env_list_reset_objects, torch.tensor([env_count])), axis=0)
                         else:
-                            print("No sample points")
+                            # print("No sample points")
                             env_complete_reset = torch.cat(
                                 (env_complete_reset, torch.tensor([env_count])), axis=0)
-                    # except Exception as e:
-                    #     print("dexnet error: ", e)
-                    #     env_complete_reset = torch.cat(
-                    #         (env_complete_reset, torch.tensor([env_count])), axis=0)
+                    except Exception as e:
+                        print("dexnet error: ", e)
+                        env_complete_reset = torch.cat(
+                            (env_complete_reset, torch.tensor([env_count])), axis=0)
 
                     self.suction_deformation_score_env[env_count] = self.suction_deformation_score_temp
                     self.grasp_angle_env[env_count] = self.grasp_angle_temp
                     self.force_SI_env[env_count] = self.force_SI_temp
                     self.xyz_point_env[env_count] = self.xyz_point_temp
                     self.grasp_point_env[env_count] = self.grasp_point_temp
+                    self.dexnet_score_env[env_count] = self.dexnet_score_temp
                     self.free_envs_list[env_count] = torch.tensor(0)
                     if self.RL_flag[env_count] == torch.tensor(1):
                         # print("pass obs 1")
                         self.finished_prim[env_count] = 1
                     
                 elif (total_objects != objects_spawned and (self.free_envs_list[env_count] == torch.tensor(1))):
-                    print(f"Object falled down in environment {env_count}")
+                    # print(f"Object falled down in environment {env_count}")
                     env_complete_reset = torch.cat(
                         (env_complete_reset, torch.tensor([env_count])), axis=0)
 
@@ -1441,6 +1420,8 @@ class RL_UR16eManipulation(VecTask):
                     self.xyz_point_env[env_count] = self.xyz_point_env[env_count][1:]
                     self.grasp_point[env_count] = self.grasp_point_env[env_count][0]
                     self.grasp_point_env[env_count] = self.grasp_point_env[env_count][1:]
+                    self.dexnet_score[env_count] = self.dexnet_score_env[env_count][0]
+                    self.dexnet_score_env[env_count] = self.dexnet_score_env[env_count][1:]
                     self.force_SI[env_count] = self.force_SI_env[env_count][0]
                     self.force_SI_env[env_count] = self.force_SI_env[env_count][1:]
                 else:
@@ -1449,7 +1430,7 @@ class RL_UR16eManipulation(VecTask):
                 try:
                     if (torch.all(self.xyz_point[env_count]) == torch.tensor(0.)):
                         # error due to illegal 3d coordinate
-                        print("xyz point error", self.xyz_point[env_count])
+                        # print("xyz point error", self.xyz_point[env_count])
                         env_list_reset_arm_pose = torch.cat(
                             (env_list_reset_arm_pose, torch.tensor([env_count])), axis=0)
                         env_list_reset_objects = torch.cat(
@@ -1463,6 +1444,7 @@ class RL_UR16eManipulation(VecTask):
                             "force_array": [],
                             "grasp point": self.grasp_point[env_count].tolist(),
                             "grasp_angle": self.grasp_angle[env_count].tolist(),
+                            "dexnet_score": self.dexnet_score[env_count].item(),
                             "suction_deformation_score": self.suction_deformation_score[env_count].item(),
                             "oscillation": oscillation,
                             "gripper_score": 0,
@@ -1805,11 +1787,17 @@ class RL_UR16eManipulation(VecTask):
                             object_pose_error = torch.tensor(0)
 
                         # Compute the segmask and depth map of the camera at the gripper
-                        torch_mask_tensor = self.eef_mask_camera_tensors[env_count]
+                        mask_camera_tensor = self.gym.get_camera_image_gpu_tensor(
+                            self.sim, self.envs[env_count], self.camera_handles[env_count][1], gymapi.IMAGE_SEGMENTATION)
+                        torch_mask_tensor = gymtorch.wrap_tensor(
+                            mask_camera_tensor)
                         segmask_gripper = torch_mask_tensor.to(self.device)
                         segmask_gripper = segmask_gripper.clone().detach()
 
-                        torch_depth_tensor = self.eef_depth_camera_tensors[env_count]
+                        depth_camera_tensor = self.gym.get_camera_image_gpu_tensor(
+                            self.sim, self.envs[env_count], self.camera_handles[env_count][1], gymapi.IMAGE_DEPTH)
+                        torch_depth_tensor = gymtorch.wrap_tensor(
+                            depth_camera_tensor)
                         depth_image = torch_depth_tensor.to(self.device)
                         depth_image = -depth_image
                         depth_numpy_gripper = depth_image.clone().detach()
@@ -1851,6 +1839,7 @@ class RL_UR16eManipulation(VecTask):
                                     "force_array": [],
                                     "grasp point": self.grasp_point[env_count].tolist(),
                                     "grasp_angle": self.grasp_angle[env_count].tolist(),
+                                    "dexnet_score": self.dexnet_score[env_count].item(),
                                     "suction_deformation_score": self.suction_deformation_score[env_count].item(),
                                     "oscillation": oscillation,
                                     "gripper_score": 0,
@@ -1903,6 +1892,7 @@ class RL_UR16eManipulation(VecTask):
                                 "force_array": [],
                                 "grasp point": self.grasp_point[env_count].tolist(),
                                 "grasp_angle": self.grasp_angle[env_count].tolist(),
+                                "dexnet_score": self.dexnet_score[env_count].item(),
                                 "suction_deformation_score": self.suction_deformation_score[env_count].item(),
                                 "oscillation": oscillation,
                                 "gripper_score": 0,
@@ -1944,17 +1934,26 @@ class RL_UR16eManipulation(VecTask):
                     if (self.frame_count[env_count] > torch.tensor(self.cooldown_frames) and self.frame_count_contact_object[env_count] == torch.tensor(0)):
                         if ((torch.max(torch.abs(self.action_env[0][:3]))) <= 0.005 and (torch.max(torch.abs(self.action_env[0][3:6]))) <= 0.005):
                             self.action_contrib[env_count] -= 1
-                            torch_rgb_tensor = self.eef_rgb_camera_tensors[env_count]
+                            rgb_camera_tensor = self.gym.get_camera_image_gpu_tensor(
+                                self.sim, self.envs[env_count], self.camera_handles[env_count][1], gymapi.IMAGE_COLOR)
+                            torch_rgb_tensor = gymtorch.wrap_tensor(
+                                rgb_camera_tensor)
                             rgb_image = torch_rgb_tensor.to(self.device)
                             rgb_image_copy_gripper = torch.reshape(
                                 rgb_image, (rgb_image.shape[0], -1, 4))[..., :3]
                             rgb_image_copy_gripper = rgb_image_copy_gripper.clone().detach()
 
-                            torch_mask_tensor = self.eef_mask_camera_tensors[env_count]
+                            mask_camera_tensor = self.gym.get_camera_image_gpu_tensor(
+                                self.sim, self.envs[env_count], self.camera_handles[env_count][1], gymapi.IMAGE_SEGMENTATION)
+                            torch_mask_tensor = gymtorch.wrap_tensor(
+                                mask_camera_tensor)
                             segmask_gripper = torch_mask_tensor.to(self.device)
                             segmask_gripper = segmask_gripper.clone().detach()
 
-                            torch_depth_tensor = self.eef_depth_camera_tensors[env_count]
+                            depth_camera_tensor = self.gym.get_camera_image_gpu_tensor(
+                                self.sim, self.envs[env_count], self.camera_handles[env_count][1], gymapi.IMAGE_DEPTH)
+                            torch_depth_tensor = gymtorch.wrap_tensor(
+                                depth_camera_tensor)
                             depth_image = torch_depth_tensor.to(self.device)
                             depth_image = -depth_image
                             depth_numpy_gripper = depth_image.clone().detach()
@@ -1976,17 +1975,26 @@ class RL_UR16eManipulation(VecTask):
                             '''
                             Gripper camera
                             '''
-                            torch_rgb_tensor = self.eef_rgb_camera_tensors[env_count]
+                            rgb_camera_tensor = self.gym.get_camera_image_gpu_tensor(
+                                self.sim, self.envs[env_count], self.camera_handles[env_count][1], gymapi.IMAGE_COLOR)
+                            torch_rgb_tensor = gymtorch.wrap_tensor(
+                                rgb_camera_tensor)
                             rgb_image = torch_rgb_tensor.to(self.device)
                             rgb_image_copy_gripper = torch.reshape(
                                 rgb_image, (rgb_image.shape[0], -1, 4))[..., :3]
                             rgb_image_copy_gripper = rgb_image_copy_gripper.clone().detach()
 
-                            torch_mask_tensor = self.eef_mask_camera_tensors[env_count]
+                            mask_camera_tensor = self.gym.get_camera_image_gpu_tensor(
+                                self.sim, self.envs[env_count], self.camera_handles[env_count][1], gymapi.IMAGE_SEGMENTATION)
+                            torch_mask_tensor = gymtorch.wrap_tensor(
+                                mask_camera_tensor)
                             segmask_gripper = torch_mask_tensor.to(self.device)
                             segmask_gripper = segmask_gripper.clone().detach()
 
-                            torch_depth_tensor = self.eef_depth_camera_tensors[env_count]
+                            depth_camera_tensor = self.gym.get_camera_image_gpu_tensor(
+                                self.sim, self.envs[env_count], self.camera_handles[env_count][1], gymapi.IMAGE_DEPTH)
+                            torch_depth_tensor = gymtorch.wrap_tensor(
+                                depth_camera_tensor)
                             depth_image = torch_depth_tensor.to(self.device)
                             depth_image = -depth_image
                             depth_numpy_gripper = depth_image.clone().detach()
@@ -2013,6 +2021,7 @@ class RL_UR16eManipulation(VecTask):
                                 "force_array": self.force_list_save[env_count].tolist(),
                                 "grasp point": self.grasp_point[env_count].tolist(),
                                 "grasp_angle": self.grasp_angle[env_count].tolist(),
+                                "dexnet_score": self.dexnet_score[env_count].item(),
                                 "suction_deformation_score": self.suction_deformation_score[env_count].item(),
                                 "oscillation": oscillation,
                                 "gripper_score": score_gripper.item(),
@@ -2049,6 +2058,7 @@ class RL_UR16eManipulation(VecTask):
                                 "force_array": [],
                                 "grasp point": self.grasp_point[env_count].tolist(),
                                 "grasp_angle": self.grasp_angle[env_count].tolist(),
+                                "dexnet_score": self.dexnet_score[env_count].item(),
                                 "suction_deformation_score": self.suction_deformation_score[env_count].item(),
                                 "oscillation": oscillation,
                                 "gripper_score": 0,
@@ -2160,6 +2170,7 @@ class RL_UR16eManipulation(VecTask):
                         "force_array": self.force_list_save[env_count].tolist(),
                         "grasp point": self.grasp_point[env_count].tolist(),
                         "grasp_angle": self.grasp_angle[env_count].tolist(),
+                        "dexnet_score": self.dexnet_score[env_count].item(),
                         "suction_deformation_score": self.suction_deformation_score[env_count].item(),
                         "oscillation": oscillation,
                         "gripper_score": 0,

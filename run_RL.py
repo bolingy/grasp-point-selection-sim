@@ -2,6 +2,7 @@ import isaacgym
 import isaacgymenvs
 import torch
 import rl.rl_utils
+import matplotlib.pyplot as plt
 
 ne = 2
 
@@ -48,9 +49,18 @@ def step_primitives(action):
 			
 action = torch.tensor(ne * [[0.11, 0., 0.28, 0.22]]).to("cuda:0")
 imgs, reward, done = step_primitives(action)
+# obs, reward, done, info = envs.step(action)
+
+import time 
+start = time.time()
+# for i in range(1000):
 while True:
-	for i in imgs:
-		isaacgym.viewer.window.show_img(i)
-	isaacgym.viewer.window.render_buffer()
-	
+
 	imgs, reward, done = step_primitives(action)
+	img = imgs[:, :307200]
+	segmask = imgs[:, 307200:]
+	plt.imshow(segmask[0].cpu().numpy().reshape(480, 640))
+	plt.show()
+	# obs, reward, done, info = envs.step(action)
+# end = time.time()
+# print(f"Time taken to run the code was {end-start} seconds")

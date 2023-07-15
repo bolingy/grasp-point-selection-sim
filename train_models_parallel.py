@@ -8,6 +8,7 @@ import isaacgym
 import isaacgymenvs
 
 import torch
+torch.cuda.empty_cache()
 import torch.nn as nn
 from torch.distributions import MultivariateNormal
 from torch.distributions import Categorical
@@ -21,12 +22,14 @@ import gym
 #import pybullet_envs
 from rl.ppo import *
 from rl.rl_utils import *
+import wandb
+wandb.login()
 
 import warnings
 warnings.filterwarnings("ignore")
 
 # check cuda
-train_device = torch.device('cpu')
+train_device = torch.device('cuda:0')
 sim_device = torch.device('cuda:0')
 
 # if(torch.cuda.is_available()): 
@@ -40,9 +43,9 @@ env_name = "bin_picking"
 has_continuous_action_space = True
 
 max_ep_len = 2                     # max timesteps in one episode
-max_training_timesteps = int(1e5)   # break training loop if timeteps > max_training_timesteps
+max_training_timesteps = 500   # break training loop if timeteps > max_training_timesteps
 
-print_freq = 2     # print avg reward in the interval (in num timesteps)
+print_freq = 4     # print avg reward in the interval (in num timesteps)
 log_freq = max_ep_len * 2       # log avg reward in the interval (in num timesteps)
 save_model_freq = int(2e4)      # save model frequency (in num timesteps)
 
@@ -58,19 +61,35 @@ action_std = 0.1
 ################ PPO hyperparameters ################
 
 pick_len = 3
-update_size = pick_len * 20
+update_size = pick_len * 5
 K_epochs = 40               # update policy for K epochs
 eps_clip = 0.2              # clip parameter for PPO
 gamma = 0.99                # discount factor
 
-lr_actor = 1e-7       # learning rate for actor network
+lr_actor = 1e-8       # learning rate for actor network
 lr_critic = 5e-7       # learning rate for critic network
 
 random_seed = 0         # set random seed if required (0 = no random seed)
 
-ne = 10 # number of environments
+ne = 2 # number of environments
 
 print("training environment name : " + env_name)
+
+run = wandb.init(
+    project='bin_picking', 
+    config={
+    "ne": ne,
+    "pick_len": pick_len,
+    "update_size": update_size,
+    "max_training_timesteps": max_training_timesteps,
+    "action_std": action_std,
+    "eps_clip": eps_clip,
+    "gamma": gamma,
+    "lr_actor": lr_actor,
+    "lr_critic": lr_critic,
+    }
+)
+
 
 env = isaacgymenvs.make(
 	seed=0,
@@ -201,7 +220,7 @@ log_running_reward = 0
 log_running_episodes = 0
 
 time_step = 0
-i_episode = 1
+i_episode = 0
 
 buf_envs = [RolloutBuffer() for _ in range(ne)]
 buf_central = RolloutBuffer()
@@ -248,7 +267,7 @@ while time_step <= max_training_timesteps: ## prim_step
         def calc_avg_reward_per_update():
             total_reward = sum(buf_central.rewards)
             num_rewards = sum(buf_central.is_terminals)
-            return int(total_reward / num_rewards)
+            return (total_reward / num_rewards).item()
         curr_rewards = calc_avg_reward_per_update()
         ppo_agent.update(buf_central)
         buf_central.clear()
@@ -256,6 +275,8 @@ while time_step <= max_training_timesteps: ## prim_step
         print_running_reward += curr_rewards
         print_running_episodes += 1
         i_episode += 1
+        wandb.log({"Episodes": i_episode})
+        wandb.log({"Average reward in every update": curr_rewards})
 
     # if time_step % log_freq == 0:
     #     # log average reward till last episode
@@ -269,15 +290,16 @@ while time_step <= max_training_timesteps: ## prim_step
     #     log_running_episodes = 0
 
     # printing average reward
-    if i_episode % print_freq == 0:
+    if i_episode % print_freq == 0 and i_episode != 0 and print_running_episodes != 0:
 
         # print average reward till last episode
-        # print_avg_reward = print_running_reward / print_running_episodes
-        print_running_reward = round(print_running_reward, 2)
-
-        print("Episode : {} \t\t Timestep : {} \t\t Average Reward : {}".format(i_episode, time_step, print_running_reward))
+        print_avg_reward = print_running_reward / print_running_episodes
+        # print_running_reward = round(print_running_reward, 2)
+        wandb.log({"Average running reward": print_avg_reward})
+        print("Episode : {} \t\t Timestep : {} \t\t Average Reward : {}".format(i_episode, time_step, print_avg_reward))
 
         print_running_reward = 0
+        print_running_episodes = 0
         
     # # save model weights
     # if time_step % save_model_freq == 0:
