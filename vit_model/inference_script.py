@@ -29,6 +29,7 @@ from einops.layers.torch import Rearrange
 import sys
 
 from vit_pytorch.efficient import ViT
+from sklearn.cluster import DBSCAN
 import json
 print(f"Torch: {torch.__version__}")
 print(torch.cuda.is_available())
@@ -194,7 +195,7 @@ class inference:
         return point_cloud
     
     def run_model(self, depth_image, segmask, target_id):
-        self.model.load_state_dict(torch.load("vit_model/models/conv2d_large_dataMon Jun 26 22_10_36 2023.pth", map_location='cuda:0'))
+        self.model.load_state_dict(torch.load("vit_model/models/checkpoint_augment_rgb_include_top15_with_vel_continue.pth", map_location='cuda:0')['model_state_dict'])
         self.model.eval()
       
         id = target_id.item()
@@ -247,27 +248,84 @@ class inference:
         output = output.cpu().detach().numpy()*segmask_processed
 
         max_value = np.amax(output)
-        max_coordinates = np.argwhere(output == max_value)
-        avg_row = 0.0
-        avg_col = 0.0
-        for i in range(len(max_coordinates)):
-            max_row, max_col = max_coordinates[i][1], max_coordinates[i][0]
-            avg_row += max_row
-            avg_col += max_col
-
-        avg_row /= len(max_coordinates)
-        avg_col /= len(max_coordinates)
-        
-        min_dist = sys.maxsize
         grasp_point = None
-        for i in range(len(max_coordinates)):
-            max_row, max_col = max_coordinates[i][1], max_coordinates[i][0]
-            temp_first_point = np.array([max_row, max_col])
-            temp_second_point = np.array([avg_row, avg_col])
-            dist = np.linalg.norm(temp_second_point-temp_first_point)
-            if(dist < min_dist):
-                dist = min_dist
-                grasp_point = temp_second_point.astype(np.int16)
+        if(max_value < 1.0):
+            max_coordinates = np.argwhere(output == max_value)
+            grasp_point = np.array([max_coordinates[0][1], max_coordinates[0][0]])
+        else:
+            try:
+                points = np.column_stack(np.where(output > 0.9))
+                # Perform DBSCAN on the points
+                db = DBSCAN(eps=1, min_samples=5).fit(points)  # You may need to adjust the parameters
+                # Find the labels of the clusters that each point belongs to
+                labels = db.labels_
+                # Ignore noises in the cluster computation (noises are denoted by -1)
+                core_samples_mask = np.zeros_like(labels, dtype=bool)
+                core_samples_mask[db.core_sample_indices_] = True
+                labels = db.labels_
+                # Number of clusters in labels, ignoring noise if present.
+                n_clusters = len(set(labels)) - (1 if -1 in labels else 0)
+                # Print the number of clusters
+                print('Estimated number of clusters: %d' % n_clusters)
+
+                score_points = output[output > 0.9]
+
+                # Calculate the mean score for each cluster and identify the cluster with the highest mean score
+                best_cluster_id = None
+                max_avg_score = 0
+                max_cluster_size = 0
+
+                # Calculate the mean coordinate for each cluster
+                for cluster_id in np.unique(labels):
+                    if cluster_id == -1:
+                        continue  # Skip noise
+
+                    cluster_points = points[labels == cluster_id]
+                    cluster_scores = score_points[labels == cluster_id]
+                    
+                    mean_coordinate = cluster_points.mean(axis=0)
+                    avg_score = cluster_scores.mean()
+                    avg_cluster_size = len(cluster_points)
+
+                    print(f'Cluster {cluster_id}: Mean coordinate: {mean_coordinate}, Average score: {avg_score}, Cluster Size: {len(cluster_points)}')
+
+                    # if avg_score > max_avg_score:
+                    #     max_avg_score = avg_score
+                    #     best_cluster_id = cluster_id
+                    #     grasp_point = np.array([mean_coordinate[1], mean_coordinate[0]]).astype(np.int16)
+                    if avg_cluster_size > max_cluster_size:
+                        max_cluster_size = avg_cluster_size
+                        best_cluster_id = cluster_id
+                        grasp_point = np.array([mean_coordinate[1], mean_coordinate[0]]).astype(np.int16)
+                print(f'Best cluster is {best_cluster_id} with average score {max_avg_score}.')
+            except:
+                pass
+        try:
+            if(grasp_point == None):
+                max_coordinates = np.argwhere(output == max_value)
+                print(max_coordinates)
+                avg_row = 0.0
+                avg_col = 0.0
+                for i in range(len(max_coordinates)):
+                    max_row, max_col = max_coordinates[i][1], max_coordinates[i][0]
+                    avg_row += max_row
+                    avg_col += max_col
+
+                avg_row /= len(max_coordinates)
+                avg_col /= len(max_coordinates)
+                
+                min_dist = sys.maxsize
+                grasp_point = None
+                for i in range(len(max_coordinates)):
+                    max_row, max_col = max_coordinates[i][1], max_coordinates[i][0]
+                    temp_first_point = np.array([max_row, max_col])
+                    temp_second_point = np.array([avg_row, avg_col])
+                    dist = np.linalg.norm(temp_second_point-temp_first_point)
+                    if(dist < min_dist):
+                        dist = min_dist
+                        grasp_point = temp_second_point.astype(np.int16)
+        except:
+            pass
 
         # plt.Circle((grasp_point[1], grasp_point[0]), 10, fill=True)
         # plt.figure(0)

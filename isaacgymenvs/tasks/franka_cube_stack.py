@@ -39,6 +39,8 @@ from vit_model.inference_script import inference
 from pathlib import Path
 cur_path = str(Path(__file__).parent.absolute())
 
+random.seed(10)
+np.random.seed(10)
 
 class FrankaCubeStack(VecTask):
 
