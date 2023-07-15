@@ -87,10 +87,10 @@ class Env(ABC):
         self.headless = headless
 
         enable_camera_sensors = config.get("enableCameraSensors", False)
-        print('!!!!!!!!!!!!enb cam sen', enable_camera_sensors, 'gra dev id', graphics_device_id)
+        # print('!!!!!!!!!!!!enb cam sen', enable_camera_sensors, 'gra dev id', graphics_device_id)
         self.graphics_device_id = graphics_device_id
-        if enable_camera_sensors == False and self.headless == True:
-            self.graphics_device_id = -1
+        # if enable_camera_sensors == False and self.headless == True:
+        #     self.graphics_device_id = -1
 
         self.num_environments = config["env"]["numEnvs"]
         self.num_agents = config["env"].get("numAgents", 1)  # used for multi-agent environments
@@ -321,7 +321,7 @@ class VecTask(Env):
             actions: actions to apply
         Returns:
             Observations, rewards, resets, info
-            Observations are dict of observations (currently only one member called 'obs')
+            Observations are diFct of observations (currently only one member called 'obs')
         """
 
         # randomize actions
