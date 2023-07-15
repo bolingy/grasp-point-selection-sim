@@ -705,8 +705,8 @@ class UR16eManipulation(VecTask):
                 domain_randomizer = random_number = random.choice(
                     [1, 2, 3, 4, 5])
                 offset_object = np.array([np.random.uniform(0.67, 0.7, 1).reshape(
-                    1,)[0], np.random.uniform(-0.22, -0.12, 1).reshape(1,)[0], 1.3, random.choice([0, 1.57, 3.14]),
-                    random.choice([0, 1.57, 3.14]), np.random.uniform(0.0, 3.14, 1).reshape(1,)[0]])
+                    1,)[0], np.random.uniform(-0.22, -0.12, 1).reshape(1,)[0], 1.3, np.random.uniform(0.0, 6.28, 1).reshape(1,)[0],
+                    np.random.uniform(0.0, 6.28, 1).reshape(1,)[0], np.random.uniform(0.0, 6.28, 1).reshape(1,)[0]])
                 # if(random.random() < 0.5):
                 #     offset_object = np.array([np.random.uniform(0.67, 0.7, 1).reshape(
                 #         1,)[0], np.random.uniform(-0.22, -0.12, 1).reshape(1,)[0], 1.3, random.choice([0, 1.57, 3.14]),
@@ -935,10 +935,13 @@ class UR16eManipulation(VecTask):
         '''
         Camera access in the pre physics step to compute the force using suction cup deformation score
         '''
+        self.gym.simulate(self.sim)
+        self.gym.fetch_results(self.sim, True)
         # communicate physics to graphics system
         self.gym.step_graphics(self.sim)
         # render the camera sensors
         self.gym.render_all_camera_sensors(self.sim)
+        self.gym.start_access_image_tensors(self.sim)
         '''
         Commands to the arm for eef control
         '''
