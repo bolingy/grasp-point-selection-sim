@@ -194,8 +194,8 @@ class inference:
         point_cloud = np.dstack((x, y, z))
         return point_cloud
     
-    def run_model(self, depth_image, segmask, target_id):
-        self.model.load_state_dict(torch.load("vit_model/models/checkpoint_augment_rgb_include_top15_with_vel_continue.pth", map_location='cuda:0')['model_state_dict'])
+    def run_model(self, depth_image, segmask, target_id, model_path):
+        self.model.load_state_dict(torch.load(model_path, map_location='cuda:0')['model_state_dict'])
         self.model.eval()
       
         id = target_id.item()
