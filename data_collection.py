@@ -15,6 +15,7 @@ envs = isaacgymenvs.make(
 	rl_device="cuda:0",
 	multi_gpu=True,
 	graphics_device_id=0,
+	headless=True,
 	data_path=cur_path+"/../System_Identification_Data/Parallelization-Data/",
 )
 print("Observation space is", envs.observation_space)
