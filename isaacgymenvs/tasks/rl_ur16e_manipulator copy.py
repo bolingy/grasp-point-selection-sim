@@ -236,8 +236,6 @@ class RL_UR16eManipulation(VecTask):
         self.go_to_start = torch.ones(self.num_envs).to(self.device)
         self.success = torch.zeros(self.num_envs).to(self.device)
 
-        self.weight_distance = 1.0
-
         # Reset all environments
         self.reset_idx(torch.arange(self.num_envs, device=self.device))
 
@@ -754,7 +752,7 @@ class RL_UR16eManipulation(VecTask):
             # How many objects should we spawn 2 or 3
             probabilities = [0.15, 0.5, 0.35]
             ##############################################
-            probabilities = [1.0, 0.0, 0.0]
+            probabilities = [0.0, 0.0, 1.0]
             ##############################################
             random_number = self.random_number_with_probabilities(probabilities)
             random_number += 1
@@ -762,7 +760,7 @@ class RL_UR16eManipulation(VecTask):
             object_set = range(1, self.object_count_unique+1)
             selected_object = random.sample(object_set, random_number)
             ##############################################
-            selected_object = [1]
+            selected_object = [1, 2, 3]
             ##############################################
             list_objects_domain_randomizer = torch.tensor([])
             
@@ -957,15 +955,10 @@ class RL_UR16eManipulation(VecTask):
         self.done_buf = None
         self.indicies_buf = None
         self.obs_buf = torch.zeros(614403).to(self.device)
-
-        
-
-        # if self.finished_prim.sum() > 0:
-        if True:
+        if self.finished_prim.sum() > 0:
             for env_count in range(self.num_envs):
-                torch_prim_tensor =  torch.tensor([1]).to(self.device)
-                # if int(torch_prim_tensor.item()) == 1:
-                if True:
+                torch_prim_tensor =  self.finished_prim[env_count].clone().unsqueeze(0)
+                if int(torch_prim_tensor.item()) == 1:
                     if self.finished_prim_buf is None:
                         self.finished_prim_buf = torch_prim_tensor
                     else:
@@ -1012,22 +1005,8 @@ class RL_UR16eManipulation(VecTask):
                     else:
                         self.seg_buf = torch.cat(
                             (self.seg_buf, torch_segmask_tensor), dim=0)
-                    
-                    
-                    _all_objects_current_pose = {}
-                    for object_id in self.selected_object_env[env_count]:
-                        _all_objects_current_pose[int(object_id.item())] = self._root_state[env_count, self._object_model_id[int(object_id.item())-1], :][:3].type(
-                            torch.float).detach().clone()
-                        
-                    # get distance between eef and object
-                    _eef_pos = self.states["eef_pos"][env_count]
-                    _eef_pos = _eef_pos.type(torch.float).detach().clone()
-                    _object_pos = list(_all_objects_current_pose.values())[0]
-                    _object_pos = _object_pos.type(torch.float).detach().clone()
-                    _distance = torch.norm(_eef_pos - _object_pos)
-                    # print("distance", _distance)
 
-                    torch_success_tensor = -(_distance.clone().unsqueeze(0) * self.weight_distance)
+                    torch_success_tensor =  self.success[env_count].clone().unsqueeze(0)
                     if self.success_buf is None:
                         self.success_buf = torch_success_tensor
                     else:
@@ -1640,7 +1619,7 @@ class RL_UR16eManipulation(VecTask):
     
                                 # print("#############RESET ARM")
                                 self.primitive_count[env_count] += 1
-                                if False:
+                                if self.primitive_count[env_count] >= self.num_primtive_actions + 1:
                                     self.RL_flag[env_count] = 0
                                     self.run_dexnet[env_count] = 1
                                     self.free_envs_list[env_count] = torch.tensor(1)

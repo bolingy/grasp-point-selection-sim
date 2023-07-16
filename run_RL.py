@@ -4,7 +4,7 @@ import torch
 import rl.rl_utils
 import matplotlib.pyplot as plt
 
-ne = 35
+ne = 2
 
 envs = isaacgymenvs.make(
 	seed=0,
@@ -14,7 +14,7 @@ envs = isaacgymenvs.make(
 	rl_device="cuda:0",
 	multi_gpu=False,
 	graphics_device_id=0, 
-	headless=True
+	headless=False
 )
 # Observation space is eef_pos, eef_quat, q_gripper/q
 print("Observation space is", envs.observation_space)
@@ -56,10 +56,10 @@ action = torch.tensor(ne * [[0.11, 0., 0.28, 0.22]]).to("cuda:0")
 
 import time 
 start = time.time()
-for i in range(1000):
-# while True:
+# for i in range(1000):
+while True:
 	obs, reward, done, info = envs.step(action)
-
+	print(obs['obs'][:, 614400:])
 	# imgs, reward, done, indicies = step_primitives(action)
 	# img = imgs[:, :307200]
 	# segmask = imgs[:, 307200:]
