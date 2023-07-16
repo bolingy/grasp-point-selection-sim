@@ -235,6 +235,7 @@ class RL_UR16eManipulation(VecTask):
         self.return_pre_grasp = torch.zeros(self.num_envs).to(self.device)
         self.go_to_start = torch.ones(self.num_envs).to(self.device)
         self.success = torch.zeros(self.num_envs).to(self.device)
+        self.min_distance = torch.ones(self.num_envs).to(self.device) * 2
 
         self.weight_distance = 1.0
 
@@ -827,6 +828,8 @@ class RL_UR16eManipulation(VecTask):
             self.init_go_to_start[env_id] = torch.tensor(1)
             self.return_pre_grasp[env_id] = torch.tensor(0)
             self.primitive_count[env_id.item()] = torch.tensor(1)
+            self.min_distance[env_id] = torch.tensor(2)
+
             # self.finished_prim[env_id] = torch.tensor(0)
 
         self.progress_buf[env_ids] = 0
@@ -1025,9 +1028,11 @@ class RL_UR16eManipulation(VecTask):
                     _object_pos = list(_all_objects_current_pose.values())[0]
                     _object_pos = _object_pos.type(torch.float).detach().clone()
                     _distance = torch.norm(_eef_pos - _object_pos)
+                    if self.min_distance[env_count] > _distance:
+                        self.min_distance[env_count] = _distance
                     # print("distance", _distance)
 
-                    torch_success_tensor = -(_distance.clone().unsqueeze(0) * self.weight_distance)
+                    torch_success_tensor = -(self.min_distance[env_count].clone().unsqueeze(0) * self.weight_distance)
                     if self.success_buf is None:
                         self.success_buf = torch_success_tensor
                     else:
