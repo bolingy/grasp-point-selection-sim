@@ -48,8 +48,8 @@ has_continuous_action_space = True
 max_ep_len = 2                     # max timesteps in one episode
 max_training_timesteps = int(1e5)   # break training loop if timeteps > max_training_timesteps
 
-print_freq = 4     # print avg reward in the interval (in num timesteps)
-log_freq = max_ep_len * 2       # log avg reward in the interval (in num timesteps)
+print_freq = 3                  # print avg reward in the interval (in num timesteps)
+log_freq = max_ep_len * 10      # log avg reward in the interval (in num timesteps)
 save_model_freq = int(2e4)      # save model frequency (in num timesteps)
 
 action_std = 0.1 
@@ -64,17 +64,17 @@ action_std = 0.1
 ################ PPO hyperparameters ################
 
 pick_len = 3
-update_size = pick_len * 21
+update_size = pick_len * 10
 K_epochs = 40               # update policy for K epochs
 eps_clip = 0.2              # clip parameter for PPO
 gamma = 0.99                # discount factor
 
-lr_actor = 1e-8       # learning rate for actor network
-lr_critic = 5e-7       # learning rate for critic network
+lr_actor = 1e-7       # learning rate for actor network
+lr_critic = 5e-7      # learning rate for critic network
 
-random_seed = 0         # set random seed if required (0 = no random seed)
+random_seed = 0       # set random seed if required (0 = no random seed)
 
-ne = 25 # number of environments
+ne = 20               # number of environments
 
 print("training environment name : " + env_name)
 
@@ -292,7 +292,7 @@ while time_step <= max_training_timesteps: ## prim_step
         i_episode += 1
         wandb.log({"Episodes": i_episode})
         wandb.log({"Average reward in every update": curr_rewards})
-
+        print("Updated at timestep {} with average reward {}".format(time_step, curr_rewards))
     # if time_step % log_freq == 0:
     #     # log average reward till last episode
     #     log_avg_reward = log_running_reward / log_running_episodes
@@ -310,7 +310,7 @@ while time_step <= max_training_timesteps: ## prim_step
         # print average reward till last episode
         print_avg_reward = print_running_reward / print_running_episodes
         # print_running_reward = round(print_running_reward, 2)
-        wandb.log({"Average running reward": print_avg_reward})
+        wandb.log({"Average running reward in 5 updates": print_avg_reward})
         print("Episode : {} \t\t Timestep : {} \t\t Average Reward : {}".format(i_episode, time_step, print_avg_reward))
 
         print_running_reward = 0

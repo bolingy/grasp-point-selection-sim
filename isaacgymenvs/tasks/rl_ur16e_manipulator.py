@@ -1615,6 +1615,8 @@ class RL_UR16eManipulation(VecTask):
                                 # reset arm to init pose
                                 self.deploy_actions(env_count, self.ur16e_default_dof_pos)
                                 self.frame_count[env_count] = 0
+                                self.progress_buf[env_count] = 0
+    
                                 # print("#############RESET ARM")
                                 self.primitive_count[env_count] += 1
                                 if self.primitive_count[env_count] >= self.num_primtive_actions + 1:
