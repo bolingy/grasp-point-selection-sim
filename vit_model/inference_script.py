@@ -249,14 +249,14 @@ class inference:
 
         max_value = np.amax(output)
         grasp_point = None
-        if(max_value < 1.0):
+        if(max_value <= 0.7):
             max_coordinates = np.argwhere(output == max_value)
             grasp_point = np.array([max_coordinates[0][1], max_coordinates[0][0]])
         else:
             try:
                 points = np.column_stack(np.where(output > 0.9))
                 # Perform DBSCAN on the points
-                db = DBSCAN(eps=1, min_samples=5).fit(points)  # You may need to adjust the parameters
+                db = DBSCAN(eps=1.5, min_samples=5).fit(points)  # You may need to adjust the parameters
                 # Find the labels of the clusters that each point belongs to
                 labels = db.labels_
                 # Ignore noises in the cluster computation (noises are denoted by -1)
@@ -275,7 +275,17 @@ class inference:
                 max_avg_score = 0
                 max_cluster_size = 0
 
+                normalize_size = np.array([])
+                
+                for cluster_id in np.unique(labels):
+                    if cluster_id == -1:
+                        continue
+                    normalize_size = np.append(normalize_size, len(points[labels == cluster_id]))
+                
+                normalize_size = normalize_size/np.max(normalize_size)*0.025
+
                 # Calculate the mean coordinate for each cluster
+                count = 0
                 for cluster_id in np.unique(labels):
                     if cluster_id == -1:
                         continue  # Skip noise
@@ -285,19 +295,21 @@ class inference:
                     
                     mean_coordinate = cluster_points.mean(axis=0)
                     avg_score = cluster_scores.mean()
+                    avg_cluster_size_score = cluster_scores.mean() + normalize_size[count]
                     avg_cluster_size = len(cluster_points)
 
-                    print(f'Cluster {cluster_id}: Mean coordinate: {mean_coordinate}, Average score: {avg_score}, Cluster Size: {len(cluster_points)}')
+                    print(f'Cluster {cluster_id}: Mean coordinate: {mean_coordinate}, Average score: {avg_cluster_size_score}, Cluster Size: {len(cluster_points)}')
 
                     # if avg_score > max_avg_score:
                     #     max_avg_score = avg_score
                     #     best_cluster_id = cluster_id
                     #     grasp_point = np.array([mean_coordinate[1], mean_coordinate[0]]).astype(np.int16)
-                    if avg_cluster_size > max_cluster_size:
-                        max_cluster_size = avg_cluster_size
+                    if avg_cluster_size_score > max_cluster_size:
+                        max_cluster_size = avg_cluster_size_score
                         best_cluster_id = cluster_id
                         grasp_point = np.array([mean_coordinate[1], mean_coordinate[0]]).astype(np.int16)
-                print(f'Best cluster is {best_cluster_id} with average score {max_avg_score}.')
+                    count += 1
+                print(f'Best cluster is {best_cluster_id} with average score {max_cluster_size}.')
             except:
                 pass
         try:
@@ -325,7 +337,8 @@ class inference:
                         dist = min_dist
                         grasp_point = temp_second_point.astype(np.int16)
         except:
-            pass
+            max_coordinates = np.argwhere(output == max_value)
+            grasp_point = np.array([max_coordinates[0][1], max_coordinates[0][0]])
 
         # plt.Circle((grasp_point[1], grasp_point[0]), 10, fill=True)
         # plt.figure(0)

@@ -996,10 +996,20 @@ class FrankaCubeStack(VecTask):
                     env_complete_reset = torch.cat(
                         (env_complete_reset, torch.tensor([env_count])), axis=0)
                     total_objects = 1000
+                
+                object_mask_area = 1000
+                for i in torch.unique(segmask_object_count):
+                    segmask_area = np.zeros_like(segmask_check.cpu().numpy().astype(np.uint8))
+                    segmask_area[segmask_check.cpu().numpy().astype(np.uint8) == i.item()] = 1
+                    area = np.count_nonzero(segmask_area)
+                    print(i, area)
+                    if(object_mask_area > area):
+                        object_mask_area = area
+                print("area", object_mask_area, torch.unique(segmask_object_count), total_objects, objects_spawned)
 
                 # check if the environment returned from reset and the frame for that enviornment is 30 or not
                 # 30 frames is for cooldown period at the start for the simualtor to settle down
-                if ((self.free_envs_list[env_count] == torch.tensor(1)) and total_objects == objects_spawned):
+                if ((self.free_envs_list[env_count] == torch.tensor(1)) and (total_objects == objects_spawned) and object_mask_area >= 1000):
                     '''
                     DexNet 3.0
                     '''
