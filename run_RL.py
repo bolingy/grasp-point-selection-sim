@@ -4,7 +4,9 @@ import torch
 import rl.rl_utils
 import matplotlib.pyplot as plt
 
-ne = 2
+ne = 20
+img_x = 260
+img_y = 180
 
 envs = isaacgymenvs.make(
 	seed=0,
@@ -14,7 +16,7 @@ envs = isaacgymenvs.make(
 	rl_device="cuda:0",
 	multi_gpu=False,
 	graphics_device_id=0, 
-	headless=False
+	headless=True
 )
 # Observation space is eef_pos, eef_quat, q_gripper/q
 print("Observation space is", envs.observation_space)
@@ -23,8 +25,8 @@ print("Action space is", envs.action_space)
 def step_primitives_env_0(action):
 	while True:
 		obs, reward, done, info = envs.step(action)
-		imgs = obs['obs'][:, :614400]
-		info = obs['obs'][:, 614400:]
+		imgs = obs['obs'][:, :img_x*img_y*2]
+		info = obs['obs'][:, img_x*img_y*2:]
 		take_obs = info[0]
 		if take_obs[0] == 1:
 			print("@@@@@@@@@@@@observation returned")
@@ -37,8 +39,8 @@ def step_primitives(action):
 		if torch.sum(obs['obs']) == 0:
 			continue
 		# print("obs", obs['obs'])
-		imgs = obs['obs'][:, :614400]
-		info = obs['obs'][:, 614400:]
+		imgs = obs['obs'][:, :img_x*img_y*2]
+		info = obs['obs'][:, img_x*img_y*2:]
 		# return all imgs that has info[env, 0] == 1
 		# if all info[env, 0] == 0, then don't return anything
 		indicies = info[:, 2]
@@ -56,15 +58,18 @@ action = torch.tensor(ne * [[0.11, 0., 0.28, 0.22]]).to("cuda:0")
 
 import time 
 start = time.time()
-# for i in range(1000):
-while True:
-	obs, reward, done, info = envs.step(action)
-	print(obs['obs'][:, 614400:])
-	# imgs, reward, done, indicies = step_primitives(action)
-	# img = imgs[:, :307200]
-	# segmask = imgs[:, 307200:]
+for i in range(1000):
+# while True:
+	# obs, reward, done, info = envs.step(action)
+	# print(obs['obs'][:, 614400:])
+	imgs, reward, done, indicies = step_primitives(action)
+	# img = imgs[:, :img_x*img_y*2]
+	# segmask = imgs[:, img_x*img_y:]
+	# depth = imgs[:, :img_x*img_y]
 	# print("segmask", segmask.shape)
-	# plt.imshow(segmask[0].cpu().numpy().reshape(480, 640))
+	# plt.imshow(depth[0].cpu().numpy().reshape(img_y, img_x))
+	# plt.show()
+	# plt.imshow(segmask[0].cpu().numpy().reshape(img_y, img_x))
 	# plt.show()
 end = time.time()
 print(f"Time taken to run the code was {end-start} seconds")

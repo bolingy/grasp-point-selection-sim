@@ -20,7 +20,7 @@ import gym
 from rl.ppo import *
 
 
-def rearrange_state(state, b=2, h=480, w=640):
+def rearrange_state(state, b=2, h=180, w=260):
     # state is a tensor of shape (batch_size, 307200 + 307200)
     # 307200 = 640 * 480
     # rearrange such that the depth image and seg mask are separate, and the batch dimension is first
@@ -62,8 +62,8 @@ def step_primitives(action, envs):
 		if torch.sum(obs['obs']) == 0:
 			continue
 		# print("obs", obs['obs'])
-		imgs = obs['obs'][:, :614400]
-		info = obs['obs'][:, 614400:]
+		imgs = obs['obs'][:, :93600]
+		info = obs['obs'][:, 93600:]
 		# return all imgs that has info[env, 0] == 1
 		# if all info[env, 0] == 0, then don't return anything
 		indicies = info[:, 2].to(torch.int64)
@@ -78,8 +78,8 @@ def step_primitives(action, envs):
 def step_primitives_env_0(action, envs):
 	while True:
 		obs, reward, done, info = envs.step(action)
-		imgs = obs['obs'][:, :614400]
-		info = obs['obs'][:, 614400:]
+		imgs = obs['obs'][:, :93600]
+		info = obs['obs'][:, 93600:]
 		take_obs = info[0]
 		if take_obs[0] == 1:
 			print("@@@@@@@@@@@@observation returned")
