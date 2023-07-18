@@ -26,6 +26,7 @@ import gym
 from rl.ppo import *
 from rl.rl_utils import *
 import wandb
+import time
 wandb.login()
 
 import warnings
@@ -52,7 +53,7 @@ print_freq = 3                  # print avg reward in the interval (in num times
 log_freq = max_ep_len * 20      # log avg reward in the interval (in num timesteps)
 save_model_freq = int(2e4)      # save model frequency (in num timesteps)
 
-action_std = 0.1 
+action_std = 0.3 
 
 
 #####################################################
@@ -64,20 +65,19 @@ action_std = 0.1
 ################ PPO hyperparameters ################
 
 pick_len = 3
-update_size = pick_len * 1
+update_size = pick_len * 11 #20
 K_epochs = 40               # update policy for K epochs
 eps_clip = 0.2              # clip parameter for PPO
 gamma = 0.99                # discount factor
 
-lr_actor = 1e-8       # learning rate for actor network
-lr_critic = 5e-8      # learning rate for critic network
+lr_actor = 1e-5       # learning rate for actor network
+lr_critic = 3e-5      # learning rate for critic network
 
 random_seed = 0       # set random seed if required (0 = no random seed)
 
-ne = 20              # number of environments
+ne = 5              # number of environments
 
 print("training environment name : " + env_name)
-
 run = wandb.init(
     project='bin_picking', 
     config={
@@ -215,6 +215,7 @@ print("=========================================================================
 log_f = open(log_f_name,"w+")
 log_f.write('episode,timestep,reward\n')
 
+s_t = time.time()
 
 # printing and logging variables
 print_running_reward = 0
@@ -248,18 +249,22 @@ while time_step <= max_training_timesteps: ## prim_step
         buf_envs[true_i].actions.append(action[i].clone().detach())
         buf_envs[true_i].logprobs.append(action_logprob[i].clone().detach().unsqueeze(0))
         buf_envs[true_i].state_values.append(state_val[i].clone().detach())
+        if true_i == 0:
+            print("action of env 0 updated", action[i])
     action = scale_actions(action).to(sim_device)
     # true indicies to one hot flat vector
     one_hot = torch.zeros(ne).bool().to(sim_device)
     one_hot[true_indicies] = 1
     actions[one_hot] = action
-
+    # print("actions", actions)
     state, reward, done, true_indicies = step_primitives(actions, env)
     state, reward, done, true_indicies = returns_to_device(state, reward, done, true_indicies, train_device)
     state = rearrange_state(state)
     # true_idx = torch.nonzero(indicies).squeeze(1)
     for i, true_i in enumerate(true_indicies):
         if len(buf_envs[true_i].rewards) != len(buf_envs[true_i].states):
+            if true_i == 0:
+                print("reward of env 0", reward[i])
             buf_envs[true_i].rewards.append(reward[i].clone().detach().unsqueeze(0))
             buf_envs[true_i].is_terminals.append(done[i].clone().detach().unsqueeze(0))
             time_step += 1
@@ -282,6 +287,7 @@ while time_step <= max_training_timesteps: ## prim_step
             return (total_reward / num_rewards).item()
         curr_rewards = calc_avg_reward_per_update()
         ppo_agent.update(buf_central)
+        print("update time", time.time() - s_t)
         buf_central.clear()
         #free up memory
         torch.cuda.empty_cache()
@@ -310,7 +316,7 @@ while time_step <= max_training_timesteps: ## prim_step
         # print average reward till last episode
         print_avg_reward = print_running_reward / print_running_episodes
         # print_running_reward = round(print_running_reward, 2)
-        wandb.log({"Average running reward in 5 updates": print_avg_reward})
+        wandb.log({"Average running reward in every {} episodes".format(print_freq): print_avg_reward})
         print("Episode : {} \t\t Timestep : {} \t\t Average Reward : {}".format(i_episode, time_step, print_avg_reward))
 
         print_running_reward = 0
@@ -326,7 +332,7 @@ while time_step <= max_training_timesteps: ## prim_step
     #     print("--------------------------------------------------------------------------------------------")
         
     # # break; if the episode is over
-    # if done:
+    # if done:update
     #     break
 
 

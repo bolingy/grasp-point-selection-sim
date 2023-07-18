@@ -14,6 +14,7 @@ import numpy as np
 import gym
 from .models import ResidualBlock, ResNet
 from matplotlib import pyplot as plt
+import time
 # import roboschool
 # import pybullet_envs
 
@@ -236,11 +237,13 @@ class PPO:
 
 
     def update(self, buffer=None):
+        t0 = time.time()
         # buffer = self.buffer
         if (buffer is not None):
             self.buffer = copy.deepcopy(buffer)
         # self.buffer.print_buffer()
-
+        t1 = time.time()
+        print('copy time', t1 - t0)
         if DEBUG:
             # find nans in buffer state, action, logprobs, state_values
             for i in range(len(self.buffer.states)):
@@ -261,7 +264,8 @@ class PPO:
                 discounted_reward = 0
             discounted_reward = reward + (self.gamma * discounted_reward)
             rewards.insert(0, discounted_reward)
-            
+        t2 = time.time()
+        print('Monte Carlo estimate of returns time', t2 - t1)
         # Normalizing the rewards
         rewards = torch.tensor(rewards, dtype=torch.float32).to(self.device)
         rewards = (rewards - rewards.mean()) / (rewards.std() + 1e-7)

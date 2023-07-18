@@ -828,8 +828,7 @@ class RL_UR16eManipulation(VecTask):
             self.init_go_to_start[env_id] = torch.tensor(1)
             self.return_pre_grasp[env_id] = torch.tensor(0)
             self.primitive_count[env_id.item()] = torch.tensor(1)
-            self.min_distance[env_id] = torch.tensor(100)
-
+            # self.min_distance = torch.ones(self.num_envs).to(self.device)*100
             # self.finished_prim[env_id] = torch.tensor(0)
 
         self.progress_buf[env_ids] = 0
@@ -954,10 +953,20 @@ class RL_UR16eManipulation(VecTask):
         # image observations
         self.obs_buf = torch.zeros(93600).to(self.device)
         
-        
+        _object_pos = torch.zeros((self.num_envs,3))
+        values = torch.tensor(list(self.selected_object_env.values())).int() - 1
+        first_dim = torch.arange(self._root_state.shape[0])
+        _object_pos = self._root_state[first_dim, np.array(self._object_model_id)[values], :3]
+        _eef_pos = self.states["eef_pos"] 
+        # add 0.181 to x pos of eef to guesstimate suction cup pos
+        _eef_pos[:, 0] += 0.181
+        # find norm distance between eef and object given xyz pose in each row
+        _distance = torch.norm(_object_pos - _eef_pos, dim=1)
+        # print("distance", _distance)
+        # print("min_distance", self.min_distance)
+        self.min_distance = torch.min(_distance, self.min_distance)
 
-        # torch_rgb_cameras = torch.FloatTensor(self.rgb_camera_tensors).to(self.device)
-
+        # print("self.finished_prim.sum() > 0", self.finished_prim.sum() > 0)
         if self.finished_prim.sum() > 0:
             torch_prim_tensor = self.finished_prim.clone().detach()
             envs_finished_prim = torch.nonzero(torch_prim_tensor).long().squeeze(1)
@@ -970,16 +979,9 @@ class RL_UR16eManipulation(VecTask):
             # torch_rgb_tensor = self.rgb_camera_tensors[envs_finished_prim]
             ##############################################################################################
             # get distance between eef and object
-            _object_pos = torch.zeros((self.num_envs,3))
-            values = torch.tensor(list(self.selected_object_env.values())).int() - 1
-            first_dim = torch.arange(self._root_state.shape[0])
-            _object_pos = self._root_state[first_dim, np.array(self._object_model_id)[values], :3]
-            _eef_pos = self.states["eef_pos"]
-            # find norm distance between eef and object given xyz pose in each row
-            _distance = torch.norm(_object_pos - _eef_pos, dim=1)
-            self.min_distance = torch.min(_distance, self.min_distance)
-            # print("min_distance", self.min_distance)
+            # print("self.min_distance when updating env {}".format(envs_finished_prim), self.min_distance[envs_finished_prim])
             torch_success_tensor = -(self.min_distance * self.weight_distance)[envs_finished_prim]
+            self.min_distance[envs_finished_prim] = torch.tensor(100).to(self.device).float()
             ################################################################################################
             # torch_success_tensor = self.success[envs_finished_prim]
             torch_done_tensor = self.done[envs_finished_prim]
@@ -1358,9 +1360,9 @@ class RL_UR16eManipulation(VecTask):
                     self.xyz_point_env[env_count] = self.xyz_point_temp
                     self.grasp_point_env[env_count] = self.grasp_point_temp
                     self.free_envs_list[env_count] = torch.tensor(0)
-                    if self.RL_flag[env_count] == torch.tensor(1):
-                        # print("pass obs 1")
-                        self.finished_prim[env_count] = 1
+                    # if self.RL_flag[env_count] == torch.tensor(1):
+                    #     # print("pass obs 1")
+                    #     self.finished_prim[env_count] = 1
                     
                 elif (total_objects != objects_spawned and (self.free_envs_list[env_count] == torch.tensor(1))):
                     print(f"Object falled down in environment {env_count}")
@@ -1451,8 +1453,10 @@ class RL_UR16eManipulation(VecTask):
                         if self.init_go_to_start[env_count] and self.primitive_count[env_count] > 1:
                             if self.return_pre_grasp[env_count] == 0:
                                 self.finished_prim[env_count] = 1
-                                self.min_distance = torch.ones(self.num_envs).to(self.device)*100
-                                self.return_pre_grasp[env_count] = 1
+                                self.done[env_count] = 1
+                            
+                                env_list_reset_objects = torch.cat(
+                                    (env_list_reset_objects, torch.tensor([env_count])), axis=0)
                             else:
                                 self.deploy_actions(env_count, to_torch([-0.2578, -1.8044, 1.5144, 0.3867, 1.4177, -0.4511, 0.], device=self.device))
                             # print("pass obs 2")
