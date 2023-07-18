@@ -52,7 +52,7 @@ class RL_UR16eManipulation(VecTask):
             "Invalid control type specified. Must be one of: {osc, joint_tor}"
 
         # image obs include: depth dim = 1, segmask dim = 1
-        self.cfg["env"]["numObservations"] = 614400
+        self.cfg["env"]["numObservations"] = 46800
 
         # actions include: delta EEF if OSC (6) or joint torques (7) + bool gripper (1)
         self.cfg["env"]["numActions"] = 4
@@ -235,6 +235,9 @@ class RL_UR16eManipulation(VecTask):
         self.return_pre_grasp = torch.zeros(self.num_envs).to(self.device)
         self.go_to_start = torch.ones(self.num_envs).to(self.device)
         self.success = torch.zeros(self.num_envs).to(self.device)
+        self.min_distance = torch.ones(self.num_envs).to(self.device) * 100
+
+        self.weight_distance = 1.0
 
         # Reset all environments
         self.reset_idx(torch.arange(self.num_envs, device=self.device))
@@ -752,7 +755,7 @@ class RL_UR16eManipulation(VecTask):
             # How many objects should we spawn 2 or 3
             probabilities = [0.15, 0.5, 0.35]
             ##############################################
-            probabilities = [0.0, 0.0, 1.0]
+            # probabilities = [1.0, 0.0, 0.0]
             ##############################################
             random_number = self.random_number_with_probabilities(probabilities)
             random_number += 1
@@ -781,12 +784,12 @@ class RL_UR16eManipulation(VecTask):
                 # offset_object = np.array([np.random.uniform(0.67, 0.7, 1).reshape(
                 #     1,)[0], np.random.uniform(-0.22, -0.12, 1).reshape(1,)[0], 1.3, random.choice([0, 1.57, 3.14]),
                 #     random.choice([0, 1.57, 3.14]), np.random.uniform(0.0, 3.14, 1).reshape(1,)[0]])
-                offset_object = np.array([np.random.uniform(0.67, 0.9, 1).reshape(
-                    1,)[0], np.random.uniform(-0.15, 0.10, 1).reshape(1,)[0], 1.55, 0.0,
-                    0.0, 0.0])
+                # offset_object = np.array([np.random.uniform(0.67, 0.9, 1).reshape(
+                #     1,)[0], np.random.uniform(-0.15, 0.10, 1).reshape(1,)[0], 1.55, 0.0,
+                #     0.0, 0.0])
                 ##############################################
-                # domain_randomizer = random_number = random.choice(
-                #     [1])
+                domain_randomizer = random_number = random.choice(
+                    [1])
                 offset_object = offset_objects[object_count-1]
                 ##############################################
                 quat = euler_angles_to_quaternion(
@@ -825,6 +828,8 @@ class RL_UR16eManipulation(VecTask):
             self.init_go_to_start[env_id] = torch.tensor(1)
             self.return_pre_grasp[env_id] = torch.tensor(0)
             self.primitive_count[env_id.item()] = torch.tensor(1)
+            self.min_distance[env_id] = torch.tensor(100)
+
             # self.finished_prim[env_id] = torch.tensor(0)
 
         self.progress_buf[env_ids] = 0
@@ -947,124 +952,56 @@ class RL_UR16eManipulation(VecTask):
         # return self.obs_buf
 
         # image observations
-        self.rgb_buf = None
-        self.depth_buf = None
-        self.seg_buf = None
-        self.finished_prim_buf = None
-        self.success_buf = None 
-        self.done_buf = None
-        self.indicies_buf = None
-        self.obs_buf = torch.zeros(614403).to(self.device)
-        if self.finished_prim.sum() > 0:
-            for env_count in range(self.num_envs):
-                torch_prim_tensor =  self.finished_prim[env_count].clone().unsqueeze(0)
-                if int(torch_prim_tensor.item()) == 1:
-                    if self.finished_prim_buf is None:
-                        self.finished_prim_buf = torch_prim_tensor
-                    else:
-                        self.finished_prim_buf = torch.cat(
-                            (self.finished_prim_buf, torch_prim_tensor), dim=0)
-                    torch_depth_tensor = self.depth_camera_tensors[env_count]
-                    depth_image = torch_depth_tensor.to(self.device)
-                    depth_image = -depth_image
-                    depth_image_dexnet = depth_image.clone().detach()
-                    noise_image = torch.normal(
-                        0, 0.0005, size=depth_image_dexnet.size()).to(self.device)
-                    depth_image_dexnet = depth_image_dexnet + noise_image
-                    torch_depth_dexnet_tensor = to_torch(
-                        depth_image_dexnet, dtype=torch.float, device=self.device).unsqueeze(0)
-                    depth_image_save_temp = depth_image_dexnet.clone().detach().cpu().numpy()
-                    self.depth_image_save[env_count] = depth_image_save_temp[180:660, 410:1050]
-                    if self.depth_buf is None:
-                        self.depth_buf = torch_depth_dexnet_tensor
-                    else:
-                        self.depth_buf = torch.cat(
-                            (self.depth_buf, torch_depth_dexnet_tensor), dim=0)
-
-                    torch_mask_tensor = self.mask_camera_tensors[env_count]
-                    segmask = torch_mask_tensor.to(self.device)
-                    # segmask_dexnet = segmask.clone().detach()
-                    #     self.segmask_save[env_count] = segmask[180:660, 410:1050].clone(
-                    #     ).detach().cpu().numpy().astype(np.uint8)
-                    segmask_dexnet = segmask.clone().detach()
-                    self.segmask_save[env_count] = segmask[180:660, 410:1050].clone(
-                    ).detach().cpu().numpy().astype(np.uint8)
-
-                    segmask_numpy = np.zeros_like(
-                        segmask_dexnet.cpu().numpy().astype(np.uint8))
-                    segmask_numpy_temp = np.zeros_like(
-                        segmask_dexnet.cpu().numpy().astype(np.uint8))
-                    segmask_numpy_temp[segmask_dexnet.cpu().numpy().astype(
-                        np.uint8) == self.object_target_id[env_count].cpu().numpy()] = 1
-                    segmask_numpy[segmask_dexnet.cpu().numpy().astype(
-                        np.uint8) == self.object_target_id[env_count].cpu().numpy()] = 255
-                    torch_segmask_tensor = to_torch(
-                        segmask_numpy, dtype=torch.float, device=self.device).unsqueeze(0)
-                    if self.seg_buf is None:
-                        self.seg_buf = torch_segmask_tensor
-                    else:
-                        self.seg_buf = torch.cat(
-                            (self.seg_buf, torch_segmask_tensor), dim=0)
-
-                    torch_success_tensor =  self.success[env_count].clone().unsqueeze(0)
-                    if self.success_buf is None:
-                        self.success_buf = torch_success_tensor
-                    else:
-                        self.success_buf = torch.cat(
-                            (self.success_buf, torch_success_tensor), dim=0)
-                    if self.success[env_count] == 1:
-                        self.success[env_count] = 0
-                        
-                    torch_done_tensor =  self.done[env_count].clone().unsqueeze(0)
-                    if self.done_buf is None:
-                        self.done_buf = torch_done_tensor
-                    else:
-                        self.done_buf = torch.cat(
-                            (self.done_buf, torch_done_tensor), dim=0)
-                    if self.done[env_count] == 1:
-                        # print("##############done")
-                        self.done[env_count] = 0
-
-                    torch_indicies_tensor =  torch.tensor([env_count]).clone()
-                    if self.indicies_buf is None:
-                        self.indicies_buf = torch_indicies_tensor
-                    else:
-                        self.indicies_buf = torch.cat(
-                            (self.indicies_buf, torch_indicies_tensor), dim=0)
-        if self.finished_prim_buf is None:
-            return None
-        # crop depth image
-        self.depth_buf = self.depth_buf[:, 180:660, 410:1050]
-        # add extra dimensions depth image such that it is the same size as the rgb image
-        # self.depth_buf = self.depth_buf.unsqueeze(-1)
-
-        # crop segmask
-        self.seg_buf = self.seg_buf[:, 180:660, 410:1050]
-        # self.seg_buf = self.seg_buf.unsqueeze(-1)
-
-        # plot latest image from rgb_buf WRONG
-        # if self.finished_prim_buf[-1] == 1:
-        #     plt.imshow(self.rgb_buf[-1].cpu().numpy())
-        #     plt.show()
-
-        self.depth_buf = einops.rearrange(self.depth_buf, 'b h w -> b (h w)')
-        self.seg_buf = einops.rearrange(self.seg_buf, 'b h w -> b (h w)')
-        self.obs_buf = torch.cat((self.depth_buf, self.seg_buf), dim=1).squeeze(0)
-
-        if self.indicies_buf.shape[0] > 1:
-            # self.obs_buf = torch.cat((self.obs_buf,  self.finished_prim_buf.unsqueeze(0).T.to(self.device)), dim=1)
-            self.obs_buf = torch.cat((self.obs_buf,  self.success_buf.unsqueeze(0).T.to(self.device)), dim=1)
-            self.obs_buf = torch.cat((self.obs_buf,  self.done_buf.unsqueeze(0).T.to(self.device)), dim=1)
-            self.obs_buf = torch.cat((self.obs_buf,  self.indicies_buf.unsqueeze(0).T.to(self.device)), dim=1)
-        else:
-            # self.obs_buf = torch.cat((self.obs_buf,  self.finished_prim_buf.to(self.device)), dim=0)
-            self.obs_buf = torch.cat((self.obs_buf,  self.success_buf.to(self.device)), dim=0)
-            self.obs_buf = torch.cat((self.obs_buf,  self.done_buf.to(self.device)), dim=0)
-            self.obs_buf = torch.cat((self.obs_buf,  self.indicies_buf.to(self.device)), dim=0)
+        self.obs_buf = torch.zeros(93600).to(self.device)
         
-        if self.indicies_buf.shape[0] == 1:
-            self.obs_buf = self.obs_buf.unsqueeze(0)    
-        return self.obs_buf
+        
+
+        # torch_rgb_cameras = torch.FloatTensor(self.rgb_camera_tensors).to(self.device)
+
+        if self.finished_prim.sum() > 0:
+            torch_prim_tensor = self.finished_prim.clone().detach()
+            envs_finished_prim = torch.nonzero(torch_prim_tensor).long().squeeze(1)
+            print("envs_finished_prim", envs_finished_prim)
+            # if len(envs_finished_prim) == 0:
+            #     return None
+            torch_depth_cameras = torch.stack(self.depth_camera_tensors).to(self.device)
+            torch_segmask_cameras = torch.stack(self.mask_camera_tensors).to(self.device)
+            torch_depth_tensor = torch_depth_cameras[envs_finished_prim]
+            torch_segmask_tensor = torch_segmask_cameras[envs_finished_prim]
+            # torch_rgb_tensor = self.rgb_camera_tensors[envs_finished_prim]
+
+            torch_success_tensor = self.success[envs_finished_prim]
+            torch_done_tensor = self.done[envs_finished_prim]
+            torch_indicies_tensor = envs_finished_prim
+
+            # crop depth image
+            torch_depth_tensor = torch_depth_tensor[:, 280:460, 510:770]
+
+            # crop segmask
+            torch_segmask_tensor = torch_segmask_tensor[:, 280:460, 510:770]
+
+            torch_depth_tensor = einops.rearrange(torch_depth_tensor, 'b h w -> b (h w)')
+            torch_segmask_tensor = einops.rearrange(torch_segmask_tensor, 'b h w -> b (h w)')
+            label = self.object_target_id[envs_finished_prim]
+            label = label.unsqueeze(1).expand(torch_segmask_tensor.shape)
+            torch_segmask_tensor = torch.where(torch_segmask_tensor == label, torch.tensor(255).to(self.device), torch_segmask_tensor)            # print("condition", torch.nonzero(torch_depth_tensor[0] == label[0]).shape) 
+            self.obs_buf = torch.cat((torch_depth_tensor, torch_segmask_tensor), dim=1).squeeze(0)
+
+            if torch_indicies_tensor.shape[0] > 1:
+                self.obs_buf = torch.cat((self.obs_buf,  torch_success_tensor.unsqueeze(0).T.to(self.device)), dim=1)
+                self.obs_buf = torch.cat((self.obs_buf,  torch_done_tensor.unsqueeze(0).T.to(self.device)), dim=1)
+                self.obs_buf = torch.cat((self.obs_buf,  torch_indicies_tensor.unsqueeze(0).T.to(self.device)), dim=1)
+            else:
+                self.obs_buf = torch.cat((self.obs_buf,  torch_success_tensor.to(self.device)), dim=0)
+                self.obs_buf = torch.cat((self.obs_buf,  torch_done_tensor.to(self.device)), dim=0)
+                self.obs_buf = torch.cat((self.obs_buf,  torch_indicies_tensor.to(self.device)), dim=0)
+            
+            if torch_indicies_tensor.shape[0] == 1:
+                self.obs_buf = self.obs_buf.unsqueeze(0)    
+            return self.obs_buf    
+        else:
+            return None
+
     
     def compute_reward(self):
         # suction score
@@ -1503,6 +1440,7 @@ class RL_UR16eManipulation(VecTask):
                         if self.init_go_to_start[env_count] and self.primitive_count[env_count] > 1:
                             if self.return_pre_grasp[env_count] == 0:
                                 self.finished_prim[env_count] = 1
+                                self.min_distance = torch.ones(self.num_envs).to(self.device)*100
                                 self.return_pre_grasp[env_count] = 1
                             else:
                                 self.deploy_actions(env_count, to_torch([-0.2578, -1.8044, 1.5144, 0.3867, 1.4177, -0.4511, 0.], device=self.device))
@@ -1620,6 +1558,8 @@ class RL_UR16eManipulation(VecTask):
                                 # print("#############RESET ARM")
                                 self.primitive_count[env_count] += 1
                                 if self.primitive_count[env_count] >= self.num_primtive_actions + 1:
+                                ######## False if min dist
+                                # if False:
                                     self.RL_flag[env_count] = 0
                                     self.run_dexnet[env_count] = 1
                                     self.free_envs_list[env_count] = torch.tensor(1)

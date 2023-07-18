@@ -64,7 +64,7 @@ action_std = 0.1
 ################ PPO hyperparameters ################
 
 pick_len = 3
-update_size = pick_len * 10
+update_size = pick_len * 1
 K_epochs = 40               # update policy for K epochs
 eps_clip = 0.2              # clip parameter for PPO
 gamma = 0.99                # discount factor
