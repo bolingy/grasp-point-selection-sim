@@ -195,8 +195,12 @@ class inference:
         return point_cloud
     
     def run_model(self, depth_image, segmask, target_id, model_path):
-        self.model.load_state_dict(torch.load(model_path, map_location='cuda:0')['model_state_dict'])
-        self.model.eval()
+        try:
+            self.model.load_state_dict(torch.load(model_path, map_location='cuda:0')['model_state_dict'])
+            self.model.eval()
+        except:
+            self.model.load_state_dict(torch.load(model_path, map_location='cuda:0'))
+            self.model.eval()
       
         id = target_id.item()
         segmask_numpy = np.zeros_like(segmask)
@@ -337,8 +341,7 @@ class inference:
                         dist = min_dist
                         grasp_point = temp_second_point.astype(np.int16)
         except:
-            max_coordinates = np.argwhere(output == max_value)
-            grasp_point = np.array([max_coordinates[0][1], max_coordinates[0][0]])
+            pass
 
         # plt.Circle((grasp_point[1], grasp_point[0]), 10, fill=True)
         # plt.figure(0)
