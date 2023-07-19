@@ -51,9 +51,10 @@ max_training_timesteps = int(1e5)   # break training loop if timeteps > max_trai
 
 print_freq = 3                  # print avg reward in the interval (in num timesteps)
 log_freq = max_ep_len * 20      # log avg reward in the interval (in num timesteps)
-save_model_freq = int(2e4)      # save model frequency (in num timesteps)
+save_model_freq = 2      # save model frequency (in num timesteps)
 
-action_std = 0.3 
+EVAL = True #if you want to evaluate the model
+action_std = 0.3 if not EVAL else 1e-5        # starting std for action distribution (Multivariate Normal)
 
 
 #####################################################
@@ -102,7 +103,7 @@ env = isaacgymenvs.make(
 	rl_device="cuda:0", # cpu cuda:0
 	multi_gpu=False,
 	graphics_device_id=0,
-    headless=True
+    headless=False
 )
 
 # state space dimension
@@ -204,6 +205,13 @@ print("=========================================================================
 ppo_agent = PPO(state_dim, action_dim, lr_actor, lr_critic, gamma, K_epochs, eps_clip, has_continuous_action_space, action_std, train_device)
 
 
+directory = "PPO_preTrained" + '/' + env_name + '/'
+checkpoint_path = directory + "PPO_{}_{}_{}.pth".format(env_name, random_seed, run_num_pretrained)
+print("loading network from : " + checkpoint_path)
+
+ppo_agent.load(checkpoint_path)
+
+
 # track total training time
 start_time = datetime.now().replace(microsecond=0)
 print("Started training at (GMT) : ", start_time)
@@ -280,7 +288,7 @@ while time_step <= max_training_timesteps: ## prim_step
                 print("rewards and states are not the same length at env {}".format(true_i))
                 buf_envs[true_i].clear()
 
-    if buf_central.size() >= update_size:
+    if buf_central.size() >= update_size and not EVAL:
         def calc_avg_reward_per_update():
             total_reward = sum(buf_central.rewards)
             num_rewards = sum(buf_central.is_terminals)
@@ -323,13 +331,13 @@ while time_step <= max_training_timesteps: ## prim_step
         print_running_episodes = 0
         
     # # save model weights
-    # if time_step % save_model_freq == 0:
-    #     print("--------------------------------------------------------------------------------------------")
-    #     print("saving model at : " + checkpoint_path)
-    #     ppo_agent.save(checkpoint_path)
-    #     print("model saved")
-    #     print("Elapsed Time  : ", datetime.now().replace(microsecond=0) - start_time)
-    #     print("--------------------------------------------------------------------------------------------")
+    if i_episode % save_model_freq == 0 and i_episode != 0:
+        print("--------------------------------------------------------------------------------------------")
+        print("saving model at : " + checkpoint_path)
+        ppo_agent.save(checkpoint_path)
+        print("model saved")
+        print("Elapsed Time  : ", datetime.now().replace(microsecond=0) - start_time)
+        print("--------------------------------------------------------------------------------------------")
         
     # # break; if the episode is over
     # if done:update
