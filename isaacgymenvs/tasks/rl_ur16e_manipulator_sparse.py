@@ -1782,8 +1782,8 @@ class RL_UR16eManipulation(VecTask):
                             angle_error = quaternion_to_euler_angles(self._eef_state[env_count][3:7], "XYZ", degrees=False) - torch.tensor(
                                 [0, -self.grasp_angle[env_count][1], self.grasp_angle[env_count][0]]).to(self.device)
                             angle_error = torch.tensor([angle_error[0] + 1.57079632679, angle_error[1] - 1.57079632679, angle_error[2]])
-                            if (torch.max(torch.abs(angle_error)) > torch.deg2rad(torch.tensor(45))):
-                            # if (False):
+                            # if (torch.max(torch.abs(angle_error)) > torch.deg2rad(torch.tensor(45))):
+                            if (False):
                                 # encountered the arm insertion constraint
                                 env_list_reset_arm_pose = torch.cat(
                                     (env_list_reset_arm_pose, torch.tensor([env_count])), axis=0)
