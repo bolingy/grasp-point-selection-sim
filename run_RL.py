@@ -52,7 +52,7 @@ def step_primitives(action):
 			# print("imgs, reward, done", imgs.shape, reward_temp.shape, done_temp.shape)
 			return imgs, reward_temp, done_temp, indicies
 			
-action = torch.tensor(ne * [[0.11, 0., 0.28, 0.22]]).to("cuda:0")
+action = torch.tensor(ne * [[0.12, -0.03, 0.28, 0.]]).to("cuda:0")
 # imgs, reward, done = step_primitives(action)
 # obs, reward, done, info = envs.step(action)
 

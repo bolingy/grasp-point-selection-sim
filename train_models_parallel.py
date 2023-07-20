@@ -29,6 +29,8 @@ import wandb
 import time
 wandb.login()
 
+import random
+
 import warnings
 warnings.filterwarnings("ignore")
 
@@ -50,11 +52,11 @@ max_ep_len = 2                     # max timesteps in one episode
 max_training_timesteps = int(1e5)   # break training loop if timeteps > max_training_timesteps
 
 print_freq = 3                  # print avg reward in the interval (in num timesteps)
-log_freq = max_ep_len * 20      # log avg reward in the interval (in num timesteps)
+log_freq = max_ep_len * 10      # log avg reward in the interval (in num timesteps)
 save_model_freq = 2      # save model frequency (in num timesteps)
 
 EVAL = True #if you want to evaluate the model
-action_std = 0.3 if not EVAL else 1e-5        # starting std for action distribution (Multivariate Normal)
+action_std = 0.3 if not EVAL else 1e-9        # starting std for action distribution (Multivariate Normal)
 
 
 #####################################################
@@ -66,17 +68,17 @@ action_std = 0.3 if not EVAL else 1e-5        # starting std for action distribu
 ################ PPO hyperparameters ################
 
 pick_len = 3
-update_size = pick_len * 11 #20
+update_size = pick_len * 10  #20
 K_epochs = 40               # update policy for K epochs
 eps_clip = 0.2              # clip parameter for PPO
 gamma = 0.99                # discount factor
 
-lr_actor = 1e-5       # learning rate for actor network
-lr_critic = 3e-5      # learning rate for critic network
+lr_actor = 1e-3       # learning rate for actor network
+lr_critic = 3e-3      # learning rate for critic network
 
-random_seed = 0       # set random seed if required (0 = no random seed)
+random_seed = 1       # set random seed if required (0 = no random seed)
 
-ne = 5              # number of environments
+ne = 2              # number of environments
 
 print("training environment name : " + env_name)
 run = wandb.init(
@@ -111,7 +113,7 @@ state_dim = env.observation_space.shape[0]
 
 # action space dimension
 if has_continuous_action_space:
-    action_dim = env.action_space.shape[0]
+    action_dim = env.action_space.shape[0] - 1
 else:
     action_dim = env.action_space.n
 
@@ -189,12 +191,10 @@ print("optimizer learning rate actor : ", lr_actor)
 print("optimizer learning rate critic : ", lr_critic)
 
 if random_seed:
+    random_seed = random.randint(1, 10000)
     print("--------------------------------------------------------------------------------------------")
     print("setting random seed to ", random_seed)
-    torch.manual_seed(random_seed)
-    env.seed(random_seed)
-    np.random.seed(random_seed)
-
+    random_seed = 1
     #####################################################
 
 print("============================================================================================")
@@ -223,7 +223,6 @@ print("=========================================================================
 log_f = open(log_f_name,"w+")
 log_f.write('episode,timestep,reward\n')
 
-s_t = time.time()
 
 # printing and logging variables
 print_running_reward = 0
@@ -234,6 +233,7 @@ log_running_episodes = 0
 
 time_step = 0
 i_episode = 0
+prev_i_episode = 0
 
 buf_envs = [RolloutBuffer() for _ in range(ne)]
 buf_central = RolloutBuffer()
@@ -260,6 +260,10 @@ while time_step <= max_training_timesteps: ## prim_step
         if true_i == 0:
             print("action of env 0 updated", action[i])
     action = scale_actions(action).to(sim_device)
+    # append 0 to all rows of action
+    # print("action", action.shape)
+    action = torch.cat((action, torch.zeros(true_indicies.shape[0], 1).to(sim_device)), dim=1)
+    
     # true indicies to one hot flat vector
     one_hot = torch.zeros(ne).bool().to(sim_device)
     one_hot[true_indicies] = 1
@@ -273,6 +277,7 @@ while time_step <= max_training_timesteps: ## prim_step
         if len(buf_envs[true_i].rewards) != len(buf_envs[true_i].states):
             if true_i == 0:
                 print("reward of env 0", reward[i])
+                print("done of env 0", done[i])
             buf_envs[true_i].rewards.append(reward[i].clone().detach().unsqueeze(0))
             buf_envs[true_i].is_terminals.append(done[i].clone().detach().unsqueeze(0))
             time_step += 1
@@ -294,6 +299,7 @@ while time_step <= max_training_timesteps: ## prim_step
             num_rewards = sum(buf_central.is_terminals)
             return (total_reward / num_rewards).item()
         curr_rewards = calc_avg_reward_per_update()
+        s_t = time.time()
         ppo_agent.update(buf_central)
         print("update time", time.time() - s_t)
         buf_central.clear()
@@ -331,7 +337,8 @@ while time_step <= max_training_timesteps: ## prim_step
         print_running_episodes = 0
         
     # # save model weights
-    if i_episode % save_model_freq == 0 and i_episode != 0:
+    if i_episode % save_model_freq == 0 and prev_i_episode != i_episode:
+        prev_i_episode = i_episode
         print("--------------------------------------------------------------------------------------------")
         print("saving model at : " + checkpoint_path)
         ppo_agent.save(checkpoint_path)

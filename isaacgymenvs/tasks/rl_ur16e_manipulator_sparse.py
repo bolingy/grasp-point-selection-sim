@@ -755,7 +755,7 @@ class RL_UR16eManipulation(VecTask):
             # How many objects should we spawn 2 or 3
             probabilities = [0.15, 0.5, 0.35]
             ##############################################
-            # probabilities = [1.0, 0.0, 0.0]
+            probabilities = [0.0, 1.0, 0.0]
             ##############################################
             random_number = self.random_number_with_probabilities(probabilities)
             random_number += 1
@@ -763,18 +763,18 @@ class RL_UR16eManipulation(VecTask):
             object_set = range(1, self.object_count_unique+1)
             selected_object = random.sample(object_set, random_number)
             ##############################################
-            selected_object = [1, 2, 3]
+            selected_object = [1, 3]
             ##############################################
             list_objects_domain_randomizer = torch.tensor([])
             
             offset_object1 = np.array([np.random.uniform(0.71, 0.71, 1).reshape(
-                    1,)[0], np.random.uniform(0., 0., 1).reshape(1,)[0], 1.53, 0.0,
+                    1,)[0], np.random.uniform(0., 0., 1).reshape(1,)[0], 1.45, 0.0,
                     0.0, 0.0])
-            offset_object2 = np.array([np.random.uniform(0.78, 0.78, 1).reshape(
-                    1,)[0], np.random.uniform(0., 0., 1).reshape(1,)[0], 1.53, 0.0,
+            offset_object2 = np.array([np.random.uniform(0.75, 0.75, 1).reshape(
+                    1,)[0], np.random.uniform(-0.015, -0.015, 1).reshape(1,)[0], 1.45, 0.0,
                     0.0, 0.0])
-            offset_object3 = np.array([np.random.uniform(0.85, 0.85, 1).reshape(
-                    1,)[0], np.random.uniform(0., 0., 1).reshape(1,)[0], 1.53, 0.0,
+            offset_object3 = np.array([np.random.uniform(0.73, 0.73, 1).reshape(
+                    1,)[0], np.random.uniform(0., 0., 1).reshape(1,)[0], 1.45, 0.0,
                     0.0, 0.0])
             offset_objects = [offset_object1, offset_object2, offset_object3]
 
@@ -784,13 +784,13 @@ class RL_UR16eManipulation(VecTask):
                 # offset_object = np.array([np.random.uniform(0.67, 0.7, 1).reshape(
                 #     1,)[0], np.random.uniform(-0.22, -0.12, 1).reshape(1,)[0], 1.3, random.choice([0, 1.57, 3.14]),
                 #     random.choice([0, 1.57, 3.14]), np.random.uniform(0.0, 3.14, 1).reshape(1,)[0]])
-                # offset_object = np.array([np.random.uniform(0.67, 0.9, 1).reshape(
-                #     1,)[0], np.random.uniform(-0.15, 0.10, 1).reshape(1,)[0], 1.55, 0.0,
-                #     0.0, 0.0])
+                offset_object = np.array([np.random.uniform(0.67, 0.9, 1).reshape(
+                    1,)[0], np.random.uniform(-0.15, 0.10, 1).reshape(1,)[0], 1.55, 0.0,
+                    0.0, 0.0])
                 ##############################################
                 domain_randomizer = random_number = random.choice(
                     [1])
-                offset_object = offset_objects[object_count-1]
+                # offset_object = offset_objects[object_count-1]
                 ##############################################
                 quat = euler_angles_to_quaternion(
                     torch.tensor(offset_object[3:6]), "XYZ", degrees=False)
@@ -939,10 +939,6 @@ class RL_UR16eManipulation(VecTask):
 
     def compute_observations(self):
         self._refresh()
-
-        # return dummy observaytion 
-
-
         # pose state observations
         #   pose and quaternion of end effector and respective joint angles
 
@@ -961,7 +957,7 @@ class RL_UR16eManipulation(VecTask):
         if self.finished_prim.sum() > 0:
             torch_prim_tensor = self.finished_prim.clone().detach()
             envs_finished_prim = torch.nonzero(torch_prim_tensor).long().squeeze(1)
-            print("envs_finished_prim", envs_finished_prim)
+            # print("envs_finished_prim", envs_finished_prim)
             # if len(envs_finished_prim) == 0:
             #     return None
             torch_depth_cameras = torch.stack(self.depth_camera_tensors).to(self.device)
@@ -970,8 +966,12 @@ class RL_UR16eManipulation(VecTask):
             torch_segmask_tensor = torch_segmask_cameras[envs_finished_prim]
             # torch_rgb_tensor = self.rgb_camera_tensors[envs_finished_prim]
 
-            torch_success_tensor = self.success[envs_finished_prim]
-            torch_done_tensor = self.done[envs_finished_prim]
+            torch_success_tensor = self.success[envs_finished_prim].clone().detach()
+            # reset if success
+            self.success[envs_finished_prim] = torch.tensor(0).float().to(self.device)
+            torch_done_tensor = self.done[envs_finished_prim].clone().detach()
+            # reset if done
+            self.done[envs_finished_prim] = torch.tensor(0).float().to(self.device)
             torch_indicies_tensor = envs_finished_prim
 
             # crop depth image
@@ -1202,7 +1202,7 @@ class RL_UR16eManipulation(VecTask):
                             self.selected_object_env[env_count].tolist(), 1)
                         self.object_target_id[env_count] = torch.tensor(
                             random_object_select).to(self.device).type(torch.int)
-                    # self.object_target_id[env_count] = 0
+                    self.object_target_id[env_count] = 11
                     torch_rgb_tensor = self.rgb_camera_tensors[env_count]
                     rgb_image = torch_rgb_tensor.to(self.device)
                     rgb_image_copy = torch.reshape(
@@ -1350,6 +1350,7 @@ class RL_UR16eManipulation(VecTask):
                     if self.RL_flag[env_count] == torch.tensor(1):
                         # print("pass obs 1")
                         self.finished_prim[env_count] = 1
+                        self.done[env_count] = 1
                     
                 elif (total_objects != objects_spawned and (self.free_envs_list[env_count] == torch.tensor(1))):
                     print(f"Object falled down in environment {env_count}")
@@ -1388,8 +1389,7 @@ class RL_UR16eManipulation(VecTask):
                             (env_list_reset_objects, torch.tensor([env_count])), axis=0)
                         oscillation = False
                         self.success[env_count] = False
-                        self.finished_prim[env_count] = 1
-                        self.done[env_count] = 1
+
                         # saving all the properties of a single pick
                         json_save = {
                             "force_array": [],
@@ -1439,6 +1439,7 @@ class RL_UR16eManipulation(VecTask):
                     if(self.go_to_start[env_count]):
                         if self.init_go_to_start[env_count] and self.primitive_count[env_count] > 1:
                             if self.return_pre_grasp[env_count] == 0:
+                                # print("pass obs 2")
                                 self.finished_prim[env_count] = 1
                                 self.min_distance = torch.ones(self.num_envs).to(self.device)*100
                                 self.return_pre_grasp[env_count] = 1
@@ -1769,8 +1770,8 @@ class RL_UR16eManipulation(VecTask):
                             angle_error = quaternion_to_euler_angles(self._eef_state[env_count][3:7], "XYZ", degrees=False) - torch.tensor(
                                 [0, -self.grasp_angle[env_count][1], self.grasp_angle[env_count][0]]).to(self.device)
                             angle_error = torch.tensor([angle_error[0] + 1.57079632679, angle_error[1] - 1.57079632679, angle_error[2]])
-                            # if (torch.max(torch.abs(angle_error)) > torch.deg2rad(torch.tensor(30))):
-                            if (False):
+                            if (torch.max(torch.abs(angle_error)) > torch.deg2rad(torch.tensor(30))):
+                            # if (False):
                                 # encountered the arm insertion constraint
                                 env_list_reset_arm_pose = torch.cat(
                                     (env_list_reset_arm_pose, torch.tensor([env_count])), axis=0)
@@ -1831,8 +1832,6 @@ class RL_UR16eManipulation(VecTask):
                                 "reset because of object re placement check")
                             oscillation = False
                             self.success[env_count] = False
-                            self.done[env_count] = 1
-                            self.finished_prim[env_count] = 1
                             json_save = {
                                 "force_array": [],
                                 "grasp point": self.grasp_point[env_count].tolist(),
@@ -1940,8 +1939,6 @@ class RL_UR16eManipulation(VecTask):
                             penetration = False
                             if (score_gripper == torch.tensor(0)):
                                 penetration = True
-                            self.done[env_count] = 1
-                            self.finished_prim[env_count] = 1
                             # saving the grasp point ad its properties if it was a successfull grasp
                             json_save = {
                                 "force_array": self.force_list_save[env_count].tolist(),
@@ -1977,8 +1974,6 @@ class RL_UR16eManipulation(VecTask):
                                 (env_list_reset_objects, torch.tensor([env_count])), axis=0)
                             oscillation = False
                             self.success[env_count] = 0
-                            self.done[env_count] = 1
-                            self.finished_prim[env_count] = 1
                             json_save = {
                                 "force_array": [],
                                 "grasp point": self.grasp_point[env_count].tolist(),
@@ -2088,8 +2083,6 @@ class RL_UR16eManipulation(VecTask):
                     oscillation = self.detect_oscillation(
                         self.force_list_save[env_count])
                     self.success[env_count] = False
-                    self.done[env_count] = 1
-                    self.finished_prim[env_count] = 1
                     json_save = {
                         "force_array": self.force_list_save[env_count].tolist(),
                         "grasp point": self.grasp_point[env_count].tolist(),
@@ -2121,18 +2114,18 @@ class RL_UR16eManipulation(VecTask):
         self.compute_observations()
         self.compute_reward()
         self.finished_prim = torch.zeros(self.num_envs).to(self.device)
-        self.success = torch.zeros(self.num_envs).to(self.device)
-        self.done = torch.zeros(self.num_envs).to(self.device)
+        # self.success = torch.zeros(self.num_envs).to(self.device)
+        # self.done = torch.zeros(self.num_envs).to(self.device)
         # Compute resets
         self.reset_buf = torch.where(
             (self.progress_buf >= self.max_episode_length - 1), torch.ones_like(self.reset_buf), self.reset_buf)
         # add envs from reset_buf to finished_prim
-        self.finished_prim = torch.where(
-            (self.progress_buf >= self.max_episode_length - 1), torch.ones_like(self.finished_prim), self.finished_prim)
-        self.success = torch.where(
-            (self.progress_buf >= self.max_episode_length - 1), torch.zeros_like(self.success), self.success)
-        self.done = torch.where(
-            (self.progress_buf >= self.max_episode_length - 1), torch.ones_like(self.done), self.done)
+        # self.finished_prim = torch.where(
+        #     (self.progress_buf >= self.max_episode_length - 1), torch.ones_like(self.finished_prim), self.finished_prim)
+        # self.success = torch.where(
+        #     (self.progress_buf >= self.max_episode_length - 1), torch.zeros_like(self.success), self.success)
+        # self.done = torch.where(
+        #     (self.progress_buf >= self.max_episode_length - 1), torch.ones_like(self.done), self.done)
 
     def quaternion_conj(self, q):
         w, x, y, z = q

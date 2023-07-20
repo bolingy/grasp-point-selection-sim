@@ -89,7 +89,7 @@ def scale_actions(action):
 	action[:, 0] = action[:, 0] * 0.22 - 0.11
 	action[:, 1] = action[:, 1] * 0.12 - 0.02
 	action[:, 2] = action[:, 2] * 0.28
-	action[:, 3] = action[:, 3] * 0.44 - 0.22
+	# action[:, 3] = action[:, 3] * 0.44 - 0.22
 	return action
 
 def returns_to_device(state, reward, done, indicies, device):
