@@ -12,12 +12,12 @@
   </joint>
 
   <link name="pod_base_link">
-    <visual>
+    <!-- <visual>
       <origin rpy="3.14 0 1.57" xyz="0.305 0.065 0.517"/>
       <geometry>
         <mesh filename="package://Aurmar_description/meshes/pod/untitled.dae"/>
       </geometry>
-    </visual>
+    </visual> -->
     <!-- <collision>
       <origin rpy="-1.57 0 1.57" xyz="0.305 0.065 0.517"/>
       <geometry>
