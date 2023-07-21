@@ -55,7 +55,7 @@ print_freq = 3                  # print avg reward in the interval (in num times
 log_freq = max_ep_len * 10      # log avg reward in the interval (in num timesteps)
 save_model_freq = 2      # save model frequency (in num timesteps)
 
-EVAL = True #if you want to evaluate the model
+EVAL = False #if you want to evaluate the model
 action_std = 0.3 if not EVAL else 1e-9        # starting std for action distribution (Multivariate Normal)
 
 
@@ -73,12 +73,12 @@ K_epochs = 40               # update policy for K epochs
 eps_clip = 0.2              # clip parameter for PPO
 gamma = 0.99                # discount factor
 
-lr_actor = 1e-4       # learning rate for actor network
-lr_critic = 3e-4      # learning rate for critic network
+lr_actor = 1e-5       # learning rate for actor network
+lr_critic = 3e-5      # learning rate for critic network
 
 random_seed = 1       # set random seed if required (0 = no random seed)
 
-ne = 2              # number of environments
+ne = 15              # number of environments
 
 print("training environment name : " + env_name)
 run = wandb.init(
@@ -105,7 +105,7 @@ env = isaacgymenvs.make(
 	rl_device="cuda:0", # cpu cuda:0
 	multi_gpu=False,
 	graphics_device_id=0,
-    headless=False
+    headless=True
 )
 
 # state space dimension
@@ -207,7 +207,7 @@ ppo_agent = PPO(state_dim, action_dim, lr_actor, lr_critic, gamma, K_epochs, eps
 
 directory = "PPO_preTrained" + '/' + env_name + '/'
 checkpoint_path = directory + "PPO_{}_{}_{}.pth".format(env_name, random_seed, run_num_pretrained)
-checkpoint_path = directory + "PPO_reaching_multiobj_batch_30_lra_1e-3_lrc_3e-3.pth"
+checkpoint_path = directory + "PPO_reaching_multiobj_batch_30_lra_1e-5_lrc_3e-5.pth"
 #print("loading network from : " + checkpoint_path)
 ppo_agent.load(checkpoint_path)
 
@@ -271,21 +271,21 @@ while time_step <= max_training_timesteps: ## prim_step
     # print("actions", actions)
     state, reward, done, true_indicies = step_primitives(actions, env)
 
-    if true_indicies[0] == 0:
-        imgs = state
-        img_x = 260
-        img_y = 180
-        img = imgs[:, :img_x*img_y*2]
-        depth = img[:, :img_x*img_y]
-        seg = img[:, img_x*img_y:]
-        depth = depth.reshape(-1, img_y, img_x)
-        seg = seg.reshape(-1, img_y, img_x)
-        depth = depth[0].cpu().numpy()
-        seg = seg[0].cpu().numpy()
-        plt.imshow(depth)
-        plt.show()
-        plt.imshow(seg)
-        plt.show()
+    # if true_indicies[0] == 0:
+    #     imgs = state
+    #     img_x = 260
+    #     img_y = 180
+    #     img = imgs[:, :img_x*img_y*2]
+    #     depth = img[:, :img_x*img_y]
+    #     seg = img[:, img_x*img_y:]
+    #     depth = depth.reshape(-1, img_y, img_x)
+    #     seg = seg.reshape(-1, img_y, img_x)
+    #     depth = depth[0].cpu().numpy()
+    #     seg = seg[0].cpu().numpy()
+    #     plt.imshow(depth)
+    #     plt.show()
+    #     plt.imshow(seg)
+    #     plt.show()
 
     state, reward, done, true_indicies = returns_to_device(state, reward, done, true_indicies, train_device)
     state = rearrange_state(state)
