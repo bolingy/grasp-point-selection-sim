@@ -52,24 +52,33 @@ def step_primitives(action):
 			# print("imgs, reward, done", imgs.shape, reward_temp.shape, done_temp.shape)
 			return imgs, reward_temp, done_temp, indicies
 			
-action = torch.tensor(ne * [[0.12, -0.03, 0.28, 0.]]).to("cuda:0")
+action = torch.tensor(ne * [[0.12, -0.03, 0.28, 0.5]]).to("cuda:0")
 # imgs, reward, done = step_primitives(action)
 # obs, reward, done, info = envs.step(action)
 
 import time 
 start = time.time()
-for i in range(1000):
-# while True:
+# for i in range(1000):
+while True:
 	# obs, reward, done, info = envs.step(action)
 	# print(obs['obs'][:, 614400:])
 	imgs, reward, done, indicies = step_primitives(action)
-	# img = imgs[:, :img_x*img_y*2]
-	# segmask = imgs[:, img_x*img_y:]
-	# depth = imgs[:, :img_x*img_y]
-	# print("segmask", segmask.shape)
-	# plt.imshow(depth[0].cpu().numpy().reshape(img_y, img_x))
-	# plt.show()
-	# plt.imshow(segmask[0].cpu().numpy().reshape(img_y, img_x))
-	# plt.show()
+	print('indicies: ', indicies)
+	print('reward: ', reward)
+
+	# show imgs from each env in indicies
+	# for i in range(indicies.shape[0]):
+	if (indicies==0).sum():
+		i = torch.nonzero(indicies==0).item()
+		img = imgs[i, :img_x*img_y*2]
+		segmask = imgs[i, img_x*img_y:]
+		depth = imgs[i, :img_x*img_y]
+		plt.imshow(depth.cpu().numpy().reshape(img_y, img_x))
+		plt.show()
+		plt.imshow(segmask.cpu().numpy().reshape(img_y, img_x))
+		plt.show()
+
+
+
 end = time.time()
-print(f"Time taken to run the code was {end-start} seconds")
+# print(f"Time taken to run the code was {end-start} seconds")
