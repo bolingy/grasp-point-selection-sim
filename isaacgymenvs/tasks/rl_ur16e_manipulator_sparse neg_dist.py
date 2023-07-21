@@ -755,9 +755,9 @@ class RL_UR16eManipulation(VecTask):
             env_count = env_count.item()
             # self.RL_flag[env_count] = 0
             # How many objects should we spawn 2 or 3
-            probabilities = [0.15, 0.5, 0.35]
+            probabilities = [0.0, 0., 1.]
             ##############################################
-            probabilities = [1.0, 0.0, 0.0]
+            # probabilities = [1.0, 0.0, 0.0]
             ##############################################
             random_number = self.random_number_with_probabilities(probabilities)
             random_number += 1
@@ -765,7 +765,7 @@ class RL_UR16eManipulation(VecTask):
             object_set = range(1, self.object_count_unique+1)
             selected_object = random.sample(object_set, random_number)
             ##############################################
-            selected_object = [1]
+            # selected_object = [1]
             ##############################################
             list_objects_domain_randomizer = torch.tensor([])
             
@@ -957,15 +957,21 @@ class RL_UR16eManipulation(VecTask):
         # image observations
         self.obs_buf = torch.zeros(93600).to(self.device)
         
-        _object_pos = torch.zeros((self.num_envs,3))
-        values = torch.tensor(list(self.selected_object_env.values())).int() - 1
+
         first_dim = torch.arange(self._root_state.shape[0])
-        _object_pos = self._root_state[first_dim, np.array(self._object_model_id)[values], :3]
+        # get pose of self.object_target_id[env_count]
+        # print("self.object_target_id", self.object_target_id)
+        # print("self._object_model_id", self._object_model_id)
+        # model_ids = self._object_model_id[self.object_target_id]
+        model_ids = torch.index_select(torch.tensor(self._object_model_id).to(self.device), 0, self.object_target_id)
+        model_ids = model_ids - 1
+        _object_pos = self._root_state[first_dim, model_ids, :3]
         _eef_pos = self.states["hand_pos"] 
         # find norm distance between eef and object given xyz pose in each row
         # _distance = torch.norm(_object_pos - _eef_pos, dim=1)
-        # print("eef_pos 1", _eef_pos)
-        # print("distance", _distance)
+        # print("eef_pos", _eef_pos)
+        # print("_object_pos", _object_pos)
+        # print("distance", self.min_distance)
         _eef_pos[:, 0] += 0.02
         _distance = torch.norm(_object_pos - _eef_pos, dim=1)
         # print("eef_pos", _eef_pos)
@@ -1222,10 +1228,12 @@ class RL_UR16eManipulation(VecTask):
                     '''
                     # print("!!!!!!!!!!!!!!!Running Dexnet 3.0")
                     if (self.RL_flag[env_count] == torch.tensor(1)):
-                        random_object_select = random.sample(
-                            self.selected_object_env[env_count].tolist(), 1)
-                        self.object_target_id[env_count] = torch.tensor(
-                            random_object_select).to(self.device).type(torch.int)
+                        # random_object_select = self.selected_object_env[env_count][0]
+                        # print("random_object_select", random_object_select)
+                        # random_object_select = random.sample(
+                        #     self.selected_object_env[env_count].tolist(), 1)
+                        self.object_target_id[env_count] = torch.tensor( #########################################################################################################################################################
+                            self.selected_object_env[env_count][0]).to(self.device).type(torch.int)
                     # self.object_target_id[env_count] = 0
                     torch_rgb_tensor = self.rgb_camera_tensors[env_count]
                     rgb_image = torch_rgb_tensor.to(self.device)
@@ -1341,6 +1349,9 @@ class RL_UR16eManipulation(VecTask):
                             self.grasp_point_temp = torch.cat(
                                 [self.grasp_point_temp, grasp_point.clone().detach().unsqueeze(0)], dim=0)
                             # cv2.circle(self.rgb_save[env_count], (grasp_point.clone().detach().cpu().numpy()[0], grasp_point.clone().detach().cpu().numpy()[1]), 2, (0, 0, 0), 1)
+                            # cv2.imshow("rgb_image_vis", self.rgb_save[env_count])
+                            # cv2.waitKey(1)
+                            # cv2.destroyAllWindows()
                             self.object_coordiante_camera = xyz_point.clone().detach()
                             if (suction_deformation_score > 0):
                                 force_SI = self.force_object.regression(
