@@ -152,7 +152,12 @@ dmypy.json
 # Cython debug symbols
 cython_debug/
 isaacgymenvs/tasks/__pycache__/ant.cpython-37.pyc
-isaacgymenvs/tasks/__pycache__/franka_cube_stack.cpython-37.pyc
 .vscode/settings.json
 .vscode/launch.json
 .vscode/tasks.json
+*.pyc
+assets/urdf/Aurmar_description/meshes/pod/texture_1001.png
+assets/urdf/Aurmar_description/meshes/pod/texture_1002.png
+assets/urdf/Aurmar_description/meshes/pod/texture_1003.png
+assets/urdf/Aurmar_description/meshes/pod/texture_1004.png
+assets/urdf/Aurmar_description/meshes/pod/untitled.dae

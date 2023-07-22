@@ -1005,8 +1005,8 @@ class DepthImageSuctionPointGridSampler(ImageGraspSampler):
         depth_right = depth_im_[y_max, x_max]+0.5
         width = 640
         height = 480
-        fx = 914.0148
-        fy = 914.0147
+        fx = 762.7223
+        fy = 762.7223
         x_world_left = (x_min-(width/2))/fx * depth_left
         x_world_right = (x_max-(width/2))/fx * depth_right
         y_world_left = (y_min-(height/2))/fy * depth_left
