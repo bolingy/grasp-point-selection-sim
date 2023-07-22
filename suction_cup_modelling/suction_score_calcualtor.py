@@ -164,7 +164,7 @@ class calcualte_suction_score():
                 if(grasps_and_predictions == None):
                     return torch.tensor(0), torch.tensor([0, 0, 0]), torch.tensor([centroid_angle[0], centroid_angle[1], centroid_angle[2]])
                 else:
-                    return torch.tensor(0), torch.tensor([0.77, -xyz_point[0], -xyz_point[1]]), torch.tensor([centroid_angle[0], centroid_angle[1], centroid_angle[2]])
+                    return torch.tensor(0), torch.tensor([0.72, -xyz_point[0], -xyz_point[1]]), torch.tensor([centroid_angle[0], centroid_angle[1], centroid_angle[2]])
             
         difference_xy_plane = point_cloud_suction[:,:2] - (self.suction_coordinates[:, :2] + xyz_point[:2])
         thresh = torch.sum(torch.sum(difference_xy_plane, 1))
@@ -179,7 +179,7 @@ class calcualte_suction_score():
             if(grasps_and_predictions == None):
                 return torch.tensor(0), torch.tensor([0, 0, 0]), torch.tensor([centroid_angle[0], centroid_angle[1], centroid_angle[2]])
             else:
-                return torch.tensor(0), torch.tensor([0.77, -xyz_point[0], -xyz_point[1]]), torch.tensor([centroid_angle[0], centroid_angle[1], centroid_angle[2]])
+                return torch.tensor(0), torch.tensor([0.72, -xyz_point[0], -xyz_point[1]]), torch.tensor([centroid_angle[0], centroid_angle[1], centroid_angle[2]])
 
         '''
         Calcualte the conical spring score
@@ -202,7 +202,7 @@ class calcualte_suction_score():
         #     suction_score = 1-torch.max(ri)
         if(grasps_and_predictions == None):
             return suction_score, torch.tensor([xyz_point[2]-0.07, -xyz_point[0], -xyz_point[1]]), torch.tensor([centroid_angle[0], centroid_angle[1], centroid_angle[2]])
-        return suction_score, torch.tensor([0.77, -xyz_point[0], -xyz_point[1]]), torch.tensor([0, 0, 0])
+        return suction_score, torch.tensor([0.72, -xyz_point[0], -xyz_point[1]]), torch.tensor([0, 0, 0])
 
 
     def calculate_contact(self, depth_image, segmask, rgb_img, grasps_and_predictions, object_id):
