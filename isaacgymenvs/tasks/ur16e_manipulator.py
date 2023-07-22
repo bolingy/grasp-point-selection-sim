@@ -125,7 +125,8 @@ class UR16eManipulation(VecTask):
         self.data_path = data_path or os.path.expanduser(
             "~/temp/grasp_data_05/")
         for env_number in range(self.num_envs):
-            new_dir_path = os.path.join(self.data_path, f"{self.bin_id}/{env_number}/")
+            new_dir_path = os.path.join(
+                self.data_path, f"{self.bin_id}/{env_number}/")
             os.makedirs(new_dir_path, exist_ok=True)
 
         self.force_list = np.array([])
@@ -211,8 +212,8 @@ class UR16eManipulation(VecTask):
 
         self.object_bin_prob_spawn = {
             "3F": [0.025, 0.35, 1],
-            "3E": [0.15, 0.6, 1],
-            "3H": [0.1, 0.5, 1],
+            "3E": [0.05, 0.45, 1],
+            "3H": [0.05, 0.45, 1],
         }
 
         self.object_height_spawn = {
@@ -220,6 +221,11 @@ class UR16eManipulation(VecTask):
             "3E": 1.4,
             "3H": 1.4,
         }
+
+        if (self.bin_id == "3E" or self.bin_id == "3H"):
+            self.smaller_bin = True
+        else:
+            self.smaller_bin = False
 
         self.check_object_coord = self.check_object_coord_bins[bin_id]
         self.crop_coord = self.crop_coord_bins[bin_id]
@@ -293,7 +299,15 @@ class UR16eManipulation(VecTask):
 
         self.object_models = []
         objects_file = open('misc/object_list_domain_randomization.txt', 'r')
-        objects = objects_file.readlines()
+        object_config = objects_file.readlines()
+
+        objects = []
+        self.object_prob = torch.Tensor()
+        for parameters in object_config:
+            object_class = parameters.split()
+            objects.append(object_class[0])
+            self.object_prob = torch.cat(
+                (self.object_prob, torch.tensor([int(object_class[1])])))
 
         self.object_count_unique = 0
         # Strips the newline character
@@ -307,6 +321,7 @@ class UR16eManipulation(VecTask):
         for counter, model in enumerate(self.object_models):
             object_model_asset_file.append(
                 "urdf_models/models/"+model+"/model.urdf")
+
             object_model_asset.append(self.gym.load_asset(
                 self.sim, asset_root, object_model_asset_file[counter], asset_options))
 
@@ -750,7 +765,14 @@ class UR16eManipulation(VecTask):
             random_number += 1
             object_list_env = {}
             object_set = range(1, self.object_count_unique+1)
-            selected_object = random.sample(object_set, random_number)
+
+            if (self.smaller_bin):
+                selected_object = random.choices(
+                    object_set, weights=self.object_prob/sum(self.object_prob), k=random_number)
+            else:
+                selected_object = random.choices(
+                    object_set, weights=None, k=random_number)
+
             list_objects_domain_randomizer = torch.tensor([])
             for object_count in selected_object:
                 domain_randomizer = random_number = random.choice(
@@ -1023,7 +1045,7 @@ class UR16eManipulation(VecTask):
                 env_list_reset_objects = torch.cat(
                     (env_list_reset_objects, torch.tensor([env_count])), axis=0)
                 self.object_pose_check_list[env_count] -= torch.tensor(1)
-            
+
             ''' 
             Spawning objects until they acquire stable pose and also doesn't falls down
             '''
@@ -1065,7 +1087,7 @@ class UR16eManipulation(VecTask):
                     env_complete_reset = torch.cat(
                         (env_complete_reset, torch.tensor([env_count])), axis=0)
                     total_objects = 1000
-                
+
                 object_mask_area[env_count] = 1000
                 for object_id in torch.unique(segmask_object_count):
                     segmask_area = np.zeros_like(
@@ -1266,7 +1288,8 @@ class UR16eManipulation(VecTask):
                     self.force_SI[env_count] = self.force_SI_env[env_count][0]
                     self.force_SI_env[env_count] = self.force_SI_env[env_count][1:]
                 else:
-                    print("objects not spawned properly inside the bin for env ", env_count)
+                    print(
+                        "objects not spawned properly inside the bin for env ", env_count)
                     env_complete_reset = torch.cat(
                         (env_complete_reset, torch.tensor([env_count])), axis=0)
                 try:
@@ -1296,10 +1319,10 @@ class UR16eManipulation(VecTask):
                         }
                         new_dir_name = str(
                             env_count)+"_"+str(self.track_save[env_count].type(torch.int).item())
-                        save_dir_json = self.data_path + str(self.bin_id) +"/" +\
-                        str(env_count)+"/json_data_"+new_dir_name+"_" + \
-                        str(self.config_env_count[env_count].type(
-                            torch.int).item())+".json"
+                        save_dir_json = self.data_path + str(self.bin_id) + "/" +\
+                            str(env_count)+"/json_data_"+new_dir_name+"_" + \
+                            str(self.config_env_count[env_count].type(
+                                torch.int).item())+".json"
                         with open(save_dir_json, 'w') as json_file:
                             json.dump(json_save, json_file)
                         self.track_save[env_count] = self.track_save[env_count] + \
@@ -1307,7 +1330,8 @@ class UR16eManipulation(VecTask):
                 except Exception as error:
                     env_complete_reset = torch.cat(
                         (env_complete_reset, torch.tensor([env_count])), axis=0)
-                    print("xyz error in env ", env_count, " and the error is ", error)
+                    print("xyz error in env ", env_count,
+                          " and the error is ", error)
 
             elif (self.env_reset_id_env[env_count] == 0 and self.frame_count[env_count] > torch.tensor(self.cooldown_frames) and self.free_envs_list[env_count] == torch.tensor(0)):
 
@@ -1542,10 +1566,10 @@ class UR16eManipulation(VecTask):
                             }
                             new_dir_name = str(
                                 env_count)+"_"+str(self.track_save[env_count].type(torch.int).item())
-                            save_dir_json = self.data_path + str(self.bin_id) +"/" +\
-                        str(env_count)+"/json_data_"+new_dir_name+"_" + \
-                        str(self.config_env_count[env_count].type(
-                            torch.int).item())+".json"
+                            save_dir_json = self.data_path + str(self.bin_id) + "/" +\
+                                str(env_count)+"/json_data_"+new_dir_name+"_" + \
+                                str(self.config_env_count[env_count].type(
+                                    torch.int).item())+".json"
                             with open(save_dir_json, 'w') as json_file:
                                 json.dump(json_save, json_file)
                             self.track_save[env_count] = self.track_save[env_count] + \
@@ -1593,10 +1617,10 @@ class UR16eManipulation(VecTask):
                         }
                         new_dir_name = str(
                             env_count)+"_"+str(self.track_save[env_count].type(torch.int).item())
-                        save_dir_json = self.data_path + str(self.bin_id) +"/" +\
-                        str(env_count)+"/json_data_"+new_dir_name+"_" + \
-                        str(self.config_env_count[env_count].type(
-                            torch.int).item())+".json"
+                        save_dir_json = self.data_path + str(self.bin_id) + "/" +\
+                            str(env_count)+"/json_data_"+new_dir_name+"_" + \
+                            str(self.config_env_count[env_count].type(
+                                torch.int).item())+".json"
                         with open(save_dir_json, 'w') as json_file:
                             json.dump(json_save, json_file)
                         self.track_save[env_count] = self.track_save[env_count] + \
@@ -1709,7 +1733,8 @@ class UR16eManipulation(VecTask):
                         if (score_gripper == torch.tensor(0)):
                             penetration = True
 
-                        object_disp_json_save = self.object_disp_save[env_count].copy()
+                        object_disp_json_save = self.object_disp_save[env_count].copy(
+                        )
                         for object_id in self.selected_object_env[env_count]:
                             object_disp_json_save[int(object_id.item(
                             ))] = object_disp_json_save[int(object_id.item())].tolist()
@@ -1731,10 +1756,10 @@ class UR16eManipulation(VecTask):
                         }
                         new_dir_name = str(
                             env_count)+"_"+str(self.track_save[env_count].type(torch.int).item())
-                        save_dir_json = self.data_path + str(self.bin_id) +"/" +\
-                        str(env_count)+"/json_data_"+new_dir_name+"_" + \
-                        str(self.config_env_count[env_count].type(
-                            torch.int).item())+".json"
+                        save_dir_json = self.data_path + str(self.bin_id) + "/" +\
+                            str(env_count)+"/json_data_"+new_dir_name+"_" + \
+                            str(self.config_env_count[env_count].type(
+                                torch.int).item())+".json"
                         with open(save_dir_json, 'w') as json_file:
                             json.dump(json_save, json_file)
                         self.track_save[env_count] = self.track_save[env_count] + \
@@ -1766,10 +1791,10 @@ class UR16eManipulation(VecTask):
                         }
                         new_dir_name = str(
                             env_count)+"_"+str(self.track_save[env_count].type(torch.int).item())
-                        save_dir_json = self.data_path + str(self.bin_id) +"/" +\
-                        str(env_count)+"/json_data_"+new_dir_name+"_" + \
-                        str(self.config_env_count[env_count].type(
-                            torch.int).item())+".json"
+                        save_dir_json = self.data_path + str(self.bin_id) + "/" +\
+                            str(env_count)+"/json_data_"+new_dir_name+"_" + \
+                            str(self.config_env_count[env_count].type(
+                                torch.int).item())+".json"
                         with open(save_dir_json, 'w') as json_file:
                             json.dump(json_save, json_file)
                         self.track_save[env_count] = self.track_save[env_count] + \
@@ -1862,7 +1887,8 @@ class UR16eManipulation(VecTask):
                         self.force_list_save[env_count])
                     success = False
 
-                    object_disp_json_save = self.object_disp_save[env_count].copy()
+                    object_disp_json_save = self.object_disp_save[env_count].copy(
+                    )
                     for object_id in self.selected_object_env[env_count]:
                         object_disp_json_save[int(object_id.item(
                         ))] = object_disp_json_save[int(object_id.item())].tolist()
@@ -1883,7 +1909,7 @@ class UR16eManipulation(VecTask):
                     }
                     new_dir_name = str(
                         env_count)+"_"+str(self.track_save[env_count].type(torch.int).item())
-                    save_dir_json = self.data_path + str(self.bin_id) +"/" +\
+                    save_dir_json = self.data_path + str(self.bin_id) + "/" +\
                         str(env_count)+"/json_data_"+new_dir_name+"_" + \
                         str(self.config_env_count[env_count].type(
                             torch.int).item())+".json"
@@ -1911,7 +1937,7 @@ class UR16eManipulation(VecTask):
                     }
                     new_dir_name = str(
                         env_count)+"_"+str(self.track_save[env_count].type(torch.int).item())
-                    save_dir_json = self.data_path + str(self.bin_id) +"/" +\
+                    save_dir_json = self.data_path + str(self.bin_id) + "/" +\
                         str(env_count)+"/json_data_"+new_dir_name+"_" + \
                         str(self.config_env_count[env_count].type(
                             torch.int).item())+".json"
