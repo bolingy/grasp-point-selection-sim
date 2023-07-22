@@ -58,13 +58,9 @@ save_model_freq = 2      # save model frequency (in num timesteps)
 EVAL = False #if you want to evaluate the model
 action_std = 0.2 if not EVAL else 1e-9        # starting std for action distribution (Multivariate Normal)
 
-
-#####################################################
-
+load_policy = False
 
 ## Note : print/log frequencies should be > than max_ep_len
-
-
 ################ PPO hyperparameters ################
 
 pick_len = 3
@@ -73,8 +69,8 @@ K_epochs = 40               # update policy for K epochs
 eps_clip = 0.2              # clip parameter for PPO
 gamma = 0.99                # discount factor
 
-lr_actor = 1e-4       # learning rate for actor network
-lr_critic = 3e-4      # learning rate for critic network
+lr_actor = 1e-6       # learning rate for actor network
+lr_critic = 3e-6      # learning rate for critic network
 
 random_seed = 1       # set random seed if required (0 = no random seed)
 
@@ -207,13 +203,15 @@ ppo_agent = PPO(state_dim, action_dim, lr_actor, lr_critic, gamma, K_epochs, eps
 
 directory = "PPO_preTrained" + '/' + env_name + '/'
 checkpoint_path = directory + "PPO_{}_{}_{}.pth".format(env_name, random_seed, run_num_pretrained)
-checkpoint_path = directory + "PPO_reaching_multiobj3prim4_batch_30_lra_1e-4_lrc_3e-4.pth"
-if os.path.exists(checkpoint_path):
-    print("loading network from : " + checkpoint_path)
-    ppo_agent.load(checkpoint_path)
-    print("network loaded")
-else:
-    print("No preTrained network exists. New network created")
+checkpoint_path = directory + "PPO_seq_multiobj3prim4_batch_30_lra_1e-6_lrc_3e-6.pth"
+
+if load_policy:
+    if os.path.exists(checkpoint_path):
+        print("loading network from : " + checkpoint_path)
+        ppo_agent.load(checkpoint_path)
+        print("network loaded")
+    else:
+        print("No preTrained network exists. New network created")
 
 
 
