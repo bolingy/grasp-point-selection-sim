@@ -302,12 +302,11 @@ class UR16eManipulation(VecTask):
         object_config = objects_file.readlines()
 
         objects = []
-        self.object_prob = torch.Tensor()
+        self.object_prob = np.array([])
         for parameters in object_config:
             object_class = parameters.split()
             objects.append(object_class[0])
-            self.object_prob = torch.cat(
-                (self.object_prob, torch.tensor([int(object_class[1])])))
+            self.object_prob = np.append(self.object_prob, int(object_class[1]))
 
         self.object_count_unique = 0
         # Strips the newline character
@@ -768,7 +767,7 @@ class UR16eManipulation(VecTask):
 
             if (self.smaller_bin):
                 selected_object = np.random.choice(
-                    object_set, p=self.object_prob/sum(self.object_prob), size=random_number, replace=False)
+                    object_set, p=self.object_prob/np.sum(self.object_prob), size=random_number, replace=False)
             else:
                 selected_object = np.random.choice(
                     object_set, p=None, size=random_number, replace=False)
