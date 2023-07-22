@@ -918,7 +918,11 @@ class RL_UR16eManipulation(VecTask):
         self.deploy_actions(env_ids, pos)
         # Update objects states
         self.reset_object_pose(env_ids)
-
+    def reset_default_arm_pose(self, env_ids):
+        pos = tensor_clamp(self.ur16e_default_dof_pos.unsqueeze(
+            0), self.ur16e_dof_lower_limits.unsqueeze(0), self.ur16e_dof_upper_limits)
+        pos = pos.repeat(len(env_ids), 1)
+        return pos
     '''
     Detecting oscillations while grasping due to slippage
     '''
@@ -992,16 +996,25 @@ class RL_UR16eManipulation(VecTask):
             torch_depth_tensor = torch_depth_cameras[envs_finished_prim]
             torch_segmask_tensor = torch_segmask_cameras[envs_finished_prim]
             # torch_rgb_tensor = self.rgb_camera_tensors[envs_finished_prim]
-            ##############################################################################################
+            
             # get distance between eef and object
             # print("self.min_distance when updating env {}".format(envs_finished_prim), self.min_distance[envs_finished_prim])
             torch_success_tensor = -(self.min_distance * self.weight_distance)[envs_finished_prim]
+##############################################################################################
+            # if torch done tensor is 1 and torch success tensor is less than threshold
+            # multiply the sduccess by 0.8
+            threshold = -0.07
+            # print("torch_success_tensor", torch_success_tensor)
+            torch_success_tensor = torch.where((self.done[envs_finished_prim] == 1) & (torch_success_tensor > threshold), torch_success_tensor*0.8, torch_success_tensor)
+            # print("torch_success_tensor", torch_success_tensor)
+
+################################################################################################
             self.min_distance[envs_finished_prim] = torch.tensor(100).to(self.device).float()
-            ################################################################################################
+            
             # torch_success_tensor = self.success[envs_finished_prim]
             torch_done_tensor = self.done[envs_finished_prim].clone().detach()
             # # reset if done
-            # self.done[envs_finished_prim] = torch.tensor(0).float().to(self.device)
+            self.done[envs_finished_prim] = torch.tensor(0).float().to(self.device)
             torch_indicies_tensor = envs_finished_prim
 
             # crop depth image
@@ -1016,7 +1029,6 @@ class RL_UR16eManipulation(VecTask):
             label = label.unsqueeze(1).expand(torch_segmask_tensor.shape)
             torch_segmask_tensor = torch.where(torch_segmask_tensor == label, torch.tensor(255).to(self.device), torch_segmask_tensor)            # print("condition", torch.nonzero(torch_depth_tensor[0] == label[0]).shape) 
             self.obs_buf = torch.cat((torch_depth_tensor, torch_segmask_tensor), dim=1).squeeze(0)
-
             if torch_indicies_tensor.shape[0] > 1:
                 self.obs_buf = torch.cat((self.obs_buf,  torch_success_tensor.unsqueeze(0).T.to(self.device)), dim=1)
                 self.obs_buf = torch.cat((self.obs_buf,  torch_done_tensor.unsqueeze(0).T.to(self.device)), dim=1)
@@ -1168,6 +1180,7 @@ class RL_UR16eManipulation(VecTask):
         # Before each loop this will track all the environments where a condition for reset has been called
         env_list_reset_objects = torch.tensor([])
         env_list_reset_arm_pose = torch.tensor([])
+        env_list_reset_default_arm_pose = torch.tensor([])
         env_complete_reset = torch.tensor([])
         
         for env_count in range(self.num_envs):
@@ -1423,9 +1436,9 @@ class RL_UR16eManipulation(VecTask):
                         env_list_reset_objects = torch.cat(
                             (env_list_reset_objects, torch.tensor([env_count])), axis=0)
                         oscillation = False
-                        self.success[env_count] = -1
-                        self.finished_prim[env_count] = 1
-                        self.done[env_count] = 1
+                        # self.success[env_count] = -1
+                        # self.finished_prim[env_count] = 1
+                        # self.done[env_count] = 1
                         # saving all the properties of a single pick
                         json_save = {
                             "force_array": [],
@@ -1475,10 +1488,12 @@ class RL_UR16eManipulation(VecTask):
                     if(self.go_to_start[env_count]):
                         if self.init_go_to_start[env_count] and self.primitive_count[env_count] > 1:
                             if self.return_pre_grasp[env_count] == 0:
-                                                     
+                                self.finished_prim[env_count] = 1
+                                self.done[env_count] = 0   
                                 self.return_pre_grasp[env_count] = 1
                             else:
-                                self.deploy_actions(env_count, to_torch([-0.2578, -1.8044, 1.5144, 0.3867, 1.4177, -0.4511, 0.], device=self.device))
+                                env_list_reset_arm_pose = torch.cat(
+                                    (env_list_reset_arm_pose, torch.tensor([env_count])), axis=0)
                                 self.return_pre_grasp[env_count] = 0
                                 self.init_go_to_start[env_count] = False
                         '''
@@ -1867,9 +1882,9 @@ class RL_UR16eManipulation(VecTask):
                             print(env_count, _all_object_pose_error,
                                 "reset because of object re placement check")
                             oscillation = False
-                            self.success[env_count] = -1
-                            self.done[env_count] = 1
-                            self.finished_prim[env_count] = 1
+                            # self.success[env_count] = -1
+                            # self.done[env_count] = 1
+                            # self.finished_prim[env_count] = 1
                             json_save = {
                                 "force_array": [],
                                 "grasp point": self.grasp_point[env_count].tolist(),
@@ -2013,9 +2028,9 @@ class RL_UR16eManipulation(VecTask):
                             env_list_reset_objects = torch.cat(
                                 (env_list_reset_objects, torch.tensor([env_count])), axis=0)
                             oscillation = False
-                            self.success[env_count] = -1
-                            self.done[env_count] = 1
-                            self.finished_prim[env_count] = 1
+                            # self.success[env_count] = -1
+                            # self.done[env_count] = 1
+                            # self.finished_prim[env_count] = 1
                             json_save = {
                                 "force_array": [],
                                 "grasp point": self.grasp_point[env_count].tolist(),
@@ -2094,6 +2109,14 @@ class RL_UR16eManipulation(VecTask):
             env_list_reset_objects = torch.unique(env_list_reset_objects)
             self.reset_object_pose(env_list_reset_objects.to(
                 self.device).type(torch.long))
+        if (len(env_list_reset_default_arm_pose) != 0):
+            env_list_reset_default_arm_pose = torch.unique(
+                env_list_reset_default_arm_pose)
+            pos = self.reset_default_arm_pose(env_list_reset_default_arm_pose.to(
+                self.device).type(torch.long))
+            env_ids = env_list_reset_default_arm_pose.to(
+                self.device).type(torch.long)
+            self.deploy_actions(env_ids, pos)
 
         self.actions = self.actions.clone().detach().to(self.device)
         # Split arm and gripper command
@@ -2124,9 +2147,9 @@ class RL_UR16eManipulation(VecTask):
                 if (self.force_list_save[env_count] != None and len(self.force_list_save[env_count]) > 10):
                     oscillation = self.detect_oscillation(
                         self.force_list_save[env_count])
-                    self.success[env_count] = -1
-                    self.done[env_count] = 1
-                    self.finished_prim[env_count] = 1
+                    # self.success[env_count] = -1
+                    # self.done[env_count] = 1
+                    # self.finished_prim[env_count] = 1
                     json_save = {
                         "force_array": self.force_list_save[env_count].tolist(),
                         "grasp point": self.grasp_point[env_count].tolist(),

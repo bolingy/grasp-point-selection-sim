@@ -298,7 +298,7 @@ while time_step <= max_training_timesteps: ## prim_step
     if buf_central.size() >= update_size and not EVAL:
         def calc_avg_reward_per_update():
             total_reward = sum(buf_central.rewards)
-            num_rewards = sum(buf_central.is_terminals)
+            num_rewards = len(buf_central.rewards)
             return (total_reward / num_rewards).item()
         curr_rewards = calc_avg_reward_per_update()
         s_t = time.time()

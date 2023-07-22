@@ -56,7 +56,7 @@ log_freq = max_ep_len * 10      # log avg reward in the interval (in num timeste
 save_model_freq = 2      # save model frequency (in num timesteps)
 
 EVAL = False #if you want to evaluate the model
-action_std = 0.3 if not EVAL else 1e-9        # starting std for action distribution (Multivariate Normal)
+action_std = 0.2 if not EVAL else 1e-9        # starting std for action distribution (Multivariate Normal)
 
 
 #####################################################
@@ -73,8 +73,8 @@ K_epochs = 40               # update policy for K epochs
 eps_clip = 0.2              # clip parameter for PPO
 gamma = 0.99                # discount factor
 
-lr_actor = 1e-5       # learning rate for actor network
-lr_critic = 3e-5      # learning rate for critic network
+lr_actor = 1e-4       # learning rate for actor network
+lr_critic = 3e-4      # learning rate for critic network
 
 random_seed = 1       # set random seed if required (0 = no random seed)
 
@@ -113,7 +113,7 @@ state_dim = env.observation_space.shape[0]
 
 # action space dimension
 if has_continuous_action_space:
-    action_dim = env.action_space.shape[0] - 1
+    action_dim = env.action_space.shape[0]
 else:
     action_dim = env.action_space.n
 
@@ -207,9 +207,15 @@ ppo_agent = PPO(state_dim, action_dim, lr_actor, lr_critic, gamma, K_epochs, eps
 
 directory = "PPO_preTrained" + '/' + env_name + '/'
 checkpoint_path = directory + "PPO_{}_{}_{}.pth".format(env_name, random_seed, run_num_pretrained)
-checkpoint_path = directory + "PPO_reaching_multiobj_batch_30_lra_1e-5_lrc_3e-5.pth"
-#print("loading network from : " + checkpoint_path)
-ppo_agent.load(checkpoint_path)
+checkpoint_path = directory + "PPO_reaching_multiobj3prim4_batch_30_lra_1e-4_lrc_3e-4.pth"
+if os.path.exists(checkpoint_path):
+    print("loading network from : " + checkpoint_path)
+    ppo_agent.load(checkpoint_path)
+    print("network loaded")
+else:
+    print("No preTrained network exists. New network created")
+
+
 
 
 # track total training time
@@ -262,7 +268,7 @@ while time_step <= max_training_timesteps: ## prim_step
     action = scale_actions(action).to(sim_device)
     # append 0 to all rows of action
     # print("action", action.shape)
-    action = torch.cat((action, torch.zeros(true_indicies.shape[0], 1).to(sim_device)), dim=1)
+    # action = torch.cat((action, torch.zeros(true_indicies.shape[0], 1).to(sim_device)), dim=1)
     
     # true indicies to one hot flat vector
     one_hot = torch.zeros(ne).bool().to(sim_device)
@@ -290,6 +296,8 @@ while time_step <= max_training_timesteps: ## prim_step
     state, reward, done, true_indicies = returns_to_device(state, reward, done, true_indicies, train_device)
     state = rearrange_state(state)
     # true_idx = torch.nonzero(indicies).squeeze(1)
+    # print("true indicies", true_indicies)
+    # print("reward ", reward)
     for i, true_i in enumerate(true_indicies):
         if len(buf_envs[true_i].rewards) != len(buf_envs[true_i].states):
             if true_i == 0:
@@ -313,7 +321,8 @@ while time_step <= max_training_timesteps: ## prim_step
     if buf_central.size() >= update_size and not EVAL:
         def calc_avg_reward_per_update():
             total_reward = sum(buf_central.rewards)
-            num_rewards = sum(buf_central.is_terminals)
+            # num_rewards = sum(buf_central.is_terminals)
+            num_rewards = len(buf_central.rewards)
             return (total_reward / num_rewards).item()
         curr_rewards = calc_avg_reward_per_update()
         s_t = time.time()

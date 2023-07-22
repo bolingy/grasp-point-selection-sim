@@ -1149,7 +1149,6 @@ class RL_UR16eManipulation(VecTask):
         env_list_reset_arm_pose = torch.tensor([])
         env_complete_reset = torch.tensor([])
         env_list_reset_default_arm_pose = torch.tensor([])
-        env_list_reset_pre_grasp_pose = torch.tensor([])
         
         for env_count in range(self.num_envs):
             torch_mask_tensor = self.mask_camera_tensors[env_count]

@@ -5,6 +5,7 @@ __pycache__/
 *.json
 *.npy
 *.csv 
+*.pth
 
 # C extensions
 *.so
