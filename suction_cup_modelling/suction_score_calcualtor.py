@@ -75,7 +75,7 @@ class calcualte_suction_score():
         point_cloud_suction = points[min_indices]
         return point_cloud_suction
 
-    def calculator(self, depth_image, segmask, rgb_img, grasps_and_predictions, object_id):
+    def calculator(self, depth_image, segmask, rgb_img, grasps_and_predictions, object_id, offset):
         self.depth_image = depth_image
         self.segmask = segmask
         self.rgb_img = rgb_img
@@ -107,7 +107,7 @@ class calcualte_suction_score():
         if(self.grasps_and_predictions == None):
             xyz_point = self.convert_uv_point_to_xyz_point(int(self.segmask.shape[1]/2), int(self.segmask.shape[0]/2))
         else:
-            xyz_point = self.convert_uv_point_to_xyz_point(self.grasps_and_predictions.center.x+410, self.grasps_and_predictions.center.y+180)
+            xyz_point = self.convert_uv_point_to_xyz_point(self.grasps_and_predictions.center.x+offset[0], self.grasps_and_predictions.center.y+offset[1])
         if(xyz_point[2] < 0):
             return torch.tensor(0), torch.tensor([0, 0, 0]), torch.tensor([centroid_angle[0], centroid_angle[1], centroid_angle[2]])
         
@@ -164,7 +164,7 @@ class calcualte_suction_score():
                 if(grasps_and_predictions == None):
                     return torch.tensor(0), torch.tensor([0, 0, 0]), torch.tensor([centroid_angle[0], centroid_angle[1], centroid_angle[2]])
                 else:
-                    return torch.tensor(0), torch.tensor([1.02, -xyz_point[0], -xyz_point[1]]), torch.tensor([centroid_angle[0], centroid_angle[1], centroid_angle[2]])
+                    return torch.tensor(0), torch.tensor([0.72, -xyz_point[0], -xyz_point[1]]), torch.tensor([centroid_angle[0], centroid_angle[1], centroid_angle[2]])
             
         difference_xy_plane = point_cloud_suction[:,:2] - (self.suction_coordinates[:, :2] + xyz_point[:2])
         thresh = torch.sum(torch.sum(difference_xy_plane, 1))
@@ -179,7 +179,7 @@ class calcualte_suction_score():
             if(grasps_and_predictions == None):
                 return torch.tensor(0), torch.tensor([0, 0, 0]), torch.tensor([centroid_angle[0], centroid_angle[1], centroid_angle[2]])
             else:
-                return torch.tensor(0), torch.tensor([1.02, -xyz_point[0], -xyz_point[1]]), torch.tensor([centroid_angle[0], centroid_angle[1], centroid_angle[2]])
+                return torch.tensor(0), torch.tensor([0.72, -xyz_point[0], -xyz_point[1]]), torch.tensor([centroid_angle[0], centroid_angle[1], centroid_angle[2]])
 
         '''
         Calcualte the conical spring score
@@ -202,7 +202,7 @@ class calcualte_suction_score():
         #     suction_score = 1-torch.max(ri)
         if(grasps_and_predictions == None):
             return suction_score, torch.tensor([xyz_point[2]-0.07, -xyz_point[0], -xyz_point[1]]), torch.tensor([centroid_angle[0], centroid_angle[1], centroid_angle[2]])
-        return suction_score, torch.tensor([1.02, -xyz_point[0], -xyz_point[1]]), torch.tensor([0, 0, 0])
+        return suction_score, torch.tensor([0.72, -xyz_point[0], -xyz_point[1]]), torch.tensor([0, 0, 0])
 
 
     def calculate_contact(self, depth_image, segmask, rgb_img, grasps_and_predictions, object_id):
@@ -251,7 +251,7 @@ class calcualte_suction_score():
         for i in range(8):
             if(self.segmask[V[i].type(torch.int)][U[i].type(torch.int)] == 0):
                 count += 1        
-        if(count == 8):
+        if(count >= 3):
             return torch.tensor(0)
         
         # TO check if any of the point is within the threshold or not
@@ -259,7 +259,7 @@ class calcualte_suction_score():
         for i in range(8):
             if(self.depth_image[V[i].type(torch.int)][U[i].type(torch.int)] > 0.022):
                 count += 1        
-        if(count == 8):
+        if(count >= 3):
             return torch.tensor(0)
 
         return torch.tensor(1)

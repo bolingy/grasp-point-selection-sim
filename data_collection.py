@@ -7,6 +7,9 @@ ne = 50
 from pathlib import Path
 cur_path = str(Path(__file__).parent.absolute())
 
+# Options are 3H, 3E and 3F
+bin_id = "3H"
+
 envs = isaacgymenvs.make(
 	seed=0,
 	task="UR16eManipulation",
@@ -16,6 +19,7 @@ envs = isaacgymenvs.make(
 	multi_gpu=True,
 	graphics_device_id=0,
 	headless=True,
+	bin_id=bin_id,
 	data_path=cur_path+"/../System_Identification_Data/Parallelization-Data/",
 )
 print("Observation space is", envs.observation_space)
