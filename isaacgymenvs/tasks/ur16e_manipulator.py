@@ -13,7 +13,6 @@ from isaacgymenvs.utils.torch_jit_utils import *
 from isaacgymenvs.tasks.base.vec_task import VecTask
 
 # For camera module
-from PIL import Image as im
 from PIL import Image
 import matplotlib.pyplot as plt
 
@@ -24,6 +23,9 @@ import cv2
 from suction_cup_modelling.suction_score_calcualtor import calcualte_suction_score
 from suction_cup_modelling.force_calculator import calcualte_force
 
+# Importing DexNet
+from gqcnn.examples.policy_for_training import dexnet3
+from autolab_core import (BinaryImage, CameraIntrinsics, DepthImage)
 from gqcnn_examples.policy_for_training import dexnet3
 from autolab_core import (
     YamlConfig,
