@@ -767,11 +767,11 @@ class UR16eManipulation(VecTask):
             object_set = range(1, self.object_count_unique+1)
 
             if (self.smaller_bin):
-                selected_object = random.choices(
-                    object_set, weights=self.object_prob/sum(self.object_prob), k=random_number)
+                selected_object = np.random.choice(
+                    object_set, p=self.object_prob/sum(self.object_prob), size=random_number, replace=False)
             else:
-                selected_object = random.choices(
-                    object_set, weights=None, k=random_number)
+                selected_object = np.random.choice(
+                    object_set, p=None, size=random_number, replace=False)
 
             list_objects_domain_randomizer = torch.tensor([])
             for object_count in selected_object:
@@ -1459,6 +1459,57 @@ class UR16eManipulation(VecTask):
                                                      T_ee_pose_to_pre_grasp_pose[2][3], ori_factor *
                                                      action_orientation[0],
                                                     ori_factor*action_orientation[1], ori_factor*action_orientation[2], 1]], dtype=torch.float)
+
+                    '''
+                    detecting contacts with other objects before contact to the target object
+                    '''
+                    _all_object_pose_error = torch.tensor(0.0).to(self.device)
+                    try:
+                        # estimating movement of other objects
+                        for object_id in self.selected_object_env[env_count]:
+                            if (object_id != self.object_target_id[env_count]):
+                                _all_object_pose_error += torch.abs(torch.norm(
+                                    _all_objects_current_pose[int(object_id.item())][:3] - self.all_objects_last_pose[env_count][int(object_id.item())][:3]))
+                    except Exception as error:
+                        _all_object_pose_error = torch.tensor(0.0)
+
+                    # reset if object has moved even before having contact with the target object
+                    if ((_all_object_pose_error > torch.tensor(0.0075)) and contact_exist == torch.tensor(0)):
+                        env_list_reset_arm_pose = torch.cat(
+                            (env_list_reset_arm_pose, torch.tensor([env_count])), axis=0)
+                        env_list_reset_objects = torch.cat(
+                            (env_list_reset_objects, torch.tensor([env_count])), axis=0)
+                        print(env_count, _all_object_pose_error,
+                              "reset because of object re placement check")
+                        oscillation = False
+                        success = False
+                        json_save = {
+                            "force_array": [],
+                            "object_disp": {},
+                            "grasp point": self.grasp_point[env_count].tolist(),
+                            "grasp_angle": self.grasp_angle[env_count].tolist(),
+                            "dexnet_score": self.dexnet_score[env_count].item(),
+                            "suction_deformation_score": self.suction_deformation_score[env_count].item(),
+                            "oscillation": oscillation,
+                            "gripper_score": 0,
+                            "success": success,
+                            "object_id": self.object_target_id[env_count].item(),
+                            "penetration": False,
+                            "unreachable": True
+                        }
+                        new_dir_name = str(
+                            env_count)+"_"+str(self.track_save[env_count].type(torch.int).item())
+                        save_dir_json = self.data_path + str(self.bin_id) + "/" +\
+                            str(env_count)+"/json_data_"+new_dir_name+"_" + \
+                            str(self.config_env_count[env_count].type(
+                                torch.int).item())+".json"
+                        with open(save_dir_json, 'w') as json_file:
+                            json.dump(json_save, json_file)
+                        self.track_save[env_count] = self.track_save[env_count] + \
+                            torch.tensor(1)
+                    for object_id in self.selected_object_env[env_count]:
+                        self.all_objects_last_pose[env_count][int(
+                            object_id.item())] = _all_objects_current_pose[int(object_id.item())]
                 else:
                     # Transformation for grasp pose (wg --> wo*og)
                     rotation_matrix_grasp_pose = euler_angles_to_matrix(torch.tensor(
@@ -1581,7 +1632,7 @@ class UR16eManipulation(VecTask):
                     '''
                     detecting contacts with other objects before contact to the target object
                     '''
-                    _all_object_pose_error = torch.tensor(0.0)
+                    _all_object_pose_error = torch.tensor(0.0).to(self.device)
                     try:
                         # estimating movement of other objects
                         for object_id in self.selected_object_env[env_count]:
@@ -1640,6 +1691,7 @@ class UR16eManipulation(VecTask):
                             [0.1, 0.1, 0.1, 0.5, 0.5, 0.5], device=self.device).unsqueeze(0)
 
                     self.last_object_pose[env_count] = current_object_pose
+
                     for object_id in self.selected_object_env[env_count]:
                         self.all_objects_last_pose[env_count][int(
                             object_id.item())] = _all_objects_current_pose[int(object_id.item())]
