@@ -55,18 +55,19 @@ print_freq = 3                  # print avg reward in the interval (in num times
 log_freq = max_ep_len * 10      # log avg reward in the interval (in num timesteps)
 save_model_freq = 2      # save model frequency (in num timesteps)
 
-EVAL = False #if you want to evaluate the model
-action_std = 0.2 if not EVAL else 1e-9        # starting std for action distribution (Multivariate Normal)
+head_less = False
+EVAL = True #if you want to evaluate the model
+action_std = 0.1 if not EVAL else 1e-9        # starting std for action distribution (Multivariate Normal)
 
-load_policy = False
+load_policy = True
 
 ## Note : print/log frequencies should be > than max_ep_len
 ################ PPO hyperparameters ################
 
 pick_len = 3
-update_size = pick_len * 10  #20
+update_size = pick_len * 20  #20
 K_epochs = 40               # update policy for K epochs
-eps_clip = 0.2              # clip parameter for PPO
+eps_clip = 0.18              # clip parameter for PPO
 gamma = 0.99                # discount factor
 
 lr_actor = 1e-6       # learning rate for actor network
@@ -74,23 +75,24 @@ lr_critic = 3e-6      # learning rate for critic network
 
 random_seed = 1       # set random seed if required (0 = no random seed)
 
-ne = 15              # number of environments
+ne = 2#15              # number of environments
 
 print("training environment name : " + env_name)
-run = wandb.init(
-    project='bin_picking', 
-    config={
-    "ne": ne,
-    "pick_len": pick_len,
-    "update_size": update_size,
-    "max_training_timesteps": max_training_timesteps,
-    "action_std": action_std,
-    "eps_clip": eps_clip,
-    "gamma": gamma,
-    "lr_actor": lr_actor,
-    "lr_critic": lr_critic,
-    }
-)
+if not EVAL:
+    run = wandb.init(
+        project='bin_picking', 
+        config={
+        "ne": ne,
+        "pick_len": pick_len,
+        "update_size": update_size,
+        "max_training_timesteps": max_training_timesteps,
+        "action_std": action_std,
+        "eps_clip": eps_clip,
+        "gamma": gamma,
+        "lr_actor": lr_actor,
+        "lr_critic": lr_critic,
+        }
+    )
 
 
 env = isaacgymenvs.make(
@@ -101,7 +103,7 @@ env = isaacgymenvs.make(
 	rl_device="cuda:0", # cpu cuda:0
 	multi_gpu=False,
 	graphics_device_id=0,
-    headless=True
+    headless=head_less
 )
 
 # state space dimension
@@ -203,7 +205,7 @@ ppo_agent = PPO(state_dim, action_dim, lr_actor, lr_critic, gamma, K_epochs, eps
 
 directory = "PPO_preTrained" + '/' + env_name + '/'
 checkpoint_path = directory + "PPO_{}_{}_{}.pth".format(env_name, random_seed, run_num_pretrained)
-checkpoint_path = directory + "PPO_seq_multiobj3prim4_batch_30_lra_1e-6_lrc_3e-6.pth"
+checkpoint_path = directory + "PPO_seq_multiobj3prim4_batch_60_lra_1e-6_lrc_3e-6.pth"
 
 if load_policy:
     if os.path.exists(checkpoint_path):
@@ -275,21 +277,21 @@ while time_step <= max_training_timesteps: ## prim_step
     # print("actions", actions)
     state, reward, done, true_indicies = step_primitives(actions, env)
 
-    # if true_indicies[0] == 0:
-    #     imgs = state
-    #     img_x = 260
-    #     img_y = 180
-    #     img = imgs[:, :img_x*img_y*2]
-    #     depth = img[:, :img_x*img_y]
-    #     seg = img[:, img_x*img_y:]
-    #     depth = depth.reshape(-1, img_y, img_x)
-    #     seg = seg.reshape(-1, img_y, img_x)
-    #     depth = depth[0].cpu().numpy()
-    #     seg = seg[0].cpu().numpy()
-    #     plt.imshow(depth)
-    #     plt.show()
-    #     plt.imshow(seg)
-    #     plt.show()
+    if EVAL and true_indicies[0] == 0:
+        imgs = state
+        img_x = 260
+        img_y = 180
+        img = imgs[:, :img_x*img_y*2]
+        depth = img[:, :img_x*img_y]
+        seg = img[:, img_x*img_y:]
+        depth = depth.reshape(-1, img_y, img_x)
+        seg = seg.reshape(-1, img_y, img_x)
+        depth = depth[0].cpu().numpy()
+        seg = seg[0].cpu().numpy()
+        plt.imshow(depth)
+        plt.show()
+        plt.imshow(seg)
+        plt.show()
 
     state, reward, done, true_indicies = returns_to_device(state, reward, done, true_indicies, train_device)
     state = rearrange_state(state)
@@ -310,7 +312,8 @@ while time_step <= max_training_timesteps: ## prim_step
             if len(buf_envs[true_i].rewards) == len(buf_envs[true_i].states):
                 assert len(buf_envs[true_i].rewards) == len(buf_envs[true_i].states), "rewards and states are not the same length at env {}".format(i)
                 buf_central.append(copy.deepcopy(buf_envs[true_i]))
-                wandb.log({"Central buffer size": len(buf_central.states)})
+                if not EVAL:
+                    wandb.log({"Central buffer size": len(buf_central.states)})
                 buf_envs[true_i].clear()
             else:
                 print("rewards and states are not the same length at env {}".format(true_i))
@@ -334,9 +337,10 @@ while time_step <= max_training_timesteps: ## prim_step
         print_running_reward += curr_rewards
         print_running_episodes += 1
         i_episode += 1
-        wandb.log({"Episodes": i_episode})
-        wandb.log({"Average reward in every update": curr_rewards})
-        print("Updated at timestep {} with average reward {}".format(time_step, curr_rewards))
+        if not EVAL:
+            wandb.log({"Episodes": i_episode})
+            wandb.log({"Average reward in every update": curr_rewards})
+            print("Updated at timestep {} with average reward {}".format(time_step, curr_rewards))
     # if time_step % log_freq == 0:
     #     # log average reward till last episode
     #     log_avg_reward = log_running_reward / log_running_episodes
@@ -354,7 +358,8 @@ while time_step <= max_training_timesteps: ## prim_step
         # print average reward till last episode
         print_avg_reward = print_running_reward / print_running_episodes
         # print_running_reward = round(print_running_reward, 2)
-        wandb.log({"Average running reward in every {} episodes".format(print_freq): print_avg_reward})
+        if not EVAL:
+            wandb.log({"Average running reward in every {} episodes".format(print_freq): print_avg_reward})
         print("Episode : {} \t\t Timestep : {} \t\t Average Reward : {}".format(i_episode, time_step, print_avg_reward))
 
         print_running_reward = 0
