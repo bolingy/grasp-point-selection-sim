@@ -55,11 +55,12 @@ print_freq = 3                  # print avg reward in the interval (in num times
 log_freq = max_ep_len * 10      # log avg reward in the interval (in num timesteps)
 save_model_freq = 2      # save model frequency (in num timesteps)
 
-head_less = False
-EVAL = True #if you want to evaluate the model
+head_less = True
+EVAL = False #if you want to evaluate the model
 action_std = 0.1 if not EVAL else 1e-9        # starting std for action distribution (Multivariate Normal)
 
-load_policy = True
+load_policy = False
+policy_name = "seq_multiobj3prim4_batch_60_lra_1e-6_lrc_3e-6_clip015.pth"
 
 ## Note : print/log frequencies should be > than max_ep_len
 ################ PPO hyperparameters ################
@@ -67,7 +68,7 @@ load_policy = True
 pick_len = 3
 update_size = pick_len * 20  #20
 K_epochs = 40               # update policy for K epochs
-eps_clip = 0.18              # clip parameter for PPO
+eps_clip = 0.15              # clip parameter for PPO
 gamma = 0.99                # discount factor
 
 lr_actor = 1e-6       # learning rate for actor network
@@ -75,7 +76,7 @@ lr_critic = 3e-6      # learning rate for critic network
 
 random_seed = 1       # set random seed if required (0 = no random seed)
 
-ne = 2#15              # number of environments
+ne = 15              # number of environments
 
 print("training environment name : " + env_name)
 if not EVAL:
@@ -205,7 +206,7 @@ ppo_agent = PPO(state_dim, action_dim, lr_actor, lr_critic, gamma, K_epochs, eps
 
 directory = "PPO_preTrained" + '/' + env_name + '/'
 checkpoint_path = directory + "PPO_{}_{}_{}.pth".format(env_name, random_seed, run_num_pretrained)
-checkpoint_path = directory + "PPO_seq_multiobj3prim4_batch_60_lra_1e-6_lrc_3e-6.pth"
+checkpoint_path = directory + policy_name
 
 if load_policy:
     if os.path.exists(checkpoint_path):
