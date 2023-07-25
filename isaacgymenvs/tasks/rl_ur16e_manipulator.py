@@ -755,9 +755,9 @@ class RL_UR16eManipulation(VecTask):
             env_count = env_count.item()
             # self.RL_flag[env_count] = 0
             # How many objects should we spawn 2 or 3
-            probabilities = [0.0, 0., 1.]
+            # probabilities = [0.0, 0., 1.]
             ##############################################
-            # probabilities = [1.0, 0.0, 0.0]
+            probabilities = [1.0, 0.0, 0.0]
             ##############################################
             random_number = self.random_number_with_probabilities(probabilities)
             random_number += 1
@@ -765,7 +765,7 @@ class RL_UR16eManipulation(VecTask):
             object_set = range(1, self.object_count_unique+1)
             selected_object = random.sample(object_set, random_number)
             ##############################################
-            # selected_object = [1]
+            selected_object = [1]
             ##############################################
             list_objects_domain_randomizer = torch.tensor([])
             
@@ -792,7 +792,7 @@ class RL_UR16eManipulation(VecTask):
                 ##############################################
                 domain_randomizer = random_number = random.choice(
                     [1])
-                # offset_object = offset_objects[object_count-1]
+                offset_object = offset_objects[object_count-1]
                 ##############################################
                 quat = euler_angles_to_quaternion(
                     torch.tensor(offset_object[3:6]), "XYZ", degrees=False)

@@ -4,7 +4,7 @@ import torch
 import rl.rl_utils
 import matplotlib.pyplot as plt
 
-ne = 2
+ne = 50
 img_x = 260
 img_y = 180
 
@@ -59,12 +59,19 @@ action = torch.tensor(ne * [[0.12, -0.03, 0.28, 0.5]]).to("cuda:0")
 import time 
 start = time.time()
 # for i in range(1000):
+total_act = 0
 while True:
 	# obs, reward, done, info = envs.step(action)
 	# print(obs['obs'][:, 614400:])
 	imgs, reward, done, indicies = step_primitives(action)
-	print('indicies: ', indicies)
-	print('reward: ', reward)
+	total_act += indicies.shape[0]
+	#print('indicies: ', indicies.shape[0])
+	#print('reward: ', reward)
+	#print(('--------------------------------------------------'))
+	if total_act % 10 == 0:
+		print('current done', total_act)
+	if total_act >= 100:
+		break
 
 	# show imgs from each env in indicies
 	# for i in range(indicies.shape[0]):
@@ -79,4 +86,5 @@ while True:
 	# 	plt.show()
 
 end = time.time()
-# print(f"Time taken to run the code was {end-start} seconds")
+print('total actions', total_act)
+print(f"Time taken to run the code was {end-start} seconds")
