@@ -48,35 +48,35 @@ sim_device = torch.device('cuda:0')
 env_name = "bin_picking"
 has_continuous_action_space = True
 
-max_ep_len = 2                     # max timesteps in one episode
+#max_ep_len = 2                     # max timesteps in one episode
 max_training_timesteps = int(1e5)   # break training loop if timeteps > max_training_timesteps
 
 print_freq = 3                  # print avg reward in the interval (in num timesteps)
-log_freq = max_ep_len * 10      # log avg reward in the interval (in num timesteps)
+log_freq = 90 #max_ep_len * 10      # log avg reward in the interval (in num timesteps)
 save_model_freq = 2      # save model frequency (in num timesteps)
 
-head_less = True
-EVAL = False #if you want to evaluate the model
+'''Training/Evaluation Parameter'''
+head_less = False
+EVAL = True #if you want to evaluate the model
 action_std = 0.1 if not EVAL else 1e-9        # starting std for action distribution (Multivariate Normal)
-
-load_policy = False
-policy_name = "seq_multiobj3prim4_batch_60_lra_1e-6_lrc_3e-6_clip015.pth"
+load_policy = True
+policy_name = "seq_multiobj3poke_batch_90_lra_1e-6_lrc_3e-6_clip015.pth"
 
 ## Note : print/log frequencies should be > than max_ep_len
 ################ PPO hyperparameters ################
 
 pick_len = 3
-update_size = pick_len * 20  #20
+update_size = pick_len * 30  #20
 K_epochs = 40               # update policy for K epochs
 eps_clip = 0.15              # clip parameter for PPO
 gamma = 0.99                # discount factor
 
-lr_actor = 1e-6       # learning rate for actor network
-lr_critic = 3e-6      # learning rate for critic network
+lr_actor = 1e-7       # learning rate for actor network
+lr_critic = 3e-7      # learning rate for critic network
 
 random_seed = 1       # set random seed if required (0 = no random seed)
 
-ne = 15              # number of environments
+ne = 2               # number of environments
 
 print("training environment name : " + env_name)
 if not EVAL:
@@ -112,7 +112,7 @@ state_dim = env.observation_space.shape[0]
 
 # action space dimension
 if has_continuous_action_space:
-    action_dim = env.action_space.shape[0]
+    action_dim = env.action_space.shape[0] - 1
 else:
     action_dim = env.action_space.n
 
@@ -166,7 +166,7 @@ print("save checkpoint path : " + checkpoint_path)
 print("--------------------------------------------------------------------------------------------")
 
 print("max training timesteps : ", max_training_timesteps)
-print("max timesteps per episode : ", max_ep_len)
+#print("max timesteps per episode : ", max_ep_len)
 
 print("model saving frequency : " + str(save_model_freq) + " timesteps")
 print("log frequency : " + str(log_freq) + " timesteps")
@@ -212,6 +212,9 @@ if load_policy:
     if os.path.exists(checkpoint_path):
         print("loading network from : " + checkpoint_path)
         ppo_agent.load(checkpoint_path)
+        if EVAL:
+            ppo_agent.policy.eval()
+            ppo_agent.policy_old.eval()
         print("network loaded")
     else:
         print("No preTrained network exists. New network created")
@@ -269,7 +272,7 @@ while time_step <= max_training_timesteps: ## prim_step
     action = scale_actions(action).to(sim_device)
     # append 0 to all rows of action
     # print("action", action.shape)
-    # action = torch.cat((action, torch.zeros(true_indicies.shape[0], 1).to(sim_device)), dim=1)
+    action = torch.cat((action, torch.zeros(true_indicies.shape[0], 1).to(sim_device)), dim=1)
     
     # true indicies to one hot flat vector
     one_hot = torch.zeros(ne).bool().to(sim_device)
