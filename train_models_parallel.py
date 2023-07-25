@@ -56,10 +56,10 @@ log_freq = 90 #max_ep_len * 10      # log avg reward in the interval (in num tim
 save_model_freq = 2      # save model frequency (in num timesteps)
 
 '''Training/Evaluation Parameter'''
-head_less = False
-EVAL = True #if you want to evaluate the model
+head_less = True
+EVAL = False #if you want to evaluate the model
 action_std = 0.1 if not EVAL else 1e-9        # starting std for action distribution (Multivariate Normal)
-load_policy = True
+load_policy = False
 policy_name = "seq_multiobj3poke_batch_90_lra_1e-6_lrc_3e-6_clip015.pth"
 
 ## Note : print/log frequencies should be > than max_ep_len
