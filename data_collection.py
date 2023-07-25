@@ -2,14 +2,11 @@ import isaacgym
 import isaacgymenvs
 import torch
 
-
 import click
 import os
 os.environ['XLA_PYTHON_CLIENT_PREALLOCATE'] ='false'
 os.environ['XLA_PYTHON_CLIENT_ALLOCATOR']='platform'
 os.environ['TF_FORCE_GPU_ALLOW_GROWTH'] = 'true'
-
-
 
 def _get_data_path(bin_id):
     from datetime import datetime
@@ -17,9 +14,8 @@ def _get_data_path(bin_id):
     import string
     datetime_string = datetime.now().isoformat().replace(":","")[:-7]
     random_string = ''.join(random.choice(string.ascii_letters) for _ in range(6))
-    temp_path = f"~/manipulation_policy/{datetime_string}-{random_string}-grasp_data_{bin_id}/"
+    temp_path = f"/home/aurmr/workspaces/manipulation_policy/src/System_Identification_Data/{datetime_string}-{random_string}-grasp_data_{bin_id}/"
     return os.path.expanduser(temp_path)
- 
 
 @click.command()
 @click.option('--bin-id', type=click.Choice(['3H', '3E', '3F']))
