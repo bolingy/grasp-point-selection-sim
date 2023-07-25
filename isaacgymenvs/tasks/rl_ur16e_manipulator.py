@@ -20,7 +20,7 @@ from suction_cup_modelling.suction_score_calcualtor import calcualte_suction_sco
 from suction_cup_modelling.force_calculator import calcualte_force
 
 # Importing DexNet
-from gqcnn.examples.policy_for_training import dexnet3
+#from gqcnn.examples.policy_for_training import dexnet3
 from autolab_core import (BinaryImage, CameraIntrinsics, DepthImage)
 import assets.urdf_models.models_data as md
 
