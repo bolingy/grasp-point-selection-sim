@@ -1473,7 +1473,7 @@ class UR16eManipulation(VecTask):
                         _all_object_pose_error = torch.tensor(0.0)
 
                     # reset if object has moved even before having contact with the target object
-                    if ((_all_object_pose_error > torch.tensor(0.0075)) and contact_exist == torch.tensor(0)):
+                    if (_all_object_pose_error > torch.tensor(0.0075)):
                         env_list_reset_arm_pose = torch.cat(
                             (env_list_reset_arm_pose, torch.tensor([env_count])), axis=0)
                         env_list_reset_objects = torch.cat(
