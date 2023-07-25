@@ -16,7 +16,7 @@ envs = isaacgymenvs.make(
 	rl_device="cuda:0",
 	multi_gpu=False,
 	graphics_device_id=0, 
-	headless=False
+	headless=True
 )
 # Observation space is eef_pos, eef_quat, q_gripper/q
 print("Observation space is", envs.observation_space)
@@ -68,17 +68,15 @@ while True:
 
 	# show imgs from each env in indicies
 	# for i in range(indicies.shape[0]):
-	if (indicies==0).sum():
-		i = torch.nonzero(indicies==0).item()
-		img = imgs[i, :img_x*img_y*2]
-		segmask = imgs[i, img_x*img_y:]
-		depth = imgs[i, :img_x*img_y]
-		plt.imshow(depth.cpu().numpy().reshape(img_y, img_x))
-		plt.show()
-		plt.imshow(segmask.cpu().numpy().reshape(img_y, img_x))
-		plt.show()
-
-
+	# if (indicies==0).sum():
+	# 	i = torch.nonzero(indicies==0).item()
+	# 	img = imgs[i, :img_x*img_y*2]
+	# 	segmask = imgs[i, img_x*img_y:]
+	# 	depth = imgs[i, :img_x*img_y]
+	# 	plt.imshow(depth.cpu().numpy().reshape(img_y, img_x))
+	# 	plt.show()
+	# 	plt.imshow(segmask.cpu().numpy().reshape(img_y, img_x))
+	# 	plt.show()
 
 end = time.time()
 # print(f"Time taken to run the code was {end-start} seconds")
