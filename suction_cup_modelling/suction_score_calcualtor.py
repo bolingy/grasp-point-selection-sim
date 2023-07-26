@@ -9,9 +9,9 @@ from autolab_core import DepthImage
 from homogeneous_trasnformation_and_conversion.rotation_conversions import *
 
 class calcualte_suction_score():
-    def __init__(self, camera_intrinsics):
+    def __init__(self, camera_intrinsics, device='cuda:0'):
         self.camera_intrinsics = camera_intrinsics
-        self.device = 'cuda:0'
+        self.device = device
         # pc_o3d = o3d.geometry.PointCloud(o3d.utility.Vector3dVector(point_cloud_im.data.reshape(-1,3)))
         # # print('here')
         # pc_o3d.estimate_normals(o3d.geometry.KDTreeSearchParamKNN(100), fast_normal_computation=False)

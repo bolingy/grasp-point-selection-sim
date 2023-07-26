@@ -35,7 +35,7 @@ import warnings
 warnings.filterwarnings("ignore")
 
 # check cuda
-train_device = torch.device('cuda:0')
+train_device = torch.device('cuda:1')
 sim_device = torch.device('cuda:0')
 
 # if(torch.cuda.is_available()): 
@@ -61,6 +61,7 @@ EVAL = False #if you want to evaluate the model
 action_std = 0.1 if not EVAL else 1e-9        # starting std for action distribution (Multivariate Normal)
 load_policy = False
 policy_name = "seq_multiobj3poke_batch_90_lra_1e-6_lrc_3e-6_clip015.pth"
+ne = 90               # number of environments
 
 ## Note : print/log frequencies should be > than max_ep_len
 ################ PPO hyperparameters ################
@@ -68,15 +69,15 @@ policy_name = "seq_multiobj3poke_batch_90_lra_1e-6_lrc_3e-6_clip015.pth"
 pick_len = 3
 update_size = pick_len * 30  #20
 K_epochs = 40               # update policy for K epochs
-eps_clip = 0.15              # clip parameter for PPO
+eps_clip = 0.18              # clip parameter for PPO
 gamma = 0.99                # discount factor
 
-lr_actor = 1e-7       # learning rate for actor network
-lr_critic = 3e-7      # learning rate for critic network
+lr_actor = 1e-6       # learning rate for actor network
+lr_critic = 3e-6      # learning rate for critic network
 
 random_seed = 1       # set random seed if required (0 = no random seed)
 
-ne = 2               # number of environments
+
 
 print("training environment name : " + env_name)
 if not EVAL:
@@ -100,8 +101,8 @@ env = isaacgymenvs.make(
 	seed=0,
 	task="RL_UR16eManipulation",
 	num_envs=ne,
-	sim_device="cuda:0", # cpu cuda:0
-	rl_device="cuda:0", # cpu cuda:0
+	sim_device='cuda:0', # cpu cuda:0
+	rl_device='cuda:0', # cpu cuda:0
 	multi_gpu=False,
 	graphics_device_id=0,
     headless=head_less
@@ -272,6 +273,8 @@ while time_step <= max_training_timesteps: ## prim_step
     action = scale_actions(action).to(sim_device)
     # append 0 to all rows of action
     # print("action", action.shape)
+
+    # ##### poking action #####
     action = torch.cat((action, torch.zeros(true_indicies.shape[0], 1).to(sim_device)), dim=1)
     
     # true indicies to one hot flat vector
@@ -304,7 +307,7 @@ while time_step <= max_training_timesteps: ## prim_step
     # print("reward ", reward)
     for i, true_i in enumerate(true_indicies):
         if len(buf_envs[true_i].rewards) != len(buf_envs[true_i].states):
-            if true_i == 0:
+            if true_i == 0 and EVAL:
                 print("reward of env 0", reward[i])
                 print("done of env 0", done[i])
             buf_envs[true_i].rewards.append(reward[i].clone().detach().unsqueeze(0))

@@ -6,6 +6,7 @@ DEFAULT_OSC_DIST = 0.3
 DEFAULT_MIN_DIST_MUL = 0.05
 class Primitives():
     def __init__(self, num_envs, init_pose, device):
+        self.device = device
         self.target_pose = init_pose
         self.current_pose = init_pose
         self.prev_pose = torch.tensor([[0., 0., 0.]], device=device)
@@ -95,7 +96,7 @@ class Primitives():
         self.current_quat = current_quat
         if self.executing == False:
             self.target_pose = self.current_pose + target_dist
-            self.target_quat = torch.tensor([[0., 1.57, -1.57]], device="cuda:0")
+            self.target_quat = torch.tensor([[0., 1.57, -1.57]], device=self.device)
             self.executing = True
             self.stuck_counter = 0
         # print(self.current_quat)

@@ -666,7 +666,7 @@ class RL_UR16eManipulation(VecTask):
                                                            cx=self.cx_back_cam, cy=self.cy_back_cam, skew=0.0,
                                                            height=self.height_back_cam, width=self.width_back_cam)
         self.suction_score_object = calcualte_suction_score(
-            self.camera_intrinsics_back_cam)
+            self.camera_intrinsics_back_cam, device=self.device)
 
         print("focal length in x axis: ", self.fx_back_cam)
         print("focal length in y axis: ", self.fy_back_cam)
@@ -683,7 +683,7 @@ class RL_UR16eManipulation(VecTask):
                                                           cx=self.cx_gripper, cy=self.cy_gripper, skew=0.0,
                                                           height=self.height_gripper, width=self.width_gripper)
         self.suction_score_object_gripper = calcualte_suction_score(
-            self.camera_intrinsics_gripper)
+            self.camera_intrinsics_gripper, device=self.device)
         self.force_object = calcualte_force()
 
     def _update_states(self):
@@ -1329,10 +1329,10 @@ class RL_UR16eManipulation(VecTask):
                     if True:
                         y, x = np.where(segmask_numpy[180:660, 410:1050] == 255)
                         center_x, center_y = int(np.mean(x)), int(np.mean(y))
-                        # print(center_x, center_y)
-
-                        import cv2
-                        rgb_image_vis = rgb_image.cpu().numpy()[180:660, 410:1050]
+                        
+                        # visualization for debugging
+                        # import cv2
+                        # rgb_image_vis = rgb_image.cpu().numpy()[180:660, 410:1050]
 
                         # action, self.grasps_and_predictions, self.unsorted_grasps_and_predictions = self.dexnet_object.inference(
                         #     depth_img_dexnet, segmask_dexnet, None)
@@ -1361,6 +1361,7 @@ class RL_UR16eManipulation(VecTask):
                                 [self.grasp_angle_temp, grasp_angle.unsqueeze(0)], dim=0)
                             self.grasp_point_temp = torch.cat(
                                 [self.grasp_point_temp, grasp_point.clone().detach().unsqueeze(0)], dim=0)
+                            # visualization for debugging
                             # cv2.circle(self.rgb_save[env_count], (grasp_point.clone().detach().cpu().numpy()[0], grasp_point.clone().detach().cpu().numpy()[1]), 2, (0, 0, 0), 1)
                             # cv2.imshow("rgb_image_vis", self.rgb_save[env_count])
                             # cv2.waitKey(1)
