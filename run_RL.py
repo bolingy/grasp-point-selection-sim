@@ -4,7 +4,7 @@ import torch
 import rl.rl_utils
 import matplotlib.pyplot as plt
 
-ne = 50
+ne = 20
 img_x = 260
 img_y = 180
 
@@ -70,7 +70,7 @@ while True:
 	#print(('--------------------------------------------------'))
 	if total_act % 10 == 0:
 		print('current done', total_act)
-	if total_act >= 100:
+	if total_act >= 50:
 		break
 
 	# show imgs from each env in indicies
