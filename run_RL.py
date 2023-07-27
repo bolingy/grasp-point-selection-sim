@@ -1,10 +1,10 @@
 import isaacgym
 import isaacgymenvs
 import torch
-import rl.rl_utils
+from rl.rl_utils import *
 import matplotlib.pyplot as plt
 
-ne = 20
+ne = 2
 img_x = 260
 img_y = 180
 
@@ -16,7 +16,7 @@ envs = isaacgymenvs.make(
 	rl_device="cuda:0",
 	multi_gpu=False,
 	graphics_device_id=0, 
-	headless=True
+	headless=False
 )
 # Observation space is eef_pos, eef_quat, q_gripper/q
 print("Observation space is", envs.observation_space)
@@ -32,29 +32,29 @@ def step_primitives_env_0(action):
 			print("@@@@@@@@@@@@observation returned")
 			return imgs[0], torch.tensor([info[0][1]]), torch.tensor([info[0][2]])
 
-def step_primitives(action):
-	while True:
-		obs, reward, done, info = envs.step(action)
-		# if obs['obs'] is all zeros, then continue
-		if torch.sum(obs['obs']) == 0:
-			continue
-		# print("obs", obs['obs'])
-		imgs = obs['obs'][:, :img_x*img_y*2]
-		info = obs['obs'][:, img_x*img_y*2:]
-		# return all imgs that has info[env, 0] == 1
-		# if all info[env, 0] == 0, then don't return anything
-		indicies = info[:, 2]
-		# select and return imgs with the selected indicies
-		if imgs.shape[0] > 0:
-			# print("info indicies", info[indicies])
-			reward_temp = info[:, 0]
-			done_temp = info[:, 1]
-			# print("imgs, reward, done", imgs.shape, reward_temp.shape, done_temp.shape)
-			return imgs, reward_temp, done_temp, indicies
+# def step_primitives(action):
+# 	while True:
+# 		obs, reward, done, info = envs.step(action)
+# 		# if obs['obs'] is all zeros, then continue
+# 		if torch.sum(obs['obs']) == 0:
+# 			continue
+# 		# print("obs", obs['obs'])
+# 		imgs = obs['obs'][:, :img_x*img_y*2]
+# 		info = obs['obs'][:, img_x*img_y*2:]
+# 		# return all imgs that has info[env, 0] == 1
+# 		# if all info[env, 0] == 0, then don't return anything
+# 		indicies = info[:, 2]
+# 		# select and return imgs with the selected indicies
+# 		if imgs.shape[0] > 0:
+# 			# print("info indicies", info[indicies])
+# 			reward_temp = info[:, 0]
+# 			done_temp = info[:, 1]
+# 			# print("imgs, reward, done", imgs.shape, reward_temp.shape, done_temp.shape)
+# 			return imgs, reward_temp, done_temp, indicies
 			
-action = torch.tensor(ne * [[0.12, -0.03, 0.28, 0.5]]).to("cuda:0")
-# imgs, reward, done = step_primitives(action)
-# obs, reward, done, info = envs.step(action)
+action = torch.tensor(ne * [[0.5, 0.5, 0.2, 0.2]]).to("cuda:0")
+action = scale_actions(action).to("cuda:0")
+print('scaled action', action)
 
 import time 
 start = time.time()
@@ -63,7 +63,7 @@ total_act = 0
 while True:
 	# obs, reward, done, info = envs.step(action)
 	# print(obs['obs'][:, 614400:])
-	imgs, reward, done, indicies = step_primitives(action)
+	imgs, reward, done, indicies = step_primitives(action, envs)
 	total_act += indicies.shape[0]
 	#print('indicies: ', indicies.shape[0])
 	#print('reward: ', reward)

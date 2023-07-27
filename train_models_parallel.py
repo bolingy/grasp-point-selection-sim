@@ -35,7 +35,7 @@ import warnings
 warnings.filterwarnings("ignore")
 
 # check cuda
-train_device = torch.device('cuda:1')
+train_device = torch.device('cuda:0')
 sim_device = torch.device('cuda:0')
 
 # if(torch.cuda.is_available()): 
@@ -60,8 +60,9 @@ head_less = True
 EVAL = False #if you want to evaluate the model
 action_std = 0.1 if not EVAL else 1e-9        # starting std for action distribution (Multivariate Normal)
 load_policy = False
-policy_name = "seq_multiobj3poke_batch_90_lra_1e-6_lrc_3e-6_clip015.pth"
-ne = 90               # number of environments
+policy_name = "seq_multiobj_batch_30_lra_1e-6_lrc_3e-6_clip015"
+policy_version = None
+ne = 50               # number of environments
 
 ## Note : print/log frequencies should be > than max_ep_len
 ################ PPO hyperparameters ################
@@ -69,7 +70,7 @@ ne = 90               # number of environments
 pick_len = 3
 update_size = pick_len * 30  #20
 K_epochs = 40               # update policy for K epochs
-eps_clip = 0.18              # clip parameter for PPO
+eps_clip = 0.15              # clip parameter for PPO
 gamma = 0.99                # discount factor
 
 lr_actor = 1e-6       # learning rate for actor network
@@ -113,7 +114,7 @@ state_dim = env.observation_space.shape[0]
 
 # action space dimension
 if has_continuous_action_space:
-    action_dim = env.action_space.shape[0] - 1
+    action_dim = env.action_space.shape[0] #- 1 # -1 for poking behavior
 else:
     action_dim = env.action_space.n
 
@@ -134,7 +135,7 @@ if not os.path.exists(log_dir):
 run_num = 0
 current_num_files = next(os.walk(log_dir))[2]
 run_num = len(current_num_files)
-
+policy_num = 0
 
 # create new log file for each run 
 log_f_name = log_dir + '/PPO_' + env_name + "_log_" + str(run_num) + ".csv"
@@ -156,7 +157,10 @@ if not os.path.exists(directory):
       os.makedirs(directory)
 
 
-checkpoint_path = directory + "PPO_{}_{}_{}.pth".format(env_name, random_seed, run_num_pretrained)
+directory = "PPO_preTrained" + '/' + env_name + '/'
+#checkpoint_path = directory + policy_name
+checkpoint_path = model_name(directory, policy_name, policy_version)
+
 print("save checkpoint path : " + checkpoint_path)
 
 #####################################################
@@ -204,10 +208,6 @@ print("=========================================================================
 # initialize a PPO agent
 ppo_agent = PPO(state_dim, action_dim, lr_actor, lr_critic, gamma, K_epochs, eps_clip, has_continuous_action_space, action_std, train_device)
 
-
-directory = "PPO_preTrained" + '/' + env_name + '/'
-checkpoint_path = directory + "PPO_{}_{}_{}.pth".format(env_name, random_seed, run_num_pretrained)
-checkpoint_path = directory + policy_name
 
 if load_policy:
     if os.path.exists(checkpoint_path):
@@ -275,12 +275,13 @@ while time_step <= max_training_timesteps: ## prim_step
     # print("action", action.shape)
 
     # ##### poking action #####
-    action = torch.cat((action, torch.zeros(true_indicies.shape[0], 1).to(sim_device)), dim=1)
+    #action = torch.cat((action, torch.zeros(true_indicies.shape[0], 1).to(sim_device)), dim=1)
     
     # true indicies to one hot flat vector
-    one_hot = torch.zeros(ne).bool().to(sim_device)
-    one_hot[true_indicies] = 1
-    actions[one_hot] = action
+    # one_hot = torch.zeros(ne).bool().to(sim_device)
+    # one_hot[true_indicies] = 1
+    # actions[one_hot] = action
+    create_env_action_via_true_indicies(true_indicies, action, actions, ne, sim_device)
     # print("actions", actions)
     state, reward, done, true_indicies = step_primitives(actions, env)
 
@@ -375,11 +376,12 @@ while time_step <= max_training_timesteps: ## prim_step
     # # save model weights
     if i_episode % save_model_freq == 0 and prev_i_episode != i_episode:
         prev_i_episode = i_episode
+        checkpoint_path = model_name(directory, policy_name, policy_num)
+        policy_num += 1
         print("--------------------------------------------------------------------------------------------")
         print("saving model at : " + checkpoint_path)
         ppo_agent.save(checkpoint_path)
-        print("model saved")
-        print("Elapsed Time  : ", datetime.now().replace(microsecond=0) - start_time)
+        print("Model Saved - Elapsed Time  : ", datetime.now().replace(microsecond=0) - start_time)
         print("--------------------------------------------------------------------------------------------")
         
     # # break; if the episode is over

@@ -90,8 +90,13 @@ def scale_actions(action):
 	action[:, 1] = action[:, 1] * 0.12 - 0.02
 	action[:, 2] = action[:, 2] * 0.28
 	if action.shape[1] == 4:
-		action[:, 3] = action[:, 3] * 0.5
+		action[:, 3] = action[:, 3] * 0.22 - 0.11
 	return action
+
+def create_env_action_via_true_indicies(true_indicies, action, actions, ne, sim_device):
+	one_hot_vec = torch.zeros(ne).bool().to(sim_device)
+	one_hot_vec[true_indicies] = 1
+	actions[one_hot_vec] = action
 
 def returns_to_device(state, reward, done, indicies, device):
 	state = state.to(device)
@@ -100,3 +105,9 @@ def returns_to_device(state, reward, done, indicies, device):
 	indicies = indicies.to(device)
 	return state, reward, done, indicies
 	
+def model_name(directory, policy_name, version=None):
+	if version is None:
+		checkpoint_path = directory + policy_name + '.pth'
+	else:
+		checkpoint_path = directory + policy_name + '_' + str(version) + '.pth'
+	return checkpoint_path
