@@ -288,7 +288,7 @@ while time_step <= max_training_timesteps: ## prim_step
     # print("actions", actions)
     state, reward, done, true_indicies = step_primitives(actions, env)
 
-    if EVAL and true_indicies[0] == 0:
+    if EVAL and true_indicies[0] == 0 and res_net:
         imgs = state
         img_x = 260
         img_y = 180
@@ -303,6 +303,30 @@ while time_step <= max_training_timesteps: ## prim_step
         plt.show()
         plt.imshow(seg)
         plt.show()
+    elif EVAL and true_indicies[0] == 0 and not res_net:
+        # state is in the form of (target_x, target_y, target_z, obj1_x, obj1_y, obj1_z, obj2_x, obj2_y, obj2_z)
+        # print whether target is left, middle, or right compared to the two objects
+        state_env_0 = state[0]
+        print("state env 0", state_env_0)
+        target_y = state_env_0[1]
+        obj1_y = state_env_0[4]
+        obj2_y = state_env_0[7]
+        if target_y < obj1_y and target_y < obj2_y:
+            print("target is right")
+        elif target_y > obj1_y and target_y > obj2_y:
+            print("target is left")
+        else:
+            print("target is y-middle")
+        
+        target_x = state_env_0[0]
+        obj1_x = state_env_0[3]
+        obj2_x = state_env_0[6]
+        if target_x < obj1_x and target_x < obj2_x:
+            print("target is front")
+        elif target_x > obj1_x and target_x > obj2_x:
+            print("target is back")
+        else:
+            print("target is x-middle")
 
     state, reward, done, true_indicies = returns_to_device(state, reward, done, true_indicies, train_device)
     if res_net:
