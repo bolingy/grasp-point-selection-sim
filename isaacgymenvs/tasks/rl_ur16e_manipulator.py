@@ -1003,10 +1003,8 @@ class RL_UR16eManipulation(VecTask):
 ##############################################################################################
             # if torch done tensor is 1 and torch success tensor is less than threshold
             # multiply the sduccess by 0.8
-            threshold = -0.07
-            # print("torch_success_tensor", torch_success_tensor)
-            torch_success_tensor = torch.where((self.done[envs_finished_prim] == 1) & (torch_success_tensor > threshold), torch_success_tensor*0.8, torch_success_tensor)
-            # print("torch_success_tensor", torch_success_tensor)
+            # threshold = -0.07
+            # torch_success_tensor = torch.where((self.done[envs_finished_prim] == 1) & (torch_success_tensor > threshold), torch_success_tensor*0.8, torch_success_tensor)
 
 ################################################################################################
             self.min_distance[envs_finished_prim] = torch.tensor(100).to(self.device).float()
