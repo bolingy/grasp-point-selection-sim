@@ -62,6 +62,7 @@ EVAL = False #if you want to evaluate the model
 action_std = 0.1 if not EVAL else 1e-9        # starting std for action distribution (Multivariate Normal)
 load_policy = False
 policy_name = "seq_multiobj_batch_30_lra_1e-6_lrc_3e-6_clip015"
+load_policy_version = None                   # specify policy version (i.e. int, 50) when loading a trained policy
 ne = 50               # number of environments
 res_net = True
 
@@ -160,7 +161,7 @@ if not os.path.exists(directory):
 
 directory = "PPO_preTrained" + '/' + env_name + '/'
 #checkpoint_path = directory + policy_name
-checkpoint_path = model_name(directory, policy_name)
+checkpoint_path = model_name(directory, policy_name, load_policy_version)
 
 print("save checkpoint path : " + checkpoint_path)
 
@@ -207,7 +208,7 @@ print("=========================================================================
 ################# training procedure ################
 
 # initialize a PPO agent
-ppo_agent = PPO(state_dim, action_dim, lr_actor, lr_critic, gamma, K_epochs, eps_clip, has_continuous_action_space, action_std, train_device)
+ppo_agent = PPO(state_dim, action_dim, lr_actor, lr_critic, gamma, K_epochs, eps_clip, has_continuous_action_space, action_std, train_device, res_net)
 
 
 if load_policy:
@@ -257,7 +258,8 @@ state, reward, done, true_indicies = returns_to_device(state, reward, done, true
 
 # print(state.shape, reward.shape, done.shape, indicies)
 # state, reward, done = state[None,:], reward[None, :], done[None, :] # remove when parallelized
-state = rearrange_state(state)
+if res_net:
+    state = rearrange_state(state)
 
 curr_rewards = 0
 # training loop
@@ -303,7 +305,8 @@ while time_step <= max_training_timesteps: ## prim_step
         plt.show()
 
     state, reward, done, true_indicies = returns_to_device(state, reward, done, true_indicies, train_device)
-    state = rearrange_state(state)
+    if res_net:
+        state = rearrange_state(state)
     # true_idx = torch.nonzero(indicies).squeeze(1)
     # print("true indicies", true_indicies)
     # print("reward ", reward)
