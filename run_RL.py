@@ -4,53 +4,23 @@ import torch
 from rl.rl_utils import *
 import matplotlib.pyplot as plt
 
-ne = 2
+ne = 50
 img_x = 260
 img_y = 180
 
 envs = isaacgymenvs.make(
 	seed=0,
-	task="RL_UR16eManipulation",
+	task="RL_UR16eManipulation_Nocam",
 	num_envs=ne,
 	sim_device="cuda:0",
 	rl_device="cuda:0",
 	multi_gpu=False,
 	graphics_device_id=0, 
-	headless=False
+	headless=True
 )
 # Observation space is eef_pos, eef_quat, q_gripper/q
 print("Observation space is", envs.observation_space)
 print("Action space is", envs.action_space)
-
-def step_primitives_env_0(action):
-	while True:
-		obs, reward, done, info = envs.step(action)
-		imgs = obs['obs'][:, :img_x*img_y*2]
-		info = obs['obs'][:, img_x*img_y*2:]
-		take_obs = info[0]
-		if take_obs[0] == 1:
-			print("@@@@@@@@@@@@observation returned")
-			return imgs[0], torch.tensor([info[0][1]]), torch.tensor([info[0][2]])
-
-# def step_primitives(action):
-# 	while True:
-# 		obs, reward, done, info = envs.step(action)
-# 		# if obs['obs'] is all zeros, then continue
-# 		if torch.sum(obs['obs']) == 0:
-# 			continue
-# 		# print("obs", obs['obs'])
-# 		imgs = obs['obs'][:, :img_x*img_y*2]
-# 		info = obs['obs'][:, img_x*img_y*2:]
-# 		# return all imgs that has info[env, 0] == 1
-# 		# if all info[env, 0] == 0, then don't return anything
-# 		indicies = info[:, 2]
-# 		# select and return imgs with the selected indicies
-# 		if imgs.shape[0] > 0:
-# 			# print("info indicies", info[indicies])
-# 			reward_temp = info[:, 0]
-# 			done_temp = info[:, 1]
-# 			# print("imgs, reward, done", imgs.shape, reward_temp.shape, done_temp.shape)
-# 			return imgs, reward_temp, done_temp, indicies
 			
 action = torch.tensor(ne * [[0.5, 0.5, 0.2, 0.2]]).to("cuda:0")
 action = scale_actions(action).to("cuda:0")
@@ -70,7 +40,7 @@ while True:
 	#print(('--------------------------------------------------'))
 	if total_act % 10 == 0:
 		print('current done', total_act)
-	if total_act >= 50:
+	if total_act >= 100:
 		break
 
 	# show imgs from each env in indicies

@@ -69,7 +69,7 @@ class RolloutBuffer:
 
 
 class ActorCritic(nn.Module):
-    def __init__(self, state_dim, action_dim, has_continuous_action_space, action_std_init, device='cpu'):
+    def __init__(self, state_dim, action_dim, has_continuous_action_space, action_std_init, device='cpu', res_net=True):
         super(ActorCritic, self).__init__()
 
         self.has_continuous_action_space = has_continuous_action_space
@@ -80,17 +80,17 @@ class ActorCritic(nn.Module):
 
         # actor
         if has_continuous_action_space :
-
-            # self.actor = nn.Sequential(
-            #                 nn.Flatten(),
-            #                 nn.Linear(state_dim, 64),
-            #                 nn.Tanh(),
-            #                 nn.Linear(64, 64),
-            #                 nn.Tanh(),
-            #                 nn.Linear(64, action_dim),
-            #                 nn.Tanh()
-            #             )
-            self.actor = ResNet(ResidualBlock, [3, 4, 6, 3], num_classes=self.action_dim)
+            if res_net:
+                self.actor = ResNet(ResidualBlock, [3, 4, 6, 3], num_classes=self.action_dim)
+            else:
+                self.actor = nn.Sequential(
+                                nn.Linear(state_dim, 64),
+                                nn.Tanh(),
+                                nn.Linear(64, 64),
+                                nn.Tanh(),
+                                nn.Linear(64, action_dim),
+                                nn.Tanh()
+                            )
 
         else:
             self.actor = nn.Sequential(
@@ -104,14 +104,17 @@ class ActorCritic(nn.Module):
 
         
         # critic
-        # self.critic = nn.Sequential(
-        #                 nn.Linear(state_dim, 64),
-        #                 nn.Tanh(),
-        #                 nn.Linear(64, 64),
-        #                 nn.Tanh(),
-        #                 nn.Linear(64, 1)
-        #             )
-        self.critic = ResNet(ResidualBlock, [3, 4, 6, 3], num_classes=1)
+        if res_net:
+            self.critic = ResNet(ResidualBlock, [3, 4, 6, 3], num_classes=1)
+        else:
+            self.critic = nn.Sequential(
+                            nn.Linear(state_dim, 64),
+                            nn.Tanh(),
+                            nn.Linear(64, 64),
+                            nn.Tanh(),
+                            nn.Linear(64, 1)
+                        )
+        
         
     def set_action_std(self, new_action_std):
 
@@ -167,7 +170,7 @@ class ActorCritic(nn.Module):
         return action_logprobs, state_values, dist_entropy
 
 class PPO:
-    def __init__(self, state_dim, action_dim, lr_actor, lr_critic, gamma, K_epochs, eps_clip, has_continuous_action_space, action_std_init=0.6, device='cpu'):
+    def __init__(self, state_dim, action_dim, lr_actor, lr_critic, gamma, K_epochs, eps_clip, has_continuous_action_space, action_std_init=0.6, device='cpu', res_net=True):
 
         self.has_continuous_action_space = has_continuous_action_space
 
@@ -182,13 +185,13 @@ class PPO:
 
         self.device = device
 
-        self.policy = ActorCritic(state_dim, action_dim, has_continuous_action_space, action_std_init, device=device).to(self.device)
+        self.policy = ActorCritic(state_dim, action_dim, has_continuous_action_space, action_std_init, device=device, res_net=res_net).to(self.device)
         self.optimizer = torch.optim.Adam([
                         {'params': self.policy.actor.parameters(), 'lr': lr_actor},
                         {'params': self.policy.critic.parameters(), 'lr': lr_critic}
                     ])
 
-        self.policy_old = ActorCritic(state_dim, action_dim, has_continuous_action_space, action_std_init, device=device).to(self.device)
+        self.policy_old = ActorCritic(state_dim, action_dim, has_continuous_action_space, action_std_init, device=device, res_net=res_net).to(self.device)
         self.policy_old.load_state_dict(self.policy.state_dict())
         
         self.MseLoss = nn.MSELoss()

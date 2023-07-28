@@ -28,9 +28,11 @@
 
 #from .ur16e_manipulator import UR16eManipualtion
 from .rl_ur16e_manipulator import RL_UR16eManipulation
+from .rl_ur16e_manipulator_nocam import RL_UR16eManipulation_Nocam
 
 # Mappings from strings to environments
 isaacgym_task_map = {
     #"UR16eManipualtion": UR16eManipualtion,
     "RL_UR16eManipulation": RL_UR16eManipulation,
+    "RL_UR16eManipulation_Nocam": RL_UR16eManipulation_Nocam,
 }

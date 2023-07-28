@@ -45,7 +45,7 @@ sim_device = torch.device('cuda:0')
 # else:
 #     print("Device set to : cpu")
 
-env_name = "bin_picking"
+
 has_continuous_action_space = True
 
 #max_ep_len = 2                     # max timesteps in one episode
@@ -56,13 +56,14 @@ log_freq = 90 #max_ep_len * 10      # log avg reward in the interval (in num tim
 save_model_freq = 2      # save model frequency (in num timesteps)
 
 '''Training/Evaluation Parameter'''
+env_name = "RL_UR16eManipulation" # "RL_UR16eManipulation_Nocam"
 head_less = True
 EVAL = False #if you want to evaluate the model
 action_std = 0.1 if not EVAL else 1e-9        # starting std for action distribution (Multivariate Normal)
 load_policy = False
 policy_name = "seq_multiobj_batch_30_lra_1e-6_lrc_3e-6_clip015"
-policy_version = None
 ne = 50               # number of environments
+res_net = True
 
 ## Note : print/log frequencies should be > than max_ep_len
 ################ PPO hyperparameters ################
@@ -100,7 +101,7 @@ if not EVAL:
 
 env = isaacgymenvs.make(
 	seed=0,
-	task="RL_UR16eManipulation",
+	task=env_name,
 	num_envs=ne,
 	sim_device='cuda:0', # cpu cuda:0
 	rl_device='cuda:0', # cpu cuda:0
@@ -159,7 +160,7 @@ if not os.path.exists(directory):
 
 directory = "PPO_preTrained" + '/' + env_name + '/'
 #checkpoint_path = directory + policy_name
-checkpoint_path = model_name(directory, policy_name, policy_version)
+checkpoint_path = model_name(directory, policy_name)
 
 print("save checkpoint path : " + checkpoint_path)
 
