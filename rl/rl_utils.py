@@ -62,8 +62,8 @@ def step_primitives(action, envs):
 		if torch.sum(obs['obs']) == 0:
 			continue
 		# print("obs", obs['obs'])
-		imgs = obs['obs'][:, :93600]
-		info = obs['obs'][:, 93600:]
+		imgs = obs['obs'][:, :-3]
+		info = obs['obs'][:, -3:]
 		# return all imgs that has info[env, 0] == 1
 		# if all info[env, 0] == 0, then don't return anything
 		indicies = info[:, 2].to(torch.int64)
