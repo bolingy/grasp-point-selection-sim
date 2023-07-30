@@ -82,7 +82,7 @@ load_policy_version = 43                   # specify policy version (i.e. int, 5
 ne = 30               # number of environments
 res_net = False
 
-print("training environment name : " + env_name)
+print("training environment name : " + policy_name)
 if not EVAL:
     run = wandb.init(
         project='bin_picking', 
