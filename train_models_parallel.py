@@ -71,7 +71,8 @@ random_seed = 1       # set random seed if required (0 = no random seed)
 
 
 '''Training/Evaluation Parameter'''
-policy_name = "seq_multiobj"
+env_name = "RL_UR16eManipulation_Nocam"
+policy_name = "seq_multiobj_back"
 Fhead_less = True
 EVAL = False #if you want to evaluate the model
 action_std = 0.1 if not EVAL else 1e-9        # starting std for action distribution (Multivariate Normal)
@@ -82,7 +83,7 @@ load_policy_version = 43                   # specify policy version (i.e. int, 5
 ne = 30               # number of environments
 res_net = False
 
-print("training environment name : " + policy_name)
+print("training environment name : " + env_name)
 if not EVAL:
     run = wandb.init(
         project='bin_picking', 
