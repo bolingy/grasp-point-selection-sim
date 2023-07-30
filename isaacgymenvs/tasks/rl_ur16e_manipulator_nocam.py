@@ -1213,6 +1213,7 @@ class RL_UR16eManipulation_Nocam(VecTask):
                         or _all_objects_current_pose[int(object_id.item())][1] < torch.tensor(-0.17) or _all_objects_current_pose[int(object_id.item())][1] > torch.tensor(0.11)):
                         env_complete_reset = torch.cat(
                             (env_complete_reset, torch.tensor([env_count])), axis=0)
+                        print("Object outside bin error")
                 _all_object_position_error = torch.abs(
                     _all_object_position_error)
                 # if (_all_object_position_error > torch.tensor(0.0055) and self.run_dexnet[env_count] == torch.tensor(0)):
@@ -1229,12 +1230,25 @@ class RL_UR16eManipulation_Nocam(VecTask):
                     '''
                     # print("!!!!!!!!!!!!!!!Running Dexnet 3.0")
                     if (self.RL_flag[env_count] == torch.tensor(1)):
+                        # Random object select
                         # random_object_select = self.selected_object_env[env_count][0]
                         # print("random_object_select", random_object_select)
                         # random_object_select = random.sample(
                         #     self.selected_object_env[env_count].tolist(), 1)
-                        self.object_target_id[env_count] = torch.tensor( #########################################################################################################################################################
+
+                        # Select the first object in the list of selected objects
+                        self.object_target_id[env_count] = torch.tensor( 
                             self.selected_object_env[env_count][0]).to(self.device).type(torch.int)
+                        
+                        # Select the object with the largest x-coordinate
+                        max_x = 0.0
+                        for i in range(len(self.selected_object_env[env_count])):
+                            object_id = self.selected_object_env[env_count][i]
+                            object_pose_x = self._root_state[env_count, self._object_model_id[int(object_id.item())-1], :][0]
+                            if object_pose_x > max_x:
+                                max_x = object_pose_x
+                                self.object_target_id[env_count] = torch.tensor( 
+                                    self.selected_object_env[env_count][i]).to(self.device).type(torch.int)
                     env_list_reset_arm_pose = torch.cat(
                                 (env_list_reset_arm_pose, torch.tensor([env_count])), axis=0)
                     env_list_reset_objects = torch.cat(
@@ -1381,7 +1395,9 @@ class RL_UR16eManipulation_Nocam(VecTask):
                             if curr_prim == 2:
                                 self.prim[env_count] = 0
                                 # reset arm to init pose
-                                self.deploy_actions(env_count, self.ur16e_default_dof_pos)
+                                # self.deploy_actions(env_count, self.ur16e_default_dof_pos)
+                                env_list_reset_default_arm_pose = torch.cat(
+                                    (env_list_reset_default_arm_pose, torch.tensor([env_count])), axis=0)
                                 self.frame_count[env_count] = 0
                                 self.progress_buf[env_count] = 0
                                 # env_complete_reset[env_count] = 1
@@ -1504,9 +1520,12 @@ class RL_UR16eManipulation_Nocam(VecTask):
                         e2 = quaternion_to_euler_angles(q2, "XYZ", False)
                         _all_object_rotation_error += torch.sum(e1-e2)
 
-                        if (_all_objects_current_pose[int(object_id.item())][2] < torch.tensor(0.5)):
+                        if (_all_objects_current_pose[int(object_id.item())][2] < torch.tensor(1.3) or _all_objects_current_pose[int(object_id.item())][2] > torch.tensor(1.7)
+                        or _all_objects_current_pose[int(object_id.item())][0] < torch.tensor(0.67) or _all_objects_current_pose[int(object_id.item())][0] > torch.tensor(0.9)
+                        or _all_objects_current_pose[int(object_id.item())][1] < torch.tensor(-0.17) or _all_objects_current_pose[int(object_id.item())][1] > torch.tensor(0.11)):
                             env_complete_reset = torch.cat(
                                 (env_complete_reset, torch.tensor([env_count])), axis=0)
+                            print("Object out of bin")
                     _all_object_position_error = torch.abs(
                         _all_object_position_error)
                     _all_object_rotation_error = torch.abs(
