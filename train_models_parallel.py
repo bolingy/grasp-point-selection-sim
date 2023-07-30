@@ -73,13 +73,13 @@ random_seed = 1       # set random seed if required (0 = no random seed)
 '''Training/Evaluation Parameter'''
 env_name = "RL_UR16eManipulation_Nocam"
 policy_name = "seq_multiobj_back"
-Fhead_less = True
+head_less = True
 EVAL = False #if you want to evaluate the model
 action_std = 0.1 if not EVAL else 1e-9        # starting std for action distribution (Multivariate Normal)
-load_policy = True
+load_policy = False
 # policy_name = "seq_multiobj_batch_90_lra_1e-5_lrc_3e-5_clip015"
 policy_name = "{0}_batch_{1}_lra_{2}_lrc_{3}_clip{4}".format(policy_name, update_size, lr_actor, lr_critic, eps_clip)
-load_policy_version = 43                   # specify policy version (i.e. int, 50) when loading a trained policy
+load_policy_version = None                   # specify policy version (i.e. int, 50) when loading a trained policy
 ne = 30               # number of environments
 res_net = False
 
