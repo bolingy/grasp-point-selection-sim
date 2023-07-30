@@ -4,19 +4,17 @@ import torch
 from rl.rl_utils import *
 import matplotlib.pyplot as plt
 
-ne = 50
-img_x = 260
-img_y = 180
-
+ne = 2
+res_net = True
 envs = isaacgymenvs.make(
 	seed=0,
-	task="RL_UR16eManipulation_Nocam",
+	task="RL_UR16eManipulation",
 	num_envs=ne,
 	sim_device="cuda:0",
 	rl_device="cuda:0",
 	multi_gpu=False,
 	graphics_device_id=0, 
-	headless=True
+	headless=False
 )
 # Observation space is eef_pos, eef_quat, q_gripper/q
 print("Observation space is", envs.observation_space)
@@ -45,15 +43,42 @@ while True:
 
 	# show imgs from each env in indicies
 	# for i in range(indicies.shape[0]):
-	# if (indicies==0).sum():
-	# 	i = torch.nonzero(indicies==0).item()
-	# 	img = imgs[i, :img_x*img_y*2]
-	# 	segmask = imgs[i, img_x*img_y:]
-	# 	depth = imgs[i, :img_x*img_y]
-	# 	plt.imshow(depth.cpu().numpy().reshape(img_y, img_x))
-	# 	plt.show()
-	# 	plt.imshow(segmask.cpu().numpy().reshape(img_y, img_x))
-	# 	plt.show()
+	if (indicies[0] == 0) and res_net == True:
+		img_x = 260
+		img_y = 180
+		img = imgs[:, :img_x*img_y*2]
+		depth = img[:, :img_x*img_y]
+		seg = img[:, img_x*img_y:]
+		depth = depth.reshape(-1, img_y, img_x)
+		seg = seg.reshape(-1, img_y, img_x)
+		depth = depth[0].cpu().numpy()
+		seg = seg[0].cpu().numpy()
+		plt.imshow(depth)
+		plt.show()
+		plt.imshow(seg)
+		plt.show()
+	elif (indicies[0] == 0) and res_net == False:
+		state_env_0 = imgs[0]
+		print("state env 0", state_env_0)
+		target_y = state_env_0[1]
+		obj1_y = state_env_0[4]
+		obj2_y = state_env_0[7]
+		if target_y < obj1_y and target_y < obj2_y:
+			print("target is right")
+		elif target_y > obj1_y and target_y > obj2_y:
+			print("target is left")
+		else:
+			print("target is y-middle")
+		
+		target_x = state_env_0[0]
+		obj1_x = state_env_0[3]
+		obj2_x = state_env_0[6]
+		if target_x < obj1_x and target_x < obj2_x:
+			print("target is front")
+		elif target_x > obj1_x and target_x > obj2_x:
+			print("target is back")
+		else:
+			print("target is x-middle")
 
 end = time.time()
 print('total actions', total_act)
