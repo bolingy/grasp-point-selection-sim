@@ -189,17 +189,6 @@ class calcualte_suction_score():
         ri = torch.clamp(torch.abs(point_cloud_suction[:, 2] - minimum_suction_point) / 0.023, max=1.0)
         suction_score = 1-torch.max(ri)
 
-        # if(suction_score < 0.2):
-        #     # removing largest
-        #     max_id = torch.argmax(point_cloud_suction[:,2])
-        #     x_index = (max_id/2).to(torch.int)
-        #     point_cloud_suction = torch.cat((point_cloud_suction[:x_index,:], point_cloud_suction[x_index+1:,:]), dim=0)
-        #     self.suction_coordinates = torch.cat((self.suction_coordinates[:x_index,:], self.suction_coordinates[x_index+1:,:]), dim=0)
-        #     point_cloud_suction[:,2] = point_cloud_suction[:, 2]*torch.cos(centroid_angle[0])*torch.cos(centroid_angle[1]) - self.suction_coordinates[:,2]
-            
-        #     minimum_suction_point = torch.min(point_cloud_suction[:, 2]).to(self.device)
-        #     ri = torch.clamp(torch.abs(point_cloud_suction[:, 2] - minimum_suction_point) / 0.023, max=1.0)
-        #     suction_score = 1-torch.max(ri)
         if(grasps_and_predictions == None):
             return suction_score, torch.tensor([xyz_point[2]-0.07, -xyz_point[0], -xyz_point[1]]), torch.tensor([centroid_angle[0], centroid_angle[1], centroid_angle[2]])
         return suction_score, torch.tensor([0.72, -xyz_point[0], -xyz_point[1]]), torch.tensor([0, 0, 0])
@@ -245,13 +234,16 @@ class calcualte_suction_score():
         '''
         point_cloud_suction = self.find_nearest(xyz_point, points)
         U, V = self.convert_xyz_point_to_uv_point(point_cloud_suction)
+
+        # if(self.depth_image[int(self.segmask.shape[1]/2)][int(self.segmask.shape[0]/2)] > 0.02):
+        #     return torch.tensor(0)
         
         # To check if any point is facing the object or not
         count = 0
         for i in range(8):
             if(self.segmask[V[i].type(torch.int)][U[i].type(torch.int)] == 0):
                 count += 1        
-        if(count >= 3):
+        if(count >= 2):
             return torch.tensor(0)
         
         # TO check if any of the point is within the threshold or not

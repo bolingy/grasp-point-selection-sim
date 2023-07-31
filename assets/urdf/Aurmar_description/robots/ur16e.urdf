@@ -12,12 +12,12 @@
   </joint>
 
   <link name="pod_base_link">
-    <visual>
+    <!-- <visual>
       <origin rpy="3.14 0 1.57" xyz="0.305 0.065 0.517"/>
       <geometry>
         <mesh filename="package://Aurmar_description/meshes/pod/untitled.dae"/>
       </geometry>
-    </visual>
+    </visual> -->
     <!-- <collision>
       <origin rpy="-1.57 0 1.57" xyz="0.305 0.065 0.517"/>
       <geometry>
@@ -34,7 +34,7 @@
            Use the joint between 'base_link' and 'base_link_inertia' (a dummy
            link/frame) to introduce the necessary rotation over Z (of pi rad).
       -->
-    <origin rpy="0 0 3.141592653589793" xyz="0 0 0"/>
+    <origin rpy="0 0 3.141592653589793" xyz="-0.05 0 0.05"/>
   </joint>
   <link name="base_link_inertia">
     <visual>
