@@ -17,8 +17,8 @@ This repository provides the codebase for collecting data through simulation. Th
 Follow these steps for the installation:
 
 ```bash
-# Create a conda environment with Python version 3.7
-conda create -n myenv python=3.7
+# Create a conda environment with Python version 3.8
+conda create -n myenv python=3.8
 conda activate myenv
 ```
 
@@ -29,6 +29,9 @@ Download the Isaac Gym package: [link](https://developer.nvidia.com/isaac-gym/do
 # In the python sub directory, run:
 pip install -e .
 
+pip install attrs
+pip install openai
+
 # Install Isaac Gym Envs
 # clone the repository,
 git clone https://github.com/NVIDIA-Omniverse/IsaacGymEnvs
@@ -36,15 +39,25 @@ git clone https://github.com/NVIDIA-Omniverse/IsaacGymEnvs
 #Install this repo,
 pip install -e .
 
+pip install flask
+
 # Install the GQCNN dependencies
 # In the gqcnn subdirectory, run:
 pip install .
+pip uninstall gqcnn
 
-# Uninstall pyglet
-pip uninstall pyglet
+pip install open3d
 
-# Install the following dependencies
-pip install open3d pyglet==1.4.10
+# Install tensorflow 2 for python 3.8 version
+pip install tensorflow==2.12.0 tensorflow-estimator==2.12.0 tensorflow-io-gcs-filesystem==0.32.0
+
+# Install cudatoolkit and cudnn libraries
+conda install cudatoolkit==11.8.0 -c nvidia
+conda install cudnn
+
+# Also export gqcnn path for tensorflow and the LD_LIBRARY_PATH for cuda
+export PYTHONPATH="${PYTHONPATH}:path/to/grasp-point-selection-sim/gqcnn/"
+export LD_LIBRARY_PATH=path/to/miniconda3/envs/isaac_ws_py38/lib
 
 # Outside this repo create two folders for saving the data(grasp point properties, depth image, segmentation mask and rgb image),
 mkdir System_Identification_Data && cd System_Identification_Data
@@ -57,7 +70,7 @@ To run the project, use the data_collection.py script:
 python data_collection.py
 ```
 ## python38
-If you would prefer to use Python 3.8 for this project, switch to the py38 branch of the repository:
+If you would prefer to use Python 3.7 for this project, switch to the parallelization branch of the repository:
 ```bash
-git checkout py38
+git checkout parallelization
 ```
