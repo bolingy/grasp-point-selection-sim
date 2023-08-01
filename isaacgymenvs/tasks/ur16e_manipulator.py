@@ -1952,7 +1952,7 @@ class UR16eManipulation(VecTask):
                         self.distance = current_point - q
 
                         if (self.retract_up[env_count] == 0):
-                            self.action_env = torch.tensor([[-self.speed[env_count]/15,
+                            self.action_env = torch.tensor([[-self.speed[env_count]/20,
                                                             translation_grasp_pose[1] -
                                                             self.distance[1] *
                                                             50 *
@@ -2011,7 +2011,6 @@ class UR16eManipulation(VecTask):
                             torch.float).clone().detach() - self.offset_object_pose_retract[env_count]
 
                         if (torch.max(torch.abs(angle_error)) > torch.deg2rad(torch.tensor(25)) or (torch.max(torch.abs(current_target_object_pose - T_world_to_ee_pose[:3,3])) >= 0.0055)):
-                            print("reset because retraction failed")
 
                             # encountered the arm insertion constraint
                             env_list_reset_arm_pose = torch.cat(
@@ -2019,7 +2018,7 @@ class UR16eManipulation(VecTask):
                             env_list_reset_objects = torch.cat(
                                 (env_list_reset_objects, torch.tensor([env_count])), axis=0)
                             print(
-                                env_count, "reset because of arm angle errror while retract")
+                                env_count, "reset because of arm angle error while retract")
 
                             success = False
                             if (self.suction_score_store_env[env_count] > torch.tensor(0.1) and self.oscillation_store_env[env_count] == False):
@@ -2206,41 +2205,83 @@ class UR16eManipulation(VecTask):
             for env_id in env_ids:
                 env_count = env_id.item()
                 if (self.force_list_save[env_count] != None and len(self.force_list_save[env_count]) > 10):
-                    oscillation = self.detect_oscillation(
-                        self.force_list_save[env_count])
-                    success = False
+                    if (self.force_encounter[env_count] == 1):
+                        print("post physics reset because retraction failed")
+                        # encountered the arm insertion constraint
+                        success = False
+                        if (self.suction_score_store_env[env_count] > torch.tensor(0.1) and self.oscillation_store_env[env_count] == False):
+                            success = True
+                        penetration = False
+                        if (self.suction_score_store_env[env_count] == torch.tensor(0)):
+                            penetration = True
 
-                    object_disp_json_save = self.object_disp_save[env_count].copy(
-                    )
-                    for object_id in self.selected_object_env[env_count]:
-                        object_disp_json_save[int(object_id.item(
-                        ))] = object_disp_json_save[int(object_id.item())].tolist()
+                        object_disp_json_save = self.object_disp_save[env_count].copy(
+                        )
+                        for object_id in self.selected_object_env[env_count]:
+                            object_disp_json_save[int(object_id.item(
+                            ))] = object_disp_json_save[int(object_id.item())].tolist()
 
-                    json_save = {
-                        "force_array": self.force_list_save[env_count].tolist(),
-                        "object_disp": object_disp_json_save,
-                        "grasp point": self.grasp_point[env_count].tolist(),
-                        "grasp_angle": self.grasp_angle[env_count].tolist(),
-                        "dexnet_score": self.dexnet_score[env_count].item(),
-                        "suction_deformation_score": self.suction_deformation_score[env_count].item(),
-                        "oscillation": oscillation,
-                        "gripper_score": 0,
-                        "success": success,
-                        "object_id": self.object_target_id[env_count].item(),
-                        "penetration": False,
-                        "unreachable": False,
-                        "retract": False
-                    }
-                    new_dir_name = str(
-                        env_count)+"_"+str(self.track_save[env_count].type(torch.int).item())
-                    save_dir_json = self.data_path + str(self.bin_id) + "/" +\
-                        str(env_count)+"/json_data_"+new_dir_name+"_" + \
-                        str(self.config_env_count[env_count].type(
-                            torch.int).item())+".json"
-                    with open(save_dir_json, 'w') as json_file:
-                        json.dump(json_save, json_file)
-                    self.track_save[env_count] = self.track_save[env_count] + \
-                        torch.tensor(1)
+                        json_save = {
+                            "force_array": self.force_list_save[env_count].tolist(),
+                            "object_disp": object_disp_json_save,
+                            "grasp point": self.grasp_point[env_count].tolist(),
+                            "grasp_angle": self.grasp_angle[env_count].tolist(),
+                            "dexnet_score": self.dexnet_score[env_count].item(),
+                            "suction_deformation_score": self.suction_deformation_score[env_count].item(),
+                            "oscillation": self.oscillation_store_env[env_count],
+                            "gripper_score": self.suction_score_store_env[env_count].item(),
+                            "success": success,
+                            "object_id": self.object_target_id[env_count].item(),
+                            "penetration": penetration,
+                            "unreachable": False,
+                            "retract": False
+                        }
+                        new_dir_name = str(
+                            env_count)+"_"+str(self.track_save[env_count].type(torch.int).item())
+                        save_dir_json = self.data_path + str(self.bin_id) + "/" +\
+                            str(env_count)+"/json_data_"+new_dir_name+"_" + \
+                            str(self.config_env_count[env_count].type(
+                                torch.int).item())+".json"
+                        with open(save_dir_json, 'w') as json_file:
+                            json.dump(json_save, json_file)
+                        self.track_save[env_count] = self.track_save[env_count] + \
+                            torch.tensor(1)
+                    else:
+                        oscillation = self.detect_oscillation(
+                            self.force_list_save[env_count])
+                        success = False
+
+                        object_disp_json_save = self.object_disp_save[env_count].copy(
+                        )
+                        for object_id in self.selected_object_env[env_count]:
+                            object_disp_json_save[int(object_id.item(
+                            ))] = object_disp_json_save[int(object_id.item())].tolist()
+
+                        json_save = {
+                            "force_array": self.force_list_save[env_count].tolist(),
+                            "object_disp": object_disp_json_save,
+                            "grasp point": self.grasp_point[env_count].tolist(),
+                            "grasp_angle": self.grasp_angle[env_count].tolist(),
+                            "dexnet_score": self.dexnet_score[env_count].item(),
+                            "suction_deformation_score": self.suction_deformation_score[env_count].item(),
+                            "oscillation": oscillation,
+                            "gripper_score": 0,
+                            "success": success,
+                            "object_id": self.object_target_id[env_count].item(),
+                            "penetration": False,
+                            "unreachable": False,
+                            "retract": False
+                        }
+                        new_dir_name = str(
+                            env_count)+"_"+str(self.track_save[env_count].type(torch.int).item())
+                        save_dir_json = self.data_path + str(self.bin_id) + "/" +\
+                            str(env_count)+"/json_data_"+new_dir_name+"_" + \
+                            str(self.config_env_count[env_count].type(
+                                torch.int).item())+".json"
+                        with open(save_dir_json, 'w') as json_file:
+                            json.dump(json_save, json_file)
+                        self.track_save[env_count] = self.track_save[env_count] + \
+                            torch.tensor(1)
                 else:
                     oscillation = False
                     success = False
