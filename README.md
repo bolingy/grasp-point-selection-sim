@@ -43,8 +43,7 @@ pip install flask
 
 # Install the GQCNN dependencies
 # In the gqcnn subdirectory, run:
-pip install .
-pip uninstall gqcnn
+pip install -e .
 
 pip install open3d
 
@@ -55,8 +54,7 @@ pip install tensorflow==2.12.0 tensorflow-estimator==2.12.0 tensorflow-io-gcs-fi
 conda install cudatoolkit==11.8.0 -c nvidia
 conda install cudnn
 
-# Also export gqcnn path for tensorflow and the LD_LIBRARY_PATH for cuda
-export PYTHONPATH="${PYTHONPATH}:path/to/grasp-point-selection-sim/gqcnn/"
+# Also export the LD_LIBRARY_PATH for cuda
 export LD_LIBRARY_PATH=path/to/miniconda3/envs/isaac_ws_py38/lib
 
 # Outside this repo create two folders for saving the data(grasp point properties, depth image, segmentation mask and rgb image),
