@@ -190,6 +190,7 @@ class UR16eManipulation(VecTask):
         self.retract_start_pose = {}
         self.oscillation_store_env = {}
         self.suction_score_store_env = {}
+        self.retract_up = torch.zeros(self.num_envs)
 
         self.selected_object_env = {}
         self.retract_object_state = {}
@@ -828,6 +829,7 @@ class UR16eManipulation(VecTask):
             self.suction_score_store_env[env_id] = torch.tensor(0.0)
             self.retract_start_pose[env_id] = None
             self.offset_object_pose_retract[env_id] = None
+            self.retract_up[env_id] = 0
 
         self.progress_buf[env_ids] = 0
         self.reset_buf[env_ids] = 0
@@ -1500,7 +1502,7 @@ class UR16eManipulation(VecTask):
                             json.dump(json_save, json_file)
                         self.track_save[env_count] = self.track_save[env_count] + \
                             torch.tensor(1)
-                        
+
                 _all_object_position_error = torch.abs(
                     _all_object_position_error)
                 _all_object_rotation_error = torch.abs(
@@ -1914,6 +1916,7 @@ class UR16eManipulation(VecTask):
                             torch.tensor(1)
 
                     if (self.force_encounter[env_count] == 1):
+                         
                         # Transformation for grasp pose (wg --> wo*og)
                         rotation_matrix_grasp_pose = euler_angles_to_matrix(torch.tensor(
                             [0, -self.grasp_angle[env_count][1], self.grasp_angle[env_count][0]]).to(self.device), "XYZ", degrees=False).type(torch.float)
@@ -1922,8 +1925,16 @@ class UR16eManipulation(VecTask):
                         translation_grasp_pose = torch.matmul(
                             rotation_matrix_grasp_pose, translation_grasp_pose)
 
-                        end_point = T_world_to_pre_grasp_pose[:3, 3].clone(
-                        ).detach()
+                        if (self.retract_up[env_count] == 1):
+                            end_point = T_world_to_pre_grasp_pose[:3, 3].clone(
+                            ).detach()
+                            end_point[2] += 0.03
+                            # end_point[0] -= 0.02
+                        else:
+                            end_point = self.retract_start_pose[env_count].clone(
+                            ).detach()
+                            end_point[2] += 0.03
+
                         start_point = self.retract_start_pose[env_count]
                         current_point = T_world_to_ee_pose[:3, 3]
                         v = torch.tensor([end_point[0] - start_point[0], end_point[1] -
@@ -1939,21 +1950,36 @@ class UR16eManipulation(VecTask):
                                           t*v[1], start_point[2] + t*v[2]]).to(self.device)
                         # Find the distance between p and q
                         self.distance = current_point - q
-                        self.action_env = torch.tensor([[(translation_grasp_pose[0] -
-                                                        self.distance[0])/10 - self.speed[env_count]/2,
-                                                        translation_grasp_pose[1] -
-                                                        self.distance[1] *
-                                                        50 *
-                                                         self.speed[env_count],
-                                                        translation_grasp_pose[2] -
-                                                        self.distance[2] *
-                                                        50 *
-                                                         self.speed[env_count],
-                                                        self.speed[env_count]*50 *
-                                                        action_orientation[0],
-                                                        self.speed[env_count]*50 *
-                                                        action_orientation[1],
-                                                        self.speed[env_count]*50*action_orientation[2], 1]], dtype=torch.float)
+
+                        if (self.retract_up[env_count] == 0):
+                            self.action_env = torch.tensor([[-self.speed[env_count]/15,
+                                                            translation_grasp_pose[1] -
+                                                            self.distance[1] *
+                                                            50 *
+                                                            self.speed[env_count],
+                                                            self.speed[env_count]/2,
+                                                            self.speed[env_count]*50 *
+                                                            action_orientation[0],
+                                                            self.speed[env_count]*50 *
+                                                            action_orientation[1],
+                                                            self.speed[env_count]*50*action_orientation[2], 1]], dtype=torch.float)
+
+                        if (self.retract_up[env_count] == 1):
+                            self.action_env = torch.tensor([[(translation_grasp_pose[0] -
+                                                            self.distance[0])/10 - self.speed[env_count]/2,
+                                                            translation_grasp_pose[1] -
+                                                            self.distance[1] *
+                                                            50 *
+                                                            self.speed[env_count],
+                                                            translation_grasp_pose[2] -
+                                                            self.distance[2] *
+                                                            50 *
+                                                            self.speed[env_count],
+                                                            self.speed[env_count]*50 *
+                                                            action_orientation[0],
+                                                            self.speed[env_count]*50 *
+                                                            action_orientation[1],
+                                                            self.speed[env_count]*50*action_orientation[2], 1]], dtype=torch.float)
 
                         self.env_reset_retract = torch.cat(
                             (self.env_reset_retract, torch.tensor([env_count]).to(self.device)), axis=0).type(torch.long)
@@ -1978,12 +2004,13 @@ class UR16eManipulation(VecTask):
                         self._object_model_state[self.object_target_id[env_count] -
                                                  1][env_count] = self._init_object_model_state[self.object_target_id[env_count]-1][env_count]
 
-                        # print(torch.sum(current_point - end_point),
-                        #       (torch.max(torch.abs(self.action_env[0][3:6]))))
                         angle_error = quaternion_to_euler_angles(self._eef_state[env_count][3:7], "XYZ", degrees=False) - torch.tensor(
                             [0, -self.grasp_angle[env_count][1], self.grasp_angle[env_count][0]]).to(self.device)
 
-                        if (torch.max(torch.abs(angle_error)) > torch.deg2rad(torch.tensor(25))):
+                        current_target_object_pose = self._root_state[env_count, self._object_model_id[int(self.object_target_id[env_count].item())-1], :][:3].type(
+                            torch.float).clone().detach() - self.offset_object_pose_retract[env_count]
+
+                        if (torch.max(torch.abs(angle_error)) > torch.deg2rad(torch.tensor(25)) or (torch.max(torch.abs(current_target_object_pose - T_world_to_ee_pose[:3,3])) >= 0.0055)):
                             print("reset because retraction failed")
 
                             # encountered the arm insertion constraint
@@ -1991,8 +2018,9 @@ class UR16eManipulation(VecTask):
                                 (env_list_reset_arm_pose, torch.tensor([env_count])), axis=0)
                             env_list_reset_objects = torch.cat(
                                 (env_list_reset_objects, torch.tensor([env_count])), axis=0)
-                            print(env_count, "reset because of arm angle errror while retract")
-                            
+                            print(
+                                env_count, "reset because of arm angle errror while retract")
+
                             success = False
                             if (self.suction_score_store_env[env_count] > torch.tensor(0.1) and self.oscillation_store_env[env_count] == False):
                                 success = True
@@ -2031,8 +2059,12 @@ class UR16eManipulation(VecTask):
                                 json.dump(json_save, json_file)
                             self.track_save[env_count] = self.track_save[env_count] + \
                                 torch.tensor(1)
-                            
-                        if (current_point[0] <= 0.27):
+
+                        if (self.retract_up[env_count] == 0 and current_point[2] >= end_point[2]):
+                            self.retract_up[env_count] = 1
+                            self.retract_start_pose[env_count] = T_world_to_ee_pose[:3, 3]
+
+                        if (self.retract_up[env_count] == 1 and current_point[0] <= 0.25):
                             self.frame_count_contact_object[env_count] = 1
 
                             success = False
@@ -2084,7 +2116,6 @@ class UR16eManipulation(VecTask):
                         (env_list_reset_arm_pose, torch.tensor([env_count])), axis=0)
                     env_list_reset_objects = torch.cat(
                         (env_list_reset_objects, torch.tensor([env_count])), axis=0)
-                    
 
             if (self.frame_count[env_count] <= torch.tensor(self.cooldown_frames)):
                 self.action_env = torch.tensor(
