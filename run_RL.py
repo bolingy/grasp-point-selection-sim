@@ -8,7 +8,7 @@ ne = 2
 res_net = True
 envs = isaacgymenvs.make(
 	seed=0,
-	task="RL_UR16eManipulation",
+	task="RL_UR16eManipulation_Full",
 	num_envs=ne,
 	sim_device="cuda:0",
 	rl_device="cuda:0",
@@ -34,7 +34,7 @@ while True:
 	imgs, reward, done, indicies = step_primitives(action, envs)
 	total_act += indicies.shape[0]
 	#print('indicies: ', indicies.shape[0])
-	#print('reward: ', reward)
+	print('reward: ', reward)
 	#print(('--------------------------------------------------'))
 	if total_act % 10 == 0:
 		print('current done', total_act)
