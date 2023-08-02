@@ -765,20 +765,20 @@ class RL_UR16eManipulation(VecTask):
             object_set = range(1, self.object_count_unique+1)
             selected_object = random.sample(object_set, random_number)
             ##############################################
-            # selected_object = [1, 3]
+            selected_object = [1, 5, 3]
             ##############################################
             list_objects_domain_randomizer = torch.tensor([])
             
-            offset_object1 = np.array([np.random.uniform(0.71, 0.71, 1).reshape(
+            offset_object1 = np.array([np.random.uniform(0.7, 0.7, 1).reshape(
                     1,)[0], np.random.uniform(-0.1, -0.1, 1).reshape(1,)[0], 1.45, 0.0,
                     0.0, 0.0])
-            offset_object2 = np.array([np.random.uniform(0.75, 0.75, 1).reshape(
-                    1,)[0], np.random.uniform(-0.115, -0.115, 1).reshape(1,)[0], 1.45, 0.0,
+            offset_object2 = np.array([np.random.uniform(0.74, 0.74, 1).reshape(
+                    1,)[0], np.random.uniform(-0., -0., 1).reshape(1,)[0], 1.45, 0.0,
                     0.0, 0.0])
-            offset_object3 = np.array([np.random.uniform(0.73, 0.73, 1).reshape(
+            offset_object3 = np.array([np.random.uniform(0.79, 0.79, 1).reshape(
                     1,)[0], np.random.uniform(-0.1, -0.1, 1).reshape(1,)[0], 1.45, 0.0,
                     0.0, 0.0])
-            offset_objects = [offset_object1, offset_object2, offset_object3]
+            offset_objects = [offset_object2, offset_object3, offset_object1]
 
             for object_count in selected_object:
                 domain_randomizer = random_number = random.choice(
@@ -791,8 +791,12 @@ class RL_UR16eManipulation(VecTask):
                     0.0, 0.0])
                 ##############################################
                 domain_randomizer = random_number = random.choice(
-                    [1, 2, 3, 4, 5])
-                # offset_object = offset_objects[object_count-1]
+                    [1])
+                # print("object count", object_count)
+                if object_count == 5:
+                    offset_object = offset_objects[1]
+                else:
+                    offset_object = offset_objects[object_count-1]
                 ##############################################
                 quat = euler_angles_to_quaternion(
                     torch.tensor(offset_object[3:6]), "XYZ", degrees=False)
@@ -945,23 +949,22 @@ class RL_UR16eManipulation(VecTask):
         # image observations
         self.obs_buf = torch.zeros(93600).to(self.device)
 
+    
+
         # print("self.finished_prim.sum() > 0", self.finished_prim.sum() > 0)
         if self.finished_prim.sum() > 0:
             torch_prim_tensor = self.finished_prim.clone().detach()
             envs_finished_prim = torch.nonzero(torch_prim_tensor).long().squeeze(1)
             # target object pose
-            model_ids = torch.index_select(torch.tensor(self._object_model_id).to(self.device), 0, self.object_target_id)
-            model_ids = model_ids - 1
+            model_ids = torch.index_select(torch.tensor(self._object_model_id).to(self.device), 0, self.object_target_id - 1)
+            # model_ids = model_ids - 1
             first_dim = torch.arange(self._root_state.shape[0])
             target_object_pose = self._root_state[first_dim, model_ids, :3]
 
             # pose of all other objects
             all_objects_current_pose = torch.zeros(self.num_envs, 3, 3).to(self.device)
-            selected_object_env = torch.stack(list(self.selected_object_env.values())).long().to(self.device) - 1
-            # print("selected_object_env", selected_object_env)
-            # print("self._object_model_id", self._object_model_id)
-            selected_object_ids = torch.index_select(torch.LongTensor(self._object_model_id).to(self.device), 0, selected_object_env.flatten()).view(self.num_envs, -1)
-            # print("selected_object_ids", selected_object_ids)
+            selected_object_env = torch.stack(list(self.selected_object_env.values())).to(self.device).clone().detach() - 1
+            selected_object_ids = torch.index_select(torch.tensor(self._object_model_id).to(self.device), 0, selected_object_env.long().flatten()).view(self.num_envs, -1)
             selected_object_ids = selected_object_ids[:, selected_object_ids[0] != model_ids[0]]
             if selected_object_ids.shape[1] == 3:
                 selected_object_ids = selected_object_ids[:, 1:]
@@ -1183,7 +1186,7 @@ class RL_UR16eManipulation(VecTask):
                         or _all_objects_current_pose[int(object_id.item())][1] < torch.tensor(-0.17) or _all_objects_current_pose[int(object_id.item())][1] > torch.tensor(0.11)):
                             env_complete_reset = torch.cat(
                                 (env_complete_reset, torch.tensor([env_count])), axis=0)
-                            print("Object out of bin")
+                            print("Object out of bin 2")
                 _all_object_position_error = torch.abs(
                     _all_object_position_error)
                 # if (_all_object_position_error > torch.tensor(0.0055) and self.run_dexnet[env_count] == torch.tensor(0)):
@@ -1700,7 +1703,7 @@ class RL_UR16eManipulation(VecTask):
                         or _all_objects_current_pose[int(object_id.item())][1] < torch.tensor(-0.17) or _all_objects_current_pose[int(object_id.item())][1] > torch.tensor(0.11)):
                             env_complete_reset = torch.cat(
                                 (env_complete_reset, torch.tensor([env_count])), axis=0)
-                            print("Object out of bin")
+                            print("Object out of bin 1")
                     _all_object_position_error = torch.abs(
                         _all_object_position_error)
                     _all_object_rotation_error = torch.abs(
