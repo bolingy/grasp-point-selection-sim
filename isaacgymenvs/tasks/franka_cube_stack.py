@@ -1090,7 +1090,8 @@ class FrankaCubeStack(VecTask):
                     # /home/soofiyan_ws/Documents/Issac_gym_ws/grasp_training/examples/models/augment_all_data_include_rgb_top15.pth /home/soofiyan_ws/Documents/Issac_gym_ws/grasp_training/examples/models/checkpoint_augment_rgb_include_top15_with_vel_continue.pth
                     grasp_point_model, centroid_model = self.inference_object.run_model(self.depth_image_save[env_count], self.segmask_save[env_count], self.object_target_id[env_count], "/home/soofiyan_ws/Documents/Issac_gym_ws/grasp_training/examples/models/augment_vel_primitives_all_18_july.pth")
                     grasp_point_model_, centroid_model_ = self.inference_object.run_model(self.depth_image_save[env_count], self.segmask_save[env_count], self.object_target_id[env_count], "/home/soofiyan_ws/Documents/Issac_gym_ws/grasp_training/examples/models/checkpoint_augment_rgb_include_top15_with_vel_continue.pth")
-                    grasp_point_model__, centroid_model__ = self.inference_object.run_model(self.depth_image_save[env_count], self.segmask_save[env_count], self.object_target_id[env_count], "/home/soofiyan_ws/Documents/Issac_gym_ws/grasp_training/examples/models/5e5_old_wo_vel.pth")
+                    # grasp_point_model__, centroid_model__ = self.inference_object.run_model(self.depth_image_save[env_count], self.segmask_save[env_count], self.object_target_id[env_count], "/home/soofiyan_ws/Documents/Issac_gym_ws/grasp_training/examples/models/5e5_old_wo_vel.pth")
+                    grasp_point_model__, centroid_model__ = self.inference_object.run_model(self.depth_image_save[env_count], self.segmask_save[env_count], self.object_target_id[env_count], "/home/soofiyan_ws/Documents/Issac_gym_ws/grasp_training/examples/models/augment_all_points_vel_corl.pth")
                     np.save(save_dir_depth_npy,
                             self.depth_image_save[env_count])
                     np.save(save_dir_segmask_npy, self.segmask_save[env_count])
@@ -1128,7 +1129,7 @@ class FrankaCubeStack(VecTask):
                     top_grasps = max_num_grasps if max_num_grasps <= 10 else 7
 
                     # top_grasps = 2
-                    max_num_grasps = 10
+                    max_num_grasps = 5
                     self.centroid_method = 0
                     print(max_num_grasps)
                     for i in range(max_num_grasps):
@@ -1137,12 +1138,12 @@ class FrankaCubeStack(VecTask):
                         #     depth_image_suction = depth_image
                         #     suction_deformation_score, xyz_point, grasp_angle = self.suction_score_object.calculator(
                         #         depth_image_suction, segmask, rgb_image_copy, grasp_point.type(torch.int16), self.object_target_id[env_count])
+                        # if(i<5):
+                        #     grasp_point = grasp_point_model_ + torch.tensor([centroid_model_[0], centroid_model_[1]])
+                        #     depth_image_suction = depth_image
+                        #     suction_deformation_score, xyz_point, grasp_angle = self.suction_score_object.calculator(
+                        #         depth_image_suction, segmask, rgb_image_copy, grasp_point.type(torch.int16), self.object_target_id[env_count])
                         if(i<5):
-                            grasp_point = grasp_point_model_ + torch.tensor([centroid_model_[0], centroid_model_[1]])
-                            depth_image_suction = depth_image
-                            suction_deformation_score, xyz_point, grasp_angle = self.suction_score_object.calculator(
-                                depth_image_suction, segmask, rgb_image_copy, grasp_point.type(torch.int16), self.object_target_id[env_count])
-                        elif(i<10):
                             grasp_point = grasp_point_model__ + torch.tensor([centroid_model__[0], centroid_model__[1]])
                             depth_image_suction = depth_image
                             suction_deformation_score, xyz_point, grasp_angle = self.suction_score_object.calculator(
