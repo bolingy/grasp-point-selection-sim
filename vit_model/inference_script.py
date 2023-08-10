@@ -299,7 +299,8 @@ class inference:
                     
                     mean_coordinate = cluster_points.mean(axis=0)
                     avg_score = cluster_scores.mean()
-                    avg_cluster_size_score = cluster_scores.mean() + normalize_size[count]
+                    # avg_cluster_size_score = cluster_scores.mean() + normalize_size[count]
+                    avg_cluster_size_score = cluster_scores.mean()
                     avg_cluster_size = len(cluster_points)
 
                     print(f'Cluster {cluster_id}: Mean coordinate: {mean_coordinate}, Average score: {avg_cluster_size_score}, Cluster Size: {len(cluster_points)}')

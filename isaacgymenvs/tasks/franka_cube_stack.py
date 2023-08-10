@@ -697,6 +697,7 @@ class FrankaCubeStack(VecTask):
             for object_count in selected_object:
                 domain_randomizer = random_number = random.choice(
                     [1, 2, 3, 4, 5])
+                domain_randomizer = 3
                 offset_object = np.array([np.random.uniform(0.67, 0.7, 1).reshape(
                     1,)[0], np.random.uniform(-0.22, -0.12, 1).reshape(1,)[0], 1.3, np.random.uniform(0.0, 6.28, 1).reshape(1,)[0],
                     np.random.uniform(0.0, 6.28, 1).reshape(1,)[0], np.random.uniform(0.0, 6.28, 1).reshape(1,)[0]])
@@ -1127,37 +1128,37 @@ class FrankaCubeStack(VecTask):
                     top_grasps = max_num_grasps if max_num_grasps <= 10 else 7
 
                     # top_grasps = 2
-                    max_num_grasps = 5
+                    max_num_grasps = 10
                     self.centroid_method = 0
                     print(max_num_grasps)
                     for i in range(max_num_grasps):
-                        if(i == 0):
-                            grasp_point = grasp_point_model + torch.tensor([centroid_model[0], centroid_model[1]])
-                            depth_image_suction = depth_image
-                            suction_deformation_score, xyz_point, grasp_angle = self.suction_score_object.calculator(
-                                depth_image_suction, segmask, rgb_image_copy, grasp_point.type(torch.int16), self.object_target_id[env_count])
-                        elif(i == 1):
+                        # if(i < 5):
+                        #     grasp_point = grasp_point_model + torch.tensor([centroid_model[0], centroid_model[1]])
+                        #     depth_image_suction = depth_image
+                        #     suction_deformation_score, xyz_point, grasp_angle = self.suction_score_object.calculator(
+                        #         depth_image_suction, segmask, rgb_image_copy, grasp_point.type(torch.int16), self.object_target_id[env_count])
+                        if(i<5):
                             grasp_point = grasp_point_model_ + torch.tensor([centroid_model_[0], centroid_model_[1]])
                             depth_image_suction = depth_image
                             suction_deformation_score, xyz_point, grasp_angle = self.suction_score_object.calculator(
                                 depth_image_suction, segmask, rgb_image_copy, grasp_point.type(torch.int16), self.object_target_id[env_count])
-                        elif(i == 2):
+                        elif(i<10):
                             grasp_point = grasp_point_model__ + torch.tensor([centroid_model__[0], centroid_model__[1]])
                             depth_image_suction = depth_image
                             suction_deformation_score, xyz_point, grasp_angle = self.suction_score_object.calculator(
                                 depth_image_suction, segmask, rgb_image_copy, grasp_point.type(torch.int16), self.object_target_id[env_count])
-                        elif(i == 3):
-                            grasp_point = torch.tensor(
-                            [self.grasps_and_predictions[0][0].center.x, self.grasps_and_predictions[0][0].center.y])
-                            depth_image_suction = depth_image
-                            suction_deformation_score, xyz_point, grasp_angle = self.suction_score_object.calculator(
-                                depth_image_suction, segmask, rgb_image_copy, grasp_point.type(torch.int16), self.object_target_id[env_count])
-                        elif(i == 4):
-                            grasp_point = torch.tensor([128, 128]) + torch.tensor([centroid_model[0], centroid_model[1]])
-                            depth_image_suction = depth_image
-                            suction_deformation_score, xyz_point, grasp_angle = self.suction_score_object.calculator(
-                                depth_image_suction, segmask, rgb_image_copy, grasp_point, self.object_target_id[env_count])
-                            grasp_angle = torch.tensor([0, 0, 0])
+                        # elif(i < 10):
+                        #     grasp_point = torch.tensor(
+                        #     [self.grasps_and_predictions[0][0].center.x, self.grasps_and_predictions[0][0].center.y])
+                        #     depth_image_suction = depth_image
+                        #     suction_deformation_score, xyz_point, grasp_angle = self.suction_score_object.calculator(
+                        #         depth_image_suction, segmask, rgb_image_copy, grasp_point.type(torch.int16), self.object_target_id[env_count])
+                        # elif(i < 15):
+                        #     grasp_point = torch.tensor([128, 128]) + torch.tensor([centroid_model[0], centroid_model[1]])
+                        #     depth_image_suction = depth_image
+                        #     suction_deformation_score, xyz_point, grasp_angle = self.suction_score_object.calculator(
+                        #         depth_image_suction, segmask, rgb_image_copy, grasp_point, self.object_target_id[env_count])
+                        #     grasp_angle = torch.tensor([0, 0, 0])
                         
                         # plt.Circle((grasp_point[0]+410, grasp_point[1]+180), 100, fill=True)
                         # plt.imshow(rgb_image_copy.cpu().numpy())
