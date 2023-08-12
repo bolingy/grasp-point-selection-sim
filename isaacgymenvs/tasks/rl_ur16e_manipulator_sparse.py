@@ -20,7 +20,7 @@ from suction_cup_modelling.suction_score_calcualtor import calcualte_suction_sco
 from suction_cup_modelling.force_calculator import calcualte_force
 
 # Importing DexNet
-from gqcnn.examples.policy_for_training import dexnet3
+# from gqcnn.examples.policy_for_training import dexnet3
 from autolab_core import (BinaryImage, CameraIntrinsics, DepthImage)
 import assets.urdf_models.models_data as md
 
@@ -362,7 +362,7 @@ class RL_UR16eManipulation(VecTask):
         # Define start pose for ur16e
         ur16e_start_pose = gymapi.Transform()
         # gymapi.Vec3(-0.45, 0.0, 1.0 + table_thickness / 2 + table_stand_height)
-        ur16e_start_pose.p = gymapi.Vec3(0, 0, 2.020)
+        ur16e_start_pose.p = gymapi.Vec3(-0.22, 0, 2.020)
 
         quat = euler_angles_to_quaternion(torch.tensor(
             [180, 0, 0]).to(self.device), "XYZ", degrees=True)
@@ -666,8 +666,8 @@ class RL_UR16eManipulation(VecTask):
                                                            height=self.height_back_cam, width=self.width_back_cam)
         self.suction_score_object = calcualte_suction_score(
             self.camera_intrinsics_back_cam)
-        self.dexnet_object = dexnet3(self.camera_intrinsics_back_cam)
-        self.dexnet_object.load_dexnet_model()
+        # self.dexnet_object = dexnet3(self.camera_intrinsics_back_cam)
+        # self.dexnet_object.load_dexnet_model()
 
         print("focal length in x axis: ", self.fx_back_cam)
         print("focal length in y axis: ", self.fy_back_cam)
@@ -765,20 +765,20 @@ class RL_UR16eManipulation(VecTask):
             object_set = range(1, self.object_count_unique+1)
             selected_object = random.sample(object_set, random_number)
             ##############################################
-            # selected_object = [1, 3]
+            selected_object = [1, 5, 3]
             ##############################################
             list_objects_domain_randomizer = torch.tensor([])
             
-            offset_object1 = np.array([np.random.uniform(0.71, 0.71, 1).reshape(
+            offset_object1 = np.array([np.random.uniform(0.6, 0.6, 1).reshape(
                     1,)[0], np.random.uniform(-0.1, -0.1, 1).reshape(1,)[0], 1.45, 0.0,
                     0.0, 0.0])
-            offset_object2 = np.array([np.random.uniform(0.75, 0.75, 1).reshape(
-                    1,)[0], np.random.uniform(-0.115, -0.115, 1).reshape(1,)[0], 1.45, 0.0,
+            offset_object2 = np.array([np.random.uniform(0.6, 0.6, 1).reshape(
+                    1,)[0], np.random.uniform(-0., -0., 1).reshape(1,)[0], 1.45, 0.0,
                     0.0, 0.0])
-            offset_object3 = np.array([np.random.uniform(0.73, 0.73, 1).reshape(
+            offset_object3 = np.array([np.random.uniform(0.62, 0.62, 1).reshape(
                     1,)[0], np.random.uniform(-0.1, -0.1, 1).reshape(1,)[0], 1.45, 0.0,
                     0.0, 0.0])
-            offset_objects = [offset_object1, offset_object2, offset_object3]
+            offset_objects = [offset_object2, offset_object3, offset_object1]
 
             for object_count in selected_object:
                 domain_randomizer = random_number = random.choice(
@@ -791,8 +791,12 @@ class RL_UR16eManipulation(VecTask):
                     0.0, 0.0])
                 ##############################################
                 domain_randomizer = random_number = random.choice(
-                    [1, 2, 3, 4, 5])
-                # offset_object = offset_objects[object_count-1]
+                    [1])
+                # print("object count", object_count)
+                if object_count == 5:
+                    offset_object = offset_objects[1]
+                else:
+                    offset_object = offset_objects[object_count-1]
                 ##############################################
                 quat = euler_angles_to_quaternion(
                     torch.tensor(offset_object[3:6]), "XYZ", degrees=False)
@@ -1184,11 +1188,11 @@ class RL_UR16eManipulation(VecTask):
                     ))][:3] - self._root_state[env_count, self._object_model_id[int(object_id.item())-1], :][:3])
 
                     if (_all_objects_current_pose[int(object_id.item())][2] < torch.tensor(1.3) or _all_objects_current_pose[int(object_id.item())][2] > torch.tensor(1.7)
-                        or _all_objects_current_pose[int(object_id.item())][0] < torch.tensor(0.67) or _all_objects_current_pose[int(object_id.item())][0] > torch.tensor(1.4)
-                        or _all_objects_current_pose[int(object_id.item())][1] < torch.tensor(-0.17) or _all_objects_current_pose[int(object_id.item())][1] > torch.tensor(0.11)):
+                        or _all_objects_current_pose[int(object_id.item())][0] < torch.tensor(0.45) or _all_objects_current_pose[int(object_id.item())][0] > torch.tensor(1.0)
+                        or _all_objects_current_pose[int(object_id.item())][1] < torch.tensor(-0.18) or _all_objects_current_pose[int(object_id.item())][1] > torch.tensor(0.10)):
                             env_complete_reset = torch.cat(
                                 (env_complete_reset, torch.tensor([env_count])), axis=0)
-                            print("Object out of bin")
+                            print("Object out of bin 2")
                 _all_object_position_error = torch.abs(
                     _all_object_position_error)
                 # if (_all_object_position_error > torch.tensor(0.0055) and self.run_dexnet[env_count] == torch.tensor(0)):
@@ -1212,8 +1216,8 @@ class RL_UR16eManipulation(VecTask):
                         #     self.selected_object_env[env_count].tolist(), 1)
 
                         # Select the first object in the list of selected objects
-                        self.object_target_id[env_count] = torch.tensor( 
-                            self.selected_object_env[env_count][0]).to(self.device).type(torch.int)
+                        # self.object_target_id[env_count] = torch.tensor( 
+                        #     self.selected_object_env[env_count][0]).to(self.device).type(torch.int)
                         
                         # Select the object with the largest x-coordinate
                         max_x = 0.0
@@ -1403,8 +1407,8 @@ class RL_UR16eManipulation(VecTask):
                     self.force_SI[env_count] = self.force_SI_env[env_count][0]
                     self.force_SI_env[env_count] = self.force_SI_env[env_count][1:]
                 else:
-                    print(
-                        "objects not spawned properly inside the bin for env ", env_count)
+                    # print(
+                    #     "objects not spawned properly inside the bin for env ", env_count)
                     env_complete_reset = torch.cat(
                         (env_complete_reset, torch.tensor([env_count])), axis=0)
                 try:
@@ -1433,10 +1437,10 @@ class RL_UR16eManipulation(VecTask):
                         }
                         new_dir_name = str(
                             env_count)+"_"+str(self.track_save[env_count].type(torch.int).item())
-                        save_dir_json = self.data_path + str(self.bin_id) + "/" +\
-                            str(env_count)+"/json_data_"+new_dir_name+"_" + \
-                            str(self.config_env_count[env_count].type(
-                                torch.int).item())+".json"
+                        save_dir_json = cur_path+"/../../System_Identification_Data/Parallelization-Data/" + \
+                                str(env_count)+"/json_data_"+new_dir_name+"_" + \
+                                str(self.config_env_count[env_count].type(
+                                    torch.int).item())+".json"
                         with open(save_dir_json, 'w') as json_file:
                             json.dump(json_save, json_file)
                         self.track_save[env_count] = self.track_save[env_count] + \
@@ -1504,7 +1508,7 @@ class RL_UR16eManipulation(VecTask):
                         rotation_matrix_camera_to_object = euler_angles_to_matrix(torch.tensor(
                             [0, 0, 0]).to(self.device), "XYZ", degrees=False)
                         T_camera_to_object = transformation_matrix(
-                            rotation_matrix_camera_to_object, torch.tensor([1.1200, self.prim_y, self.prim_z]).to(self.device)) 
+                            rotation_matrix_camera_to_object, torch.tensor([0.900, self.prim_y, self.prim_z]).to(self.device)) 
                         # Transformation from base link to object
                         T_world_to_object = torch.matmul(
                             self.T_world_to_camera_link, T_camera_to_object)
@@ -1701,11 +1705,11 @@ class RL_UR16eManipulation(VecTask):
                         _all_object_rotation_error += torch.sum(e1-e2)
 
                         if (_all_objects_current_pose[int(object_id.item())][2] < torch.tensor(1.3) or _all_objects_current_pose[int(object_id.item())][2] > torch.tensor(1.7)
-                        or _all_objects_current_pose[int(object_id.item())][0] < torch.tensor(0.67) or _all_objects_current_pose[int(object_id.item())][0] > torch.tensor(1.4)
-                        or _all_objects_current_pose[int(object_id.item())][1] < torch.tensor(-0.17) or _all_objects_current_pose[int(object_id.item())][1] > torch.tensor(0.11)):
+                        or _all_objects_current_pose[int(object_id.item())][0] < torch.tensor(0.45) or _all_objects_current_pose[int(object_id.item())][0] > torch.tensor(1.0)
+                        or _all_objects_current_pose[int(object_id.item())][1] < torch.tensor(-0.18) or _all_objects_current_pose[int(object_id.item())][1] > torch.tensor(0.10)):
                             env_complete_reset = torch.cat(
                                 (env_complete_reset, torch.tensor([env_count])), axis=0)
-                            print("Object out of bin")
+                            print("Object out of bin 1")
                     _all_object_position_error = torch.abs(
                         _all_object_position_error)
                     _all_object_rotation_error = torch.abs(
@@ -2034,6 +2038,7 @@ class RL_UR16eManipulation(VecTask):
             if (self.frame_count[env_count] <= torch.tensor(self.cooldown_frames)):
                 self.action_env = torch.tensor(
                     [[0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0]], dtype=torch.float)
+                
             # Get action from policy
             self.actions = torch.cat([self.actions, self.action_env])
             self.frame_count[env_count] += torch.tensor(1)

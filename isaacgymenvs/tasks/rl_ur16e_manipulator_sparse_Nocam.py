@@ -362,7 +362,7 @@ class RL_UR16eManipulation(VecTask):
         # Define start pose for ur16e
         ur16e_start_pose = gymapi.Transform()
         # gymapi.Vec3(-0.45, 0.0, 1.0 + table_thickness / 2 + table_stand_height)
-        ur16e_start_pose.p = gymapi.Vec3(0, 0, 2.020)
+        ur16e_start_pose.p = gymapi.Vec3(-0.22, 0, 2.020)
 
         quat = euler_angles_to_quaternion(torch.tensor(
             [180, 0, 0]).to(self.device), "XYZ", degrees=True)
@@ -435,6 +435,7 @@ class RL_UR16eManipulation(VecTask):
                 for obj in cube.keys():
                     dims = cube[obj]['dims']
                     pose = cube[obj]['pose']
+                    # decrease x of pose by 0.5
                     self.add_table(dims, pose, ur16e_start_pose,
                                    env_ptr, i, color=[0.6, 0.6, 0.6])
 
@@ -769,13 +770,13 @@ class RL_UR16eManipulation(VecTask):
             ##############################################
             list_objects_domain_randomizer = torch.tensor([])
             
-            offset_object1 = np.array([np.random.uniform(0.7, 0.7, 1).reshape(
+            offset_object1 = np.array([np.random.uniform(0.6, 0.6, 1).reshape(
                     1,)[0], np.random.uniform(-0.1, -0.1, 1).reshape(1,)[0], 1.45, 0.0,
                     0.0, 0.0])
-            offset_object2 = np.array([np.random.uniform(0.74, 0.74, 1).reshape(
+            offset_object2 = np.array([np.random.uniform(0.6, 0.6, 1).reshape(
                     1,)[0], np.random.uniform(-0., -0., 1).reshape(1,)[0], 1.45, 0.0,
                     0.0, 0.0])
-            offset_object3 = np.array([np.random.uniform(0.79, 0.79, 1).reshape(
+            offset_object3 = np.array([np.random.uniform(0.62, 0.62, 1).reshape(
                     1,)[0], np.random.uniform(-0.1, -0.1, 1).reshape(1,)[0], 1.45, 0.0,
                     0.0, 0.0])
             offset_objects = [offset_object2, offset_object3, offset_object1]
@@ -1128,7 +1129,7 @@ class RL_UR16eManipulation(VecTask):
             self.gym.start_access_image_tensors(self.sim)
             # Updated in self.rgb_camera_tensors and self.depth_camera_tensors and self.mask_camera_tensors
             self.gym.end_access_image_tensors(self.sim)
-        render_cameras()
+        # render_cameras()
         self.gym.refresh_dof_state_tensor(self.sim)
         '''
         Commands to the arm for eef control
@@ -1182,8 +1183,8 @@ class RL_UR16eManipulation(VecTask):
                     ))][:3] - self._root_state[env_count, self._object_model_id[int(object_id.item())-1], :][:3])
 
                     if (_all_objects_current_pose[int(object_id.item())][2] < torch.tensor(1.3) or _all_objects_current_pose[int(object_id.item())][2] > torch.tensor(1.7)
-                        or _all_objects_current_pose[int(object_id.item())][0] < torch.tensor(0.67) or _all_objects_current_pose[int(object_id.item())][0] > torch.tensor(1.4)
-                        or _all_objects_current_pose[int(object_id.item())][1] < torch.tensor(-0.17) or _all_objects_current_pose[int(object_id.item())][1] > torch.tensor(0.11)):
+                        or _all_objects_current_pose[int(object_id.item())][0] < torch.tensor(0.45) or _all_objects_current_pose[int(object_id.item())][0] > torch.tensor(1.0)
+                        or _all_objects_current_pose[int(object_id.item())][1] < torch.tensor(-0.18) or _all_objects_current_pose[int(object_id.item())][1] > torch.tensor(0.10)):
                             env_complete_reset = torch.cat(
                                 (env_complete_reset, torch.tensor([env_count])), axis=0)
                             print("Object out of bin 2")
@@ -1502,7 +1503,7 @@ class RL_UR16eManipulation(VecTask):
                         rotation_matrix_camera_to_object = euler_angles_to_matrix(torch.tensor(
                             [0, 0, 0]).to(self.device), "XYZ", degrees=False)
                         T_camera_to_object = transformation_matrix(
-                            rotation_matrix_camera_to_object, torch.tensor([1.1200, self.prim_y, self.prim_z]).to(self.device)) 
+                            rotation_matrix_camera_to_object, torch.tensor([0.900, self.prim_y, self.prim_z]).to(self.device)) 
                         # Transformation from base link to object
                         T_world_to_object = torch.matmul(
                             self.T_world_to_camera_link, T_camera_to_object)
@@ -1699,8 +1700,8 @@ class RL_UR16eManipulation(VecTask):
                         _all_object_rotation_error += torch.sum(e1-e2)
 
                         if (_all_objects_current_pose[int(object_id.item())][2] < torch.tensor(1.3) or _all_objects_current_pose[int(object_id.item())][2] > torch.tensor(1.7)
-                        or _all_objects_current_pose[int(object_id.item())][0] < torch.tensor(0.67) or _all_objects_current_pose[int(object_id.item())][0] > torch.tensor(1.4)
-                        or _all_objects_current_pose[int(object_id.item())][1] < torch.tensor(-0.17) or _all_objects_current_pose[int(object_id.item())][1] > torch.tensor(0.11)):
+                        or _all_objects_current_pose[int(object_id.item())][0] < torch.tensor(0.45) or _all_objects_current_pose[int(object_id.item())][0] > torch.tensor(1.0)
+                        or _all_objects_current_pose[int(object_id.item())][1] < torch.tensor(-0.18) or _all_objects_current_pose[int(object_id.item())][1] > torch.tensor(0.10)):
                             env_complete_reset = torch.cat(
                                 (env_complete_reset, torch.tensor([env_count])), axis=0)
                             print("Object out of bin 1")
