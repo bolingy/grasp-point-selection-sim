@@ -211,6 +211,7 @@ class RL_UR16eManipulation(VecTask):
         self.primitive_count = torch.ones(self.num_envs).to(self.device)
         self.done = torch.zeros(self.num_envs).to(self.device)
         self.finished_prim = torch.zeros(self.num_envs).to(self.device)
+        self.torch_target_area_tensor = torch.zeros(self.num_envs).to(self.device)
 
 
 
@@ -835,6 +836,7 @@ class RL_UR16eManipulation(VecTask):
             self.return_pre_grasp[env_id] = torch.tensor(0)
             self.primitive_count[env_id.item()] = torch.tensor(1)
             self.min_distance[env_id] = torch.tensor(100)
+            self.torch_target_area_tensor = torch.zeros(self.num_envs).to(self.device)
 
         self.progress_buf[env_ids] = 0
         self.reset_buf[env_ids] = 0
@@ -956,6 +958,27 @@ class RL_UR16eManipulation(VecTask):
         if self.finished_prim.sum() > 0:
             torch_prim_tensor = self.finished_prim.clone().detach()
             envs_finished_prim = torch.nonzero(torch_prim_tensor).long().squeeze(1)
+
+            torch_segmask_cameras = torch.stack(self.mask_camera_tensors).to(self.device)
+            prev_target_area_tensor = self.torch_target_area_tensor
+            torch_segmask_tensor = torch_segmask_cameras[envs_finished_prim]
+            torch_segmask_tensor = torch_segmask_tensor[:, 280:460, 510:770]
+            torch_segmask_tensor = einops.rearrange(torch_segmask_tensor, 'b h w -> b (h w)')
+            label = self.object_target_id[envs_finished_prim]
+            label = label.unsqueeze(1).expand(torch_segmask_tensor.shape)
+            # create torch target area tensor (ne) from torch_segmask_tensor where it counts number of pixels that is 255
+            torch_target_area_tensor = torch.sum(torch_segmask_tensor == label, dim=1)
+            # print("torch_target_area_tensor", torch_target_area_tensor)
+            diff_target_area_tensor = torch.zeros(envs_finished_prim.shape[0]).to(self.device)
+            # print(self.primitive_count[envs_finished_prim])
+            indicies = torch.where(self.primitive_count[envs_finished_prim] > 1)[0]
+            # print("indicies", indicies)
+            if indicies.shape[0] > 0:
+                diff_target_area_tensor[indicies] = torch_target_area_tensor[indicies] - prev_target_area_tensor[envs_finished_prim][indicies]
+                # print("!!!!!diff_target_area_tensor", diff_target_area_tensor)
+            self.torch_target_area_tensor[envs_finished_prim] = torch_target_area_tensor.float()
+            # print("diff_target_area_tensor", diff_target_area_tensor)
+
             # target object pose
             model_ids = torch.index_select(torch.tensor(self._object_model_id).to(self.device), 0, self.object_target_id - 1)
             # model_ids = model_ids - 1
@@ -978,6 +1001,11 @@ class RL_UR16eManipulation(VecTask):
             torch_objstate_tensor = torch_objstate_tensor[envs_finished_prim]
 
             torch_success_tensor = self.success[envs_finished_prim].clone().detach()
+            # add diff to success tensor
+            scaled_diff = torch.tensor(1e-5).to(self.device)
+            scaled_diff_tensor = diff_target_area_tensor.to(self.device) * scaled_diff
+            scaled_diff_tensor = torch.clamp(scaled_diff_tensor, 0, 0.2)
+            torch_success_tensor = torch_success_tensor + scaled_diff_tensor
             # reset if success
             self.success[envs_finished_prim] = torch.tensor(0).float().to(self.device)
             
@@ -1129,7 +1157,7 @@ class RL_UR16eManipulation(VecTask):
             self.gym.start_access_image_tensors(self.sim)
             # Updated in self.rgb_camera_tensors and self.depth_camera_tensors and self.mask_camera_tensors
             self.gym.end_access_image_tensors(self.sim)
-        # render_cameras()
+        render_cameras()
         self.gym.refresh_dof_state_tensor(self.sim)
         '''
         Commands to the arm for eef control
