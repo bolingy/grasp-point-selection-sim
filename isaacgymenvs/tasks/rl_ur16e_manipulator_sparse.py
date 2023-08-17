@@ -55,7 +55,9 @@ class RL_UR16eManipulation(VecTask):
         self.cfg["env"]["numObservations"] = 46800
 
         # actions include: delta EEF if OSC (6) or joint torques (7) + bool gripper (1)
-        self.cfg["env"]["numActions"] = 4
+        self.cfg["env"]["numActions"] = 2 # or 4 if normal PPO
+
+        self.obj_randomization = self.cfg["env"]["objRandomization"]
 
         # Values to be filled in at runtime
         # will be dict filled with relevant states to use for reward calculation
@@ -211,7 +213,7 @@ class RL_UR16eManipulation(VecTask):
         self.primitive_count = torch.ones(self.num_envs).to(self.device)
         self.done = torch.zeros(self.num_envs).to(self.device)
         self.finished_prim = torch.zeros(self.num_envs).to(self.device)
-
+        self.torch_target_area_tensor = torch.zeros(self.num_envs).to(self.device)
 
 
         self.counter = 0
@@ -755,18 +757,19 @@ class RL_UR16eManipulation(VecTask):
             env_count = env_count.item()
             # self.RL_flag[env_count] = 0
             # How many objects should we spawn 2 or 3
-            probabilities = [0.15, 0.5, 0.35]
-            ##############################################
-            probabilities = [0.0, 0.0, 1.0]
-            ##############################################
+            if self.obj_randomization:
+                probabilities = [0.0, 0.0, 1.0]
+            else:
+                probabilities = [0.0, 0.0, 1.0]
             random_number = self.random_number_with_probabilities(probabilities)
             random_number += 1
             object_list_env = {}
             object_set = range(1, self.object_count_unique+1)
-            selected_object = random.sample(object_set, random_number)
-            ##############################################
-            selected_object = [1, 5, 3]
-            ##############################################
+            if self.obj_randomization:
+                selected_object = random.sample(object_set, random_number)
+            else:
+                selected_object = [1, 5, 3]
+            
             list_objects_domain_randomizer = torch.tensor([])
             
             offset_object1 = np.array([np.random.uniform(0.6, 0.6, 1).reshape(
@@ -783,19 +786,24 @@ class RL_UR16eManipulation(VecTask):
             for object_count in selected_object:
                 domain_randomizer = random_number = random.choice(
                     [1, 2, 3, 4, 5])
-                # offset_object = np.array([np.random.uniform(0.67, 0.9, 1).reshape(
-                #     1,)[0], np.random.uniform(-0.15, 0.10, 1).reshape(1,)[0], 1.55, 0.0,
-                #     0.0, 0.0])
-                offset_object = np.array([np.random.uniform(0.7, 0.9, 1).reshape(
-                    1,)[0], np.random.uniform(-0.1, 0.06, 1).reshape(1,)[0], 1.55, 0.0,
-                    0.0, 0.0])
-                ##############################################
-                domain_randomizer = random_number = random.choice(
-                    [1])
-                # print("object count", object_count)
-                if object_count == 5:
-                    offset_object = offset_objects[1]
+                if self.obj_randomization:
+                    offset_object = np.array([np.random.uniform(0.57, 0.7, 1).reshape(
+                        1,)[0], np.random.uniform(-0.15, 0.10, 1).reshape(1,)[0], 1.55, 0.0,
+                        0.0, 0.0])
+                    domain_randomizer = random_number = random.choice(
+                    [1, 2, 3, 4, 5])
                 else:
+                    offset_object = np.array([np.random.uniform(0.7, 0.9, 1).reshape(
+                        1,)[0], np.random.uniform(-0.1, 0.06, 1).reshape(1,)[0], 1.55, 0.0,
+                        0.0, 0.0])
+                    domain_randomizer = random_number = random.choice(
+                    [1])
+                ##############################################
+                
+                # print("object count", object_count)
+                if object_count == 5 and not self.obj_randomization:
+                    offset_object = offset_objects[1]
+                elif not self.obj_randomization: 
                     offset_object = offset_objects[object_count-1]
                 ##############################################
                 quat = euler_angles_to_quaternion(
@@ -834,6 +842,7 @@ class RL_UR16eManipulation(VecTask):
             self.return_pre_grasp[env_id] = torch.tensor(0)
             self.primitive_count[env_id.item()] = torch.tensor(1)
             self.min_distance[env_id] = torch.tensor(100)
+            self.torch_target_area_tensor = torch.zeros(self.num_envs).to(self.device)
 
         self.progress_buf[env_ids] = 0
         self.reset_buf[env_ids] = 0
@@ -968,12 +977,32 @@ class RL_UR16eManipulation(VecTask):
             # if len(envs_finished_prim) == 0:
             #     return None
             torch_depth_cameras = torch.stack(self.depth_camera_tensors).to(self.device)
-            torch_segmask_cameras = torch.stack(self.mask_camera_tensors).to(self.device)
             torch_depth_tensor = torch_depth_cameras[envs_finished_prim]
-            torch_segmask_tensor = torch_segmask_cameras[envs_finished_prim]
-            # torch_rgb_tensor = self.rgb_camera_tensors[envs_finished_prim]
 
+            torch_segmask_cameras = torch.stack(self.mask_camera_tensors).to(self.device)
+            prev_target_area_tensor = self.torch_target_area_tensor
+            torch_segmask_tensor = torch_segmask_cameras[envs_finished_prim]
+            torch_segmask_tensor = torch_segmask_tensor[:, 280:460, 510:770]
+            torch_segmask_tensor = einops.rearrange(torch_segmask_tensor, 'b h w -> b (h w)')
+            label = self.object_target_id[envs_finished_prim]
+            label = label.unsqueeze(1).expand(torch_segmask_tensor.shape)
+            # create torch target area tensor (ne) from torch_segmask_tensor where it counts number of pixels that is 255
+            torch_target_area_tensor = torch.sum(torch_segmask_tensor == label, dim=1)
+            # print("torch_target_area_tensor", torch_target_area_tensor)
+            diff_target_area_tensor = torch.zeros(envs_finished_prim.shape[0]).to(self.device)
+            # print(self.primitive_count[envs_finished_prim])
+            indicies = torch.where(self.primitive_count[envs_finished_prim] > 1)[0]
+            # print("indicies", indicies)
+            if indicies.shape[0] > 0:
+                diff_target_area_tensor[indicies] = torch_target_area_tensor[indicies] - prev_target_area_tensor[envs_finished_prim][indicies]
+                # print("!!!!!diff_target_area_tensor", diff_target_area_tensor)
+            self.torch_target_area_tensor[envs_finished_prim] = torch_target_area_tensor.float()
+            scaled_diff = torch.tensor(1e-5).to(self.device)
+            scaled_diff_tensor = diff_target_area_tensor.to(self.device) * scaled_diff
+            scaled_diff_tensor = torch.clamp(scaled_diff_tensor, 0, 0.2)
             torch_success_tensor = self.success[envs_finished_prim].clone().detach()
+            torch_success_tensor = torch_success_tensor + scaled_diff_tensor
+
             # reset if success
             self.success[envs_finished_prim] = torch.tensor(0).float().to(self.device)
             torch_done_tensor = self.done[envs_finished_prim].clone().detach()
@@ -984,14 +1013,10 @@ class RL_UR16eManipulation(VecTask):
             # crop depth image
             torch_depth_tensor = torch_depth_tensor[:, 280:460, 510:770]
 
-            # crop segmask
-            torch_segmask_tensor = torch_segmask_tensor[:, 280:460, 510:770]
-
             torch_depth_tensor = einops.rearrange(torch_depth_tensor, 'b h w -> b (h w)')
-            torch_segmask_tensor = einops.rearrange(torch_segmask_tensor, 'b h w -> b (h w)')
-            label = self.object_target_id[envs_finished_prim]
-            label = label.unsqueeze(1).expand(torch_segmask_tensor.shape)
-            torch_segmask_tensor = torch.where(torch_segmask_tensor == label, torch.tensor(255).to(self.device), torch_segmask_tensor)            # print("condition", torch.nonzero(torch_depth_tensor[0] == label[0]).shape) 
+
+            torch_segmask_tensor = torch.where(torch_segmask_tensor == label, torch.tensor(255).to(self.device), torch_segmask_tensor)
+            
             self.obs_buf = torch.cat((torch_depth_tensor, torch_segmask_tensor), dim=1).squeeze(0)
 
             if torch_indicies_tensor.shape[0] > 1:
