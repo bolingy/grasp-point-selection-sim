@@ -181,29 +181,27 @@ class ActorCritic(nn.Module):
     
 
     def evaluate(self, state, action):
+        action_temp = self.actor(state)
+        action_probs = action_temp[:, :6]
+        action_mean = action_temp[:, 6:]
 
-        if self.has_continuous_action_space:
-            # print("State is nan", torch.isnan(state).any())
-            action_mean = self.actor(state)
-            action_var = self.action_var.expand_as(action_mean)
-            cov_mat = torch.diag_embed(action_var).to(self.device)
-            # print("action_mean", action_mean)
-            # print("cov_mat", cov_mat)
-            dist = MultivariateNormal(action_mean, cov_mat)
-            
-            # for single action continuous environments
-            if self.action_dim == 1:
-                action = action.reshape(-1, self.action_dim)
+        old_action1 = action[:, 0]
+        old_action2 = action[:, 1]
+        dist_1 = Categorical(action_probs)
 
-        else:
-            action_probs = self.actor(state)
-            dist = Categorical(action_probs)
+        action_var = self.action_var.expand_as(action_mean)
+        cov_mat = torch.diag_embed(action_var).to(self.device)
+        dist_2 = MultivariateNormal(action_mean, cov_mat)
+        if action_mean.shape[1] == 1:
+            old_action2 = old_action2.reshape(-1, 1)
 
-        action_logprobs = dist.log_prob(action)
-        dist_entropy = dist.entropy()
+        action_logprobs_1 = dist_1.log_prob(old_action1)
+        action_logprobs_2 = dist_2.log_prob(old_action2)
+        action_logprobs = torch.sum(action_logprobs_1, dim=-1) + action_logprobs_2
+        dist_entropy = dist_1.entropy() + dist_2.entropy()
         state_values = self.critic(state)
-        
-        return action_logprobs, state_values, dist_entropy
+
+        return action_logprobs, torch.squeeze(state_values), dist_entropy
 
 class PPO:
     def __init__(self, state_dim, action_dim, lr_actor, lr_critic, gamma, K_epochs, eps_clip, has_continuous_action_space, action_std_init=0.6, device='cpu', res_net=True):
