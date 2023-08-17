@@ -82,28 +82,7 @@ class ActorCritic(nn.Module):
         # actor
         if has_continuous_action_space :
             if res_net:
-                # # randomly initialize the weights
-                # def init_weights(m, init_type='normal'):
-                #     if hasattr(m, 'weight') and (m.__class__.__name__.find('Conv') != -1 or m.__class__.__name__.find('Linear') != -1):
-                #         if init_type == 'normal':
-                #             nn.init.normal_(m.weight.data, 0.0, 0.02)
-                #         elif init_type == 'xavier':
-                #             nn.init.xavier_normal_(m.weight.data, gain=0.02)
-                #         elif init_type == 'kaiming':
-                #             nn.init.kaiming_normal_(m.weight.data, a=0, mode='fan_in')
-                #         elif init_type == 'orthogonal':
-                #             nn.init.orthogonal_(m.weight.data, gain=0.02)
-                #         else:
-                #             raise NotImplementedError('initialization method [%s] is not implemented' % init_type)
-                #         if hasattr(m, 'bias') and m.bias is not None:
-                #             nn.init.constant_(m.bias.data, 0.0)
-                #     elif hasattr(m, 'weight') and (m.__class__.__name__.find('BatchNorm') != -1):
-                #         nn.init.normal_(m.weight.data, 1.0, 0.02)
-                #         nn.init.constant_(m.bias.data, 0.0)
-                        
-                # self._init_weights = lambda m: init_weights(m, init_type='normal')
                 self.actor = ActorNet(ResidualBlock, [3, 4, 6, 3], num_classes=self.action_dim)
-                # self.actor.apply(self._init_weights)
             else:
                 self.actor = nn.Sequential(
                                 nn.Linear(state_dim, 64),
@@ -149,36 +128,24 @@ class ActorCritic(nn.Module):
         raise NotImplementedError
 
     def act(self, state):
-        # first value of action is categorical, second value is continuous
         action = self.actor(state)
-        
 
-        # if self.has_continuous_action_space:
+        action_probs = action[:, :6]
+        dist_1 = Categorical(action_probs)
+
         action_mean = action[:, 6:]
         cov_mat = torch.diag(self.action_var).unsqueeze(dim=0).to(self.device)
-        dist_1 = MultivariateNormal(action_mean, cov_mat)
-        # else:
-        action_probs = action[:, :6]
-        dist_2 = Categorical(action_probs)
+        dist_2 = MultivariateNormal(action_mean, cov_mat)
 
-        # print("dist 1 sample", dist_1.sample())
-        # print("dist 2 sample", dist_2.sample())
-        action = torch.cat((dist_2.sample().unsqueeze(dim=-1), dist_1.sample()), dim=-1)
-        action_logprob_1 = dist_1.log_prob(action[:, 1:])
-        action_logprob_2 = dist_2.log_prob(action[:, 0])
-        action_logprob = torch.sum(action_logprob_1, dim=-1) + action_logprob_2
+        action = torch.cat((dist_1.sample().unsqueeze(dim=-1), dist_2.sample()), dim=-1)
+        action_logprob_1 = dist_1.log_prob(action[:, 0])
+        action_logprob_2 = dist_2.log_prob(action[:, 1].unsqueeze(dim=-1))
+        action_logprob = action_logprob_1 + action_logprob_2
         state_val = self.critic(state)
 
-        # print("action", action)
 
         return action.detach(), action_logprob.detach(), state_val.detach()
 
-        # action = torch.clamp(dist.sample(), min=0.0, max=6.0)
-        # action_logprob = dist.log_prob(action)
-        # state_val = self.critic(state)
-
-        # return action.detach(), action_logprob.detach(), state_val.detach()
-    
 
     def evaluate(self, state, action):
         action_temp = self.actor(state)
@@ -187,6 +154,7 @@ class ActorCritic(nn.Module):
 
         old_action1 = action[:, 0]
         old_action2 = action[:, 1]
+
         dist_1 = Categorical(action_probs)
 
         action_var = self.action_var.expand_as(action_mean)
@@ -197,7 +165,7 @@ class ActorCritic(nn.Module):
 
         action_logprobs_1 = dist_1.log_prob(old_action1)
         action_logprobs_2 = dist_2.log_prob(old_action2)
-        action_logprobs = torch.sum(action_logprobs_1, dim=-1) + action_logprobs_2
+        action_logprobs = action_logprobs_1 + action_logprobs_2
         dist_entropy = dist_1.entropy() + dist_2.entropy()
         state_values = self.critic(state)
 
