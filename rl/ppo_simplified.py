@@ -154,22 +154,22 @@ class ActorCritic(nn.Module):
         
 
         # if self.has_continuous_action_space:
-        action_mean = action[:, 5:]
+        action_mean = action[:, 6:]
         cov_mat = torch.diag(self.action_var).unsqueeze(dim=0).to(self.device)
         dist_1 = MultivariateNormal(action_mean, cov_mat)
         # else:
-        action_probs = action[:, :5]
+        action_probs = action[:, :6]
         dist_2 = Categorical(action_probs)
 
-        print("dist 1 sample", dist_1.sample())
-        print("dist 2 sample", dist_2.sample())
+        # print("dist 1 sample", dist_1.sample())
+        # print("dist 2 sample", dist_2.sample())
         action = torch.cat((dist_2.sample().unsqueeze(dim=-1), dist_1.sample()), dim=-1)
         action_logprob_1 = dist_1.log_prob(action[:, 1:])
         action_logprob_2 = dist_2.log_prob(action[:, 0])
         action_logprob = torch.sum(action_logprob_1, dim=-1) + action_logprob_2
         state_val = self.critic(state)
 
-        print("action", action)
+        # print("action", action)
 
         return action.detach(), action_logprob.detach(), state_val.detach()
 

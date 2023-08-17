@@ -59,7 +59,7 @@ save_model_freq = 2      # save model frequency (in num timesteps)
 ################ PPO hyperparameters ################
 
 pick_len = 3
-update_size = pick_len * 15  #20
+update_size = pick_len * 20  #20
 K_epochs = 40               # update policy for K epochs
 eps_clip = 0.13              # clip parameter for PPO
 gamma = 0.99                # discount factor
@@ -73,14 +73,14 @@ random_seed = 1       # set random seed if required (0 = no random seed)
 '''Training/Evaluation Parameter'''
 env_name = "RL_UR16eManipulation_Full"
 policy_name = "PPO_pick_backobj_fixedbinconfig_ActorNET"
-head_less = False
+head_less = True
 EVAL = False #if you want to evaluate the model
 action_std = 0.18 if not EVAL else 1e-9        # starting std for action distribution (Multivariate Normal)
 load_policy = False
 # policy_name = "seq_multiobj_batch_90_lra_1e-5_lrc_3e-5_clip015"
 policy_name = "{}_batch_{}_lra_{}_lrc_{}_clip{}".format(policy_name, update_size, lr_actor, lr_critic, eps_clip)
 load_policy_version = None                   # specify policy version (i.e. int, 50) when loading a trained policy
-ne = 2               # number of environments
+ne = 10               # number of environments
 res_net = True
 
 print("training environment name : " + env_name)
