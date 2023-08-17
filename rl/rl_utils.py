@@ -17,7 +17,6 @@ import einops
 import gym
 # import roboschool
 #import pybullet_envs
-from rl.ppo_simplified import *
 import matplotlib.pyplot as plt
 
 
