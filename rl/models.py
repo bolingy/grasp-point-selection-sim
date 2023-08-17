@@ -97,7 +97,7 @@ class ActorNet(nn.Module):
         self.layer2 = self._make_layer(block, 256, layers[2], stride = 2)
         #self.layer3 = self._make_layer(block, 512, layers[3], stride = 2)
         self.avgpool = nn.AvgPool2d(8, stride=2)
-        self.fc = nn.Linear(3840, 6)
+        self.fc = nn.Linear(3840, 7)
         self.sigmoid = nn.Sigmoid()
         self.softmax = nn.Softmax(dim = 1)
         
@@ -128,13 +128,10 @@ class ActorNet(nn.Module):
         x = self.avgpool(x)
         x = x.view(x.size(0), -1)
         x = self.fc(x)
-        action_1 = self.softmax(x[:, :5])
+        action_1 = self.softmax(x[:, :6])
         # print("action_1", action_1)
-        # argmax
-        action_1 = torch.argmax(action_1, dim = 1)
-        # print("action_1", action_1)
-        action_2 = self.sigmoid(x[:, 5:])
-        result = torch.cat((action_1.unsqueeze(1), action_2), dim = 1)
+        action_2 = self.sigmoid(x[:, 6:])
+        result = torch.cat((action_1, action_2), dim = 1)
         # print("result", result)
         return result
     
