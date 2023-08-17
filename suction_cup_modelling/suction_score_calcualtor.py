@@ -133,9 +133,9 @@ class calcualte_suction_score():
             '''
             self.suction_coordinates = torch.cat((self.suction_coordinates, torch.tensor([[x, y, 0.]]).to(self.device)), dim=0).type(torch.float64)
         if(self.grasps_and_predictions != None):
-            centroid_angle = torch.tensor(self.normal_cloud_im[int(self.grasps_and_predictions.center.y)][int(self.grasps_and_predictions.center.x)]).to(self.device)
-            centroid_angle[2] = 0
-        
+            centroid_angle = torch.tensor(self.normal_cloud_im.data[int(self.grasps_and_predictions.center.y + offset[1])][int(self.grasps_and_predictions.center.x + offset[0])]).to(self.device)
+            centroid_angle[2] = 0            
+            # Did trial and error and then got this transformation
             rotation_matrix_normal = euler_angles_to_matrix(torch.tensor([0, 0, -90]).to(self.device), "XYZ", degrees=True)
             null_translation = torch.tensor([0, 0, 0]).to(self.device)
             T_normal = transformation_matrix(rotation_matrix_normal, null_translation)
@@ -165,16 +165,13 @@ class calcualte_suction_score():
                     return torch.tensor(0), torch.tensor([0, 0, 0]), torch.tensor([centroid_angle[0], centroid_angle[1], centroid_angle[2]])
                 else:
                     return torch.tensor(0), torch.tensor([0.72, -xyz_point[0], -xyz_point[1]]), torch.tensor([centroid_angle[0], centroid_angle[1], centroid_angle[2]])
-            
+        
+        '''
+        Calculate the differnce in suction 3d coordinates and nearest points obtained from the suction projection
+        '''
         difference_xy_plane = point_cloud_suction[:,:2] - (self.suction_coordinates[:, :2] + xyz_point[:2])
         thresh = torch.sum(torch.sum(difference_xy_plane, 1))
-        # if(abs(thresh) >= 0.005):
-        #     # removing largest 
-        #     abs_difference_xy_plane = torch.abs(difference_xy_plane)
-        #     max_id = torch.argmax(abs_difference_xy_plane)
-        #     x_index = (max_id/2).to(torch.int)
-        #     difference_xy_plane = torch.cat((difference_xy_plane[:x_index,:], difference_xy_plane[x_index+1:,:]), dim=0)
-        #     thresh = torch.sum(torch.sum(difference_xy_plane, 1))
+        
         if(abs(thresh) > 0.008):
             if(grasps_and_predictions == None):
                 return torch.tensor(0), torch.tensor([0, 0, 0]), torch.tensor([centroid_angle[0], centroid_angle[1], centroid_angle[2]])
@@ -184,7 +181,12 @@ class calcualte_suction_score():
         '''
         Calcualte the conical spring score
         '''
-        point_cloud_suction[:,2] = point_cloud_suction[:, 2]*torch.cos(centroid_angle[0])*torch.cos(centroid_angle[1]) - self.suction_coordinates[:,2]
+        # point_cloud_suction_facing_normal gives the suction score assuming the robotic arm was facing perfectly to the normal
+        point_cloud_suction_facing_normal = torch.mm(point_cloud_suction.clone().detach().type(torch.float64), euler_angles_to_matrix(-torch.tensor([-centroid_angle[1], centroid_angle[0], 0.]).to(self.device), "XYZ", degrees=False).type(torch.float64), out=None)
+        minimum_suction_point = torch.min(point_cloud_suction_facing_normal[:, 2]).to(self.device)
+        ri = torch.clamp(torch.abs(point_cloud_suction_facing_normal[:, 2] - minimum_suction_point) / 0.023, max=1.0)
+        suction_score_facing_normal = 1-torch.max(ri)
+
         minimum_suction_point = torch.min(point_cloud_suction[:, 2]).to(self.device)
         ri = torch.clamp(torch.abs(point_cloud_suction[:, 2] - minimum_suction_point) / 0.023, max=1.0)
         suction_score = 1-torch.max(ri)
