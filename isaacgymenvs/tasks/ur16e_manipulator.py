@@ -113,7 +113,7 @@ class UR16eManipulation(VecTask):
         # Parallelization
         self.init_camera_capture = 1
 
-        with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../configs")+'/collision_primitives_'+str(bin_id)+'.yml') as file:
+        with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../configs")+'/collision_primitives_'+str(self.bin_id)+'.yml') as file:
             self.world_params = yaml.load(file, Loader=yaml.FullLoader)
 
         super().__init__(config=self.cfg, rl_device=rl_device, sim_device=sim_device, graphics_device_id=graphics_device_id,
@@ -238,8 +238,8 @@ class UR16eManipulation(VecTask):
         else:
             self.smaller_bin = False
 
-        self.check_object_coord = self.check_object_coord_bins[bin_id]
-        self.crop_coord = self.crop_coord_bins[bin_id]
+        self.check_object_coord = self.check_object_coord_bins[self.bin_id]
+        self.crop_coord = self.crop_coord_bins[self.bin_id]
 
         # Set control limits
         self.cmd_limit = to_torch([0.1, 0.1, 0.1, 0.5, 0.5, 0.5], device=self.device).unsqueeze(0) if \
@@ -309,7 +309,7 @@ class UR16eManipulation(VecTask):
         asset_options.use_mesh_materials = True
 
         self.object_models = []
-        objects_file = open('misc/object_list_domain_randomization.txt', 'r')
+        objects_file = open(f'misc/object_list_domain_randomization_{self.bin_id}.txt', 'r')
         object_config = objects_file.readlines()
 
         objects = []
