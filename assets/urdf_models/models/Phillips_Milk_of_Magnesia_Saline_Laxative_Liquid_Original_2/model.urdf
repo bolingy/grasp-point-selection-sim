@@ -1,0 +1,23 @@
+<?xml version="0.0" ?>
+<robot name="model.urdf">
+  <link name="baseLink">
+    <visual>
+			<origin xyz="0 0 0" rpy="-1.57 0 0"/>
+      <geometry>
+        <mesh filename="model.obj" scale="0.8 0.8 0.8"/>
+      </geometry>
+      <material name="white">
+        <texture filename="assets/urdf_models/models/Phillips_Milk_of_Magnesia_Saline_Laxative_Liquid_Original_2/texture.png"/>
+      </material>
+    </visual>
+    <collision>
+      <geometry>
+    	 	<mesh filename="model.obj" scale="0.8 0.8 0.8"/>
+      </geometry>
+    </collision>
+    <inertial>
+			<mass value="0.70125"/>
+			<inertia  ixx="0.00013227" ixy="0.00" ixz="0.00" iyy="0.00020916" iyz="0.00" izz="0.00031885" />
+		</inertial>
+  </link>
+</robot>
