@@ -1,0 +1,25 @@
+orange_cylinder 2
+centrum_box 2
+green_cylinder 2
+small_health_bottle 2
+pizza_cutter 1
+calcium_bottle 1
+kyolic_bottle 1
+realsense_box 1
+cream_cylinder 2
+honey_box 2
+
+Creatine_Monohydrate 1
+Perricone_MD_The_Power_Treatments 1
+Shurtape_Tape_Purple_CP28 1
+Canon_Pixma_Ink_Cartridge_8 1
+Ecoforms_Plant_Container_GP16AMOCHA 1
+Nescafe_16Count_Dolce_Gusto_Cappuccino_Capsules 1
+Perricone_MD_High_Potency_Evening_Repair 1
+Phillips_Milk_of_Magnesia_Saline_Laxative_Liquid_Original 1
+Weston_No_22_Cajun_Jerky_Tonic_12_fl_oz_nLj64ZnGwDh 1
+
+Mario_Party_9_Wii_Game 1
+Seagate_1TB_Wireless_Plus_mobile_device_storage 1
+Brother_Ink_Cartridge_Magenta_LC75M 1
+Ecoforms_Plant_Container_GP16AMOCHA 1

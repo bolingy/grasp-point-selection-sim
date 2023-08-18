@@ -168,13 +168,6 @@ class calcualte_suction_score():
             
         difference_xy_plane = point_cloud_suction[:,:2] - (self.suction_coordinates[:, :2] + xyz_point[:2])
         thresh = torch.sum(torch.sum(difference_xy_plane, 1))
-        # if(abs(thresh) >= 0.005):
-        #     # removing largest 
-        #     abs_difference_xy_plane = torch.abs(difference_xy_plane)
-        #     max_id = torch.argmax(abs_difference_xy_plane)
-        #     x_index = (max_id/2).to(torch.int)
-        #     difference_xy_plane = torch.cat((difference_xy_plane[:x_index,:], difference_xy_plane[x_index+1:,:]), dim=0)
-        #     thresh = torch.sum(torch.sum(difference_xy_plane, 1))
         if(abs(thresh) > 0.008):
             if(grasps_and_predictions == None):
                 return torch.tensor(0), torch.tensor([0, 0, 0]), torch.tensor([centroid_angle[0], centroid_angle[1], centroid_angle[2]])
@@ -184,7 +177,7 @@ class calcualte_suction_score():
         '''
         Calcualte the conical spring score
         '''
-        point_cloud_suction[:,2] = point_cloud_suction[:, 2]*torch.cos(centroid_angle[0])*torch.cos(centroid_angle[1]) - self.suction_coordinates[:,2]
+        # point_cloud_suction[:,2] = point_cloud_suction[:, 2]*torch.cos(centroid_angle[0])*torch.cos(centroid_angle[1]) - self.suction_coordinates[:,2]
         minimum_suction_point = torch.min(point_cloud_suction[:, 2]).to(self.device)
         ri = torch.clamp(torch.abs(point_cloud_suction[:, 2] - minimum_suction_point) / 0.023, max=1.0)
         suction_score = 1-torch.max(ri)
