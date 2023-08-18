@@ -1771,7 +1771,6 @@ class UR16eManipulation(VecTask):
                             torch.tensor(1)
 
                     # If the object is moving then increase the speed else go to the default value of 0.1
-                    # print(depth_point_cam, object_pose_error, self.action_contrib[env_count], contact_exist)
                     if ((depth_point_cam < torch.tensor(0.03)) and (self.action_contrib[env_count] == torch.tensor(0)) and (object_pose_error <= torch.tensor(0.001)) and (contact_exist == torch.tensor(1))):
                         self.speed[env_count] += torch.tensor(0.01)
                         self.speed[env_count] = torch.min(
@@ -1834,6 +1833,7 @@ class UR16eManipulation(VecTask):
                     if (self.force_pre_physics > torch.max(torch.tensor([self.force_threshold, self.force_SI[env_count]])) and self.action_contrib[env_count] == 0 and self.force_encounter[env_count] == 0):
                         self.force_encounter[env_count] = 1
                         self.retract_flag_env[env_count] = 1
+                        self.speed[env_count] = torch.tensor(0.02)
                         object_pose_at_contact = self._root_state[env_count, self._object_model_id[int(self.object_target_id[env_count].item())-1], :][:7].type(
                             torch.float).clone().detach()
 
@@ -1916,7 +1916,6 @@ class UR16eManipulation(VecTask):
                             torch.tensor(1)
 
                     if (self.force_encounter[env_count] == 1):
-                         
                         # Transformation for grasp pose (wg --> wo*og)
                         rotation_matrix_grasp_pose = euler_angles_to_matrix(torch.tensor(
                             [0, -self.grasp_angle[env_count][1], self.grasp_angle[env_count][0]]).to(self.device), "XYZ", degrees=False).type(torch.float)
@@ -1952,7 +1951,7 @@ class UR16eManipulation(VecTask):
                         self.distance = current_point - q
 
                         if (self.retract_up[env_count] == 0):
-                            self.action_env = torch.tensor([[-self.speed[env_count]/20,
+                            self.action_env = torch.tensor([[-self.speed[env_count]/40,
                                                             translation_grasp_pose[1] -
                                                             self.distance[1] *
                                                             50 *
@@ -1965,8 +1964,7 @@ class UR16eManipulation(VecTask):
                                                             self.speed[env_count]*50*action_orientation[2], 1]], dtype=torch.float)
 
                         if (self.retract_up[env_count] == 1):
-                            self.action_env = torch.tensor([[(translation_grasp_pose[0] -
-                                                            self.distance[0])/10 - self.speed[env_count]/2,
+                            self.action_env = torch.tensor([[-self.speed[env_count],
                                                             translation_grasp_pose[1] -
                                                             self.distance[1] *
                                                             50 *
