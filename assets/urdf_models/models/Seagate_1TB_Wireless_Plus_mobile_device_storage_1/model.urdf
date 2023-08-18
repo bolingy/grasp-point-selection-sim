@@ -1,0 +1,23 @@
+<?xml version="0.0" ?>
+<robot name="model.urdf">
+  <link name="baseLink">
+    <visual>
+			<origin xyz="0 0 0" rpy="-1.57 0 0"/>
+      <geometry>
+        <mesh filename="model.obj" scale="1 1 1"/>
+      </geometry>
+      <material name="white">
+        <texture filename="assets/urdf_models/models/Seagate_1TB_Wireless_Plus_mobile_device_storage_1/texture.png"/>
+      </material>
+    </visual>
+    <collision>
+      <geometry>
+    	 	<mesh filename="model.obj" scale="1 1 1"/>
+      </geometry>
+    </collision>
+    <inertial>
+			<mass value="0.72502"/>
+			<inertia  ixx="0.00049386" ixy="0.00" ixz="0.00" iyy="0.000036798" iyz="0.00" izz="0.00051086" />
+		</inertial>
+  </link>
+</robot>
