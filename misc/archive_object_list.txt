@@ -12,8 +12,6 @@ honey_box 2
 Creatine_Monohydrate 1
 Perricone_MD_The_Power_Treatments 1
 Shurtape_Tape_Purple_CP28 1
-Canon_Pixma_Ink_Cartridge_8 1
-Ecoforms_Plant_Container_GP16AMOCHA 1
 Nescafe_16Count_Dolce_Gusto_Cappuccino_Capsules 1
 Perricone_MD_High_Potency_Evening_Repair 1
 Phillips_Milk_of_Magnesia_Saline_Laxative_Liquid_Original 1
@@ -23,3 +21,4 @@ Mario_Party_9_Wii_Game 1
 Seagate_1TB_Wireless_Plus_mobile_device_storage 1
 Brother_Ink_Cartridge_Magenta_LC75M 1
 Ecoforms_Plant_Container_GP16AMOCHA 1
+Canon_Pixma_Ink_Cartridge_8 1
