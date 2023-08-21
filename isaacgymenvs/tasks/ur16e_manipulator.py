@@ -211,6 +211,8 @@ class UR16eManipulation(VecTask):
 
         self.env_reset_id_env = torch.ones(self.num_envs)
 
+        self.env_done_grasping = torch.zeros(self.num_envs)
+
         self.check_object_coord_bins = {
             "3F": [330, 549, 524, 752],
             "3E": [394, 510, 524, 752],
@@ -1135,7 +1137,7 @@ class UR16eManipulation(VecTask):
 
                 # check if the environment returned from reset and the frame for that enviornment is 30 or not
                 # 30 frames is for cooldown period at the start for the simualtor to settle down
-                if ((self.free_envs_list[env_count] == torch.tensor(1)) and total_objects == objects_spawned and object_coords_match and object_mask_area[env_count] >= 1000):
+                if ((self.free_envs_list[env_count] == torch.tensor(1)) and total_objects == objects_spawned and object_coords_match and object_mask_area[env_count] >= 1000 and self.env_done_grasping[env_count] == 0):
                     '''
                     Running DexNet 3.0 after investigating the pose error after spawning
                     '''
@@ -1299,9 +1301,10 @@ class UR16eManipulation(VecTask):
 
                 elif (total_objects != objects_spawned and (self.free_envs_list[env_count] == torch.tensor(1))):
                     print(f"Object falled down in environment {env_count}")
-
                     env_complete_reset = torch.cat(
                         (env_complete_reset, torch.tensor([env_count])), axis=0)
+                elif (all(self.env_done_grasping == 1) and all(self.free_envs_list == 1)):
+                    print("Done with all environments now restart the kernel")
 
             # After every reset popping out each prperty to be used for the pick
             self.action_env = torch.tensor(
@@ -1324,6 +1327,7 @@ class UR16eManipulation(VecTask):
                     self.dexnet_score_env[env_count] = self.dexnet_score_env[env_count][1:]
                     self.force_SI[env_count] = self.force_SI_env[env_count][0]
                     self.force_SI_env[env_count] = self.force_SI_env[env_count][1:]
+                    self.env_done_grasping[env_count] = 1
                 else:
                     env_complete_reset = torch.cat(
                         (env_complete_reset, torch.tensor([env_count])), axis=0)
