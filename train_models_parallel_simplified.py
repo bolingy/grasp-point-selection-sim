@@ -275,7 +275,7 @@ while time_step <= max_training_timesteps: ## prim_step
         buf_envs[true_i].state_values.append(state_val[i].clone().detach())
         if true_i == 0:
             print("action of env 0 updated", action[i])
-    action = convert_actions(action, real_ys, real_dxs)
+    action = convert_actions(action, real_ys, real_dxs, sim_device=sim_device)
     # action = scale_actions(action).to(sim_device)
     # append 0 to all rows of action
     # print("action", action.shape)
