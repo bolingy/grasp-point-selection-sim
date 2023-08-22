@@ -1,0 +1,10 @@
+orange_cylinder 1
+centrum_box 1
+green_cylinder 1
+small_health_bottle 1
+pizza_cutter 1
+calcium_bottle 1
+kyolic_bottle 1
+realsense_box 1
+cream_cylinder 1
+honey_box 1

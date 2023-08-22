@@ -38,6 +38,7 @@ import pandas as pd
 
 from pathlib import Path
 
+
 class UR16eManipulation(VecTask):
 
     def __init__(self, cfg, rl_device, sim_device, graphics_device_id, headless, virtual_screen_capture, force_render, bin_id, data_path=None):
@@ -107,13 +108,13 @@ class UR16eManipulation(VecTask):
         self.ur16e_base = "base_link"
         self.suction_gripper = "epick_end_effector"
 
-        self.force_threshold = 0.15
+        self.force_threshold = 0.1
         self.object_coordiante_camera = torch.tensor([0, 0, 0])
 
         # Parallelization
         self.init_camera_capture = 1
 
-        with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../configs")+'/collision_primitives_'+str(bin_id)+'.yml') as file:
+        with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../configs")+'/collision_primitives_'+str(self.bin_id)+'.yml') as file:
             self.world_params = yaml.load(file, Loader=yaml.FullLoader)
 
         super().__init__(config=self.cfg, rl_device=rl_device, sim_device=sim_device, graphics_device_id=graphics_device_id,
@@ -199,6 +200,7 @@ class UR16eManipulation(VecTask):
         self.dexnet_score_save = {}
         self.suction_deformation_score_save = {}
         self.force_require_SI = {}
+        self.count_step_suction_score_calculator = torch.zeros(self.num_envs)
 
         self.env_reset_id_env = torch.ones(self.num_envs)
 
@@ -231,8 +233,8 @@ class UR16eManipulation(VecTask):
         else:
             self.smaller_bin = False
 
-        self.check_object_coord = self.check_object_coord_bins[bin_id]
-        self.crop_coord = self.crop_coord_bins[bin_id]
+        self.check_object_coord = self.check_object_coord_bins[self.bin_id]
+        self.crop_coord = self.crop_coord_bins[self.bin_id]
 
         # Set control limits
         self.cmd_limit = to_torch([0.1, 0.1, 0.1, 0.5, 0.5, 0.5], device=self.device).unsqueeze(0) if \
@@ -302,7 +304,8 @@ class UR16eManipulation(VecTask):
         asset_options.use_mesh_materials = True
 
         self.object_models = []
-        objects_file = open('misc/object_list_domain_randomization.txt', 'r')
+        objects_file = open(
+            f'misc/object_list_domain_randomization_{self.bin_id}.txt', 'r')
         object_config = objects_file.readlines()
 
         objects = []
@@ -820,7 +823,8 @@ class UR16eManipulation(VecTask):
             self.frame_count[env_id] = 0
             self.free_envs_list[env_id] = torch.tensor(1)
             self.object_pose_check_list[env_id] = torch.tensor(3)
-            self.speed[env_id] = torch.tensor(0.1)
+            self.speed[env_id] = torch.tensor(0.15)
+            self.count_step_suction_score_calculator[env_id] = 0
 
         self.progress_buf[env_ids] = 0
         self.reset_buf[env_ids] = 0
@@ -881,7 +885,7 @@ class UR16eManipulation(VecTask):
             self.frame_count_contact_object[env_id] = 0
             self.frame_count[env_id] = 0
             self.env_reset_id_env[env_id] = 1
-            self.speed[env_id] = 0.1
+            self.speed[env_id] = 0.15
             self.force_contact_flag[env_id.item()] = torch.tensor(
                 0).type(torch.bool)
 
@@ -1211,7 +1215,7 @@ class UR16eManipulation(VecTask):
                         self.dexnet_score_temp = torch.Tensor()
                         max_num_grasps = len(self.grasps_and_predictions)
                         top_grasps = max_num_grasps if max_num_grasps <= 10 else 7
-                        # max_num_grasps = 1
+                        max_num_grasps = 1
                         for i in range(max_num_grasps):
                             grasp_point = torch.tensor(
                                 [self.grasps_and_predictions[i][0].center.x, self.grasps_and_predictions[i][0].center.y])
@@ -1551,6 +1555,40 @@ class UR16eManipulation(VecTask):
                                                      self.speed[env_count]*100 *
                                                      action_orientation[1],
                                                      self.speed[env_count]*100*action_orientation[2], 1]], dtype=torch.float)
+                    
+                    if (not self.count_step_suction_score_calculator[env_count] % 10 and self.suction_deformation_score[env_count] > self.force_threshold and self.force_encounter[env_count] == 0):
+                        rgb_camera_tensor = self.gym.get_camera_image_gpu_tensor(
+                            self.sim, self.envs[env_count], self.camera_handles[env_count][1], gymapi.IMAGE_COLOR)
+                        torch_rgb_tensor = gymtorch.wrap_tensor(
+                            rgb_camera_tensor)
+                        rgb_image = torch_rgb_tensor.to(self.device)
+                        rgb_image_copy_gripper = torch.reshape(
+                            rgb_image, (rgb_image.shape[0], -1, 4))[..., :3]
+                        rgb_image_copy_gripper = rgb_image_copy_gripper.clone().detach()
+
+                        mask_camera_tensor = self.gym.get_camera_image_gpu_tensor(
+                            self.sim, self.envs[env_count], self.camera_handles[env_count][1], gymapi.IMAGE_SEGMENTATION)
+                        torch_mask_tensor = gymtorch.wrap_tensor(
+                            mask_camera_tensor)
+                        segmask_gripper = torch_mask_tensor.to(self.device)
+                        segmask_gripper = segmask_gripper.clone().detach()
+
+                        depth_camera_tensor = self.gym.get_camera_image_gpu_tensor(
+                            self.sim, self.envs[env_count], self.camera_handles[env_count][1], gymapi.IMAGE_DEPTH)
+                        torch_depth_tensor = gymtorch.wrap_tensor(
+                            depth_camera_tensor)
+                        depth_image = torch_depth_tensor.to(self.device)
+                        depth_image = -depth_image
+                        depth_numpy_gripper = depth_image.clone().detach()
+                        offset = torch.tensor(
+                            [self.crop_coord[2], self.crop_coord[0]])
+                        self.suction_deformation_score[env_count], _, _ = self.suction_score_object_gripper.calculator(
+                            depth_numpy_gripper, segmask_gripper, rgb_image_copy_gripper, None, self.object_target_id[env_count], offset)
+
+                        if (self.suction_deformation_score[env_count] > self.force_threshold):
+                            self.force_SI[env_count] = self.force_object.regression(
+                                self.suction_deformation_score[env_count])
+                    self.count_step_suction_score_calculator[env_count] += 1
 
                     current_object_pose = self._root_state[env_count, self._object_model_id[self.object_target_id[env_count]-1], :][:3].type(
                         torch.float).detach().clone()
@@ -1591,12 +1629,13 @@ class UR16eManipulation(VecTask):
                     try:
                         contact_exist = self.suction_score_object_gripper.calculate_contact(
                             depth_numpy_gripper, segmask_gripper, None, None, self.object_target_id[env_count])
-                    except:
+                    except Exception as e:
+                        print(e)
                         contact_exist = torch.tensor(0)
-                    if (contact_exist == torch.tensor(1) and self.action_contrib[env_count] == 0):
+                    if (self.action_contrib[env_count] == 0):
                         angle_error = quaternion_to_euler_angles(self._eef_state[env_count][3:7], "XYZ", degrees=False) - torch.tensor(
                             [0, -self.grasp_angle[env_count][1], self.grasp_angle[env_count][0]]).to(self.device)
-                        if (torch.max(torch.abs(angle_error)) > torch.deg2rad(torch.tensor(10))):
+                        if (torch.max(torch.abs(angle_error)) > torch.deg2rad(torch.tensor(7.5))):
                             # encountered the arm insertion constraint
                             env_list_reset_arm_pose = torch.cat(
                                 (env_list_reset_arm_pose, torch.tensor([env_count])), axis=0)
@@ -1684,13 +1723,13 @@ class UR16eManipulation(VecTask):
                     # If the object is moving then increase the speed else go to the default value of 0.1
                     # print(depth_point_cam, object_pose_error, self.action_contrib[env_count], contact_exist)
                     if ((depth_point_cam < torch.tensor(0.03)) and (self.action_contrib[env_count] == torch.tensor(0)) and (object_pose_error <= torch.tensor(0.001)) and (contact_exist == torch.tensor(1))):
-                        self.speed[env_count] += torch.tensor(0.01)
+                        self.speed[env_count] += torch.tensor(0.025)
                         self.speed[env_count] = torch.min(
                             torch.tensor(1.), self.speed[env_count])
                         self.cmd_limit = to_torch(
                             [0.25, 0.25, 0.25, 0.75, 0.75, 0.75], device=self.device).unsqueeze(0)
                     else:
-                        self.speed[env_count] = torch.tensor(0.1)
+                        self.speed[env_count] = torch.tensor(0.15)
                         self.cmd_limit = to_torch(
                             [0.1, 0.1, 0.1, 0.5, 0.5, 0.5], device=self.device).unsqueeze(0)
 
