@@ -18,7 +18,9 @@ def _get_data_path(bin_id):
     datetime_string = datetime.now().isoformat().replace(":", "")[:-7]
     random_string = ''.join(random.choice(string.ascii_letters)
                             for _ in range(6))
-    temp_path = f"/home/aurmr/workspaces/manipulation_policy/src/System_Identification_Data/{datetime_string}-{random_string}-grasp_data_{bin_id}/"
+    if not os.path.exists(f"../System_Identification_Data"):
+        os.makedirs(f"../System_Identification_Data")
+    temp_path = f"../System_Identification_Data/{datetime_string}-{random_string}-grasp_data_v2_{bin_id}/"
     return os.path.expanduser(temp_path)
 
 
@@ -33,7 +35,7 @@ def generate(bin_id, num_envs):
         sim_device="cuda:0",
         rl_device="cuda:0",
         multi_gpu=True,
-        headless=True,
+        headless=False,
         graphics_device_id=0,
         bin_id=bin_id,
         data_path=_get_data_path(bin_id),

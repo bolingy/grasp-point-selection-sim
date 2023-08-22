@@ -4,6 +4,7 @@ import os
 import torch
 import yaml
 import json
+import sys
 
 from isaacgym import gymtorch
 from isaacgym import gymapi
@@ -37,6 +38,7 @@ import time
 import pandas as pd
 
 from pathlib import Path
+import glob
 
 
 class UR16eManipulation(VecTask):
@@ -226,9 +228,9 @@ class UR16eManipulation(VecTask):
         }
 
         self.object_bin_prob_spawn = {
-            "3F": [0.025, 0.35, 1],
-            "3E": [0.05, 0.45, 1],
-            "3H": [0.05, 0.45, 1],
+            "3F": [0.025, 0.25, 0.7, 1],
+            "3E": [0.05, 0.5, 0.8, 1],
+            "3H": [0.05, 0.5, 0.8, 1],
         }
 
         self.object_height_spawn = {
@@ -313,30 +315,20 @@ class UR16eManipulation(VecTask):
         asset_options.use_mesh_materials = True
 
         self.object_models = []
-        objects_file = open(
-            f'misc/object_list_domain_randomization_{self.bin_id}.txt', 'r')
-        object_config = objects_file.readlines()
-
-        objects = []
-        self.object_prob = np.array([])
-        for parameters in object_config:
-            object_class = parameters.split()
-            objects.append(object_class[0])
-            self.object_prob = np.append(
-                self.object_prob, int(object_class[1]))
+        items = os.listdir('assets/google_scanned_models/')
+        directories = [d for d in items if os.path.isdir(
+            os.path.join('assets/google_scanned_models/', d))]
 
         self.object_count_unique = 0
-        # Strips the newline character
-        for object in objects:
+        for object_name in directories:
             self.object_count_unique += 1
-            for domain in range(5):
-                self.object_models.append(
-                    str(object.strip())+"_"+str(domain+1))
+            self.object_models.append(object_name)
+
         object_model_asset_file = []
         object_model_asset = []
         for counter, model in enumerate(self.object_models):
             object_model_asset_file.append(
-                "urdf_models/models/"+model+"/model.urdf")
+                "google_scanned_models/"+model+"/model.urdf")
 
             object_model_asset.append(self.gym.load_asset(
                 self.sim, asset_root, object_model_asset_file[counter], asset_options))
@@ -772,39 +764,25 @@ class UR16eManipulation(VecTask):
             probabilities = self.object_bin_prob_spawn[self.bin_id]
             random_number = self.random_number_with_probabilities(
                 probabilities)
-            # random_number = random.choice([1, 2, 3])
+
             random_number += 1
             object_list_env = {}
             object_set = range(1, self.object_count_unique+1)
 
-            if (self.smaller_bin):
-                selected_object = np.random.choice(
-                    object_set, p=self.object_prob/np.sum(self.object_prob), size=random_number, replace=False)
-            else:
-                selected_object = np.random.choice(
-                    object_set, p=None, size=random_number, replace=False)
+            selected_object = np.random.choice(
+                object_set, p=None, size=random_number, replace=False)
 
             list_objects_domain_randomizer = torch.tensor([])
             for object_count in selected_object:
-                domain_randomizer = random_number = random.choice(
-                    [1, 2, 3, 4, 5])
                 offset_object = np.array([np.random.uniform(0.67, 0.7, 1).reshape(
                     1,)[0], np.random.uniform(-0.22, -0.12, 1).reshape(1,)[0], self.object_height_spawn[self.bin_id], np.random.uniform(0.0, 6.28, 1).reshape(1,)[0],
                     np.random.uniform(0.0, 6.28, 1).reshape(1,)[0], np.random.uniform(0.0, 6.28, 1).reshape(1,)[0]])
-                # if(random.random() < 0.5):
-                #     offset_object = np.array([np.random.uniform(0.67, 0.7, 1).reshape(
-                #         1,)[0], np.random.uniform(-0.22, -0.12, 1).reshape(1,)[0], 1.3, random.choice([0, 1.57, 3.14]),
-                #         random.choice([0, 1.57, 3.14]), np.random.uniform(0.0, 3.14, 1).reshape(1,)[0]])
-                # else:
-                #     offset_object = np.array([np.random.uniform(0.67, 0.7, 1).reshape(
-                #         1,)[0], np.random.uniform(-0.22, -0.12, 1).reshape(1,)[0], 1.3, np.random.uniform(0.0, 3.14, 1).reshape(1,)[0],
-                #         np.random.uniform(0.0, 3.14, 1).reshape(1,)[0], np.random.uniform(0.0, 3.14, 1).reshape(1,)[0]])
 
                 quat = euler_angles_to_quaternion(
                     torch.tensor(offset_object[3:6]), "XYZ", degrees=False)
                 offset_object = np.concatenate(
                     [offset_object[:3], quat.cpu().numpy()])
-                item_config = (object_count-1)*5 + domain_randomizer
+                item_config = object_count-1
                 object_list_env[item_config] = torch.tensor(offset_object)
                 list_objects_domain_randomizer = torch.cat(
                     (list_objects_domain_randomizer, torch.tensor([item_config])))
@@ -1305,6 +1283,7 @@ class UR16eManipulation(VecTask):
                         (env_complete_reset, torch.tensor([env_count])), axis=0)
                 elif (all(self.env_done_grasping == 1) and all(self.free_envs_list == 1)):
                     print("Done with all environments now restart the kernel")
+                    sys.exit()
 
             # After every reset popping out each prperty to be used for the pick
             self.action_env = torch.tensor(

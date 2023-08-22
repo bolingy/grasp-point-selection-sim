@@ -54,6 +54,8 @@ pip install tensorflow==2.12.0 tensorflow-estimator==2.12.0 tensorflow-io-gcs-fi
 conda install cudatoolkit==11.8.0 -c nvidia
 conda install cudnn
 
+pip install --upgrade google-api-python-client google-auth-httplib2 google-auth-oauthlib
+
 # Also export the LD_LIBRARY_PATH for cuda
 export LD_LIBRARY_PATH=path/to/miniconda3/envs/isaac_ws_py38/lib
 
