@@ -12,7 +12,7 @@ import copy
 import numpy as np
 
 import gym
-from .models import ResidualBlock, ResNet, ActorNet 
+from .models import ResidualBlock, ResNet, ActorTimestepNet
 from matplotlib import pyplot as plt
 import time
 # import roboschool
@@ -82,7 +82,7 @@ class ActorCritic(nn.Module):
         # actor
         if has_continuous_action_space :
             if res_net:
-                self.actor = ActorNet(ResidualBlock, [3, 4, 6, 3], num_classes=self.action_dim)
+                self.actor = ActorTimestepNet(ResidualBlock, [3, 4, 6, 3], num_classes=7)
             else:
                 self.actor = nn.Sequential(
                                 nn.Linear(state_dim, 64),
@@ -105,7 +105,7 @@ class ActorCritic(nn.Module):
         
         # critic
         if res_net:
-            self.critic = ResNet(ResidualBlock, [3, 4, 6, 3], num_classes=1)
+            self.critic = ActorTimestepNet(ResidualBlock, [3, 4, 6, 3], num_classes=1)
         else:
             self.critic = nn.Sequential(
                             nn.Linear(state_dim, 64),

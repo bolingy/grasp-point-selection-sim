@@ -55,7 +55,6 @@ class RL_UR16eManipulation(VecTask):
         self.cfg["env"]["numObservations"] = 46800
 
         # actions include: delta EEF if OSC (6) or joint torques (7) + bool gripper (1)
-        self.cfg["env"]["numActions"] = 2 # or 4 if normal PPO
 
         self.obj_randomization = self.cfg["env"]["objRandomization"]
 
@@ -1016,14 +1015,19 @@ class RL_UR16eManipulation(VecTask):
             torch_depth_tensor = einops.rearrange(torch_depth_tensor, 'b h w -> b (h w)')
 
             torch_segmask_tensor = torch.where(torch_segmask_tensor == label, torch.tensor(255).to(self.device), torch_segmask_tensor)
+
+            torch_primcount_tensor = self.primitive_count[envs_finished_prim].clone().detach()
+
             
             self.obs_buf = torch.cat((torch_depth_tensor, torch_segmask_tensor), dim=1).squeeze(0)
 
             if torch_indicies_tensor.shape[0] > 1:
+                self.obs_buf = torch.cat((self.obs_buf,  torch_primcount_tensor.unsqueeze(0).T.to(self.device)), dim=1)
                 self.obs_buf = torch.cat((self.obs_buf,  torch_success_tensor.unsqueeze(0).T.to(self.device)), dim=1)
                 self.obs_buf = torch.cat((self.obs_buf,  torch_done_tensor.unsqueeze(0).T.to(self.device)), dim=1)
                 self.obs_buf = torch.cat((self.obs_buf,  torch_indicies_tensor.unsqueeze(0).T.to(self.device)), dim=1)
             else:
+                self.obs_buf = torch.cat((self.obs_buf,  torch_primcount_tensor.to(self.device)), dim=0)
                 self.obs_buf = torch.cat((self.obs_buf,  torch_success_tensor.to(self.device)), dim=0)
                 self.obs_buf = torch.cat((self.obs_buf,  torch_done_tensor.to(self.device)), dim=0)
                 self.obs_buf = torch.cat((self.obs_buf,  torch_indicies_tensor.to(self.device)), dim=0)
