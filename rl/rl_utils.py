@@ -28,9 +28,33 @@ def rearrange_state(state, b=2, h=180, w=260):
 
     # input: (ne, 614400)
     # output: (ne, 2, 480, 640)
-    state = einops.rearrange(state, 'ne (b h w) -> ne b h w', b=b, h=h, w=w)
-    return state
+	timestep = state[:, -1]
+	state = state[:, :-1]
+	state = einops.rearrange(state, 'ne (b h w) -> ne b h w', b=b, h=h, w=w)
+	# make timestep of shape (ne, 1, h, w)
+	timestep = timestep.unsqueeze(1).unsqueeze(2).unsqueeze(3).repeat(1, 1, h, w)
+	# print("timestep: ", timestep.shape)
+	state = torch.cat((state, timestep), dim=1)
+	# print("state: ", state.shape)
+	return state
 
+def rearrange_state_timestep(state, b=2, h=180, w=260):
+    # state is a tensor of shape (batch_size, 307200 + 307200)
+    # 307200 = 640 * 480
+    # rearrange such that the depth image and seg mask are separate, and the batch dimension is first
+    # (batch_size, 307200 + 307200) -> (batch_size, 2, 480, 640)
+
+    # input: (ne, 614400)
+    # output: (ne, 2, 480, 640)
+	timestep = state[:, -1]
+	state = state[:, :-1]
+	state = einops.rearrange(state, 'ne (b h w) -> ne b h w', b=b, h=h, w=w)
+	# make timestep of shape (ne, 1, h, w)
+	timestep = timestep.unsqueeze(1).unsqueeze(2).unsqueeze(3).repeat(1, 1, h, w)
+	# print("timestep: ", timestep.shape)
+	state = torch.cat((state, timestep), dim=1)
+	# print("state: ", state.shape)
+	return state
 
 # def step_primitives(action, envs):
 # 	while True:

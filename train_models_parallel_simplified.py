@@ -261,7 +261,7 @@ state, reward, done, true_indicies = returns_to_device(state, reward, done, true
 # state, reward, done = state[None,:], reward[None, :], done[None, :] # remove when parallelized
 if res_net:
     real_ys, real_dxs = get_real_ys_dxs(state)
-    state = rearrange_state(state)
+    state = rearrange_state_timestep(state)
 
 curr_rewards = 0
 # training loop
@@ -336,7 +336,7 @@ while time_step <= max_training_timesteps: ## prim_step
 
     state, reward, done, true_indicies = returns_to_device(state, reward, done, true_indicies, train_device)
     if res_net:
-        state = rearrange_state(state)
+        state = rearrange_state_timestep(state)
     # true_idx = torch.nonzero(indicies).squeeze(1)
     # print("true indicies", true_indicies)
     # print("reward ", reward)
