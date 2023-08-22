@@ -165,3 +165,4 @@ assets/urdf/Aurmar_description/meshes/pod/untitled.dae
 assets/google_scanned_models/*
 kernel/credentials.json
 kernel/dynamo-grasp-sf-key.json
+kernel/token.pickle
