@@ -142,7 +142,7 @@ def model_name(directory, policy_name, version=None, extension=True):
 		os.makedirs(checkpoint_path)
 	return checkpoint_path
 
-def get_real_ys_dxs(imgs):
+def get_real_ys_dxs(imgs, sim_device='cuda:0'):
 	# returns a dictionary with each point corresponding to the real y and dx
 	# returns 2 dictionaries, one for real y and one for real dx
 	# example real y
@@ -218,20 +218,21 @@ def get_real_ys_dxs(imgs):
 	# plt.show()
 	# plt.imshow(depth[1].cpu())
 	# plt.show()
-	return real_y.to("cuda"), real_dx.to("cuda")
+	return real_y.to(sim_device), real_dx.to(sim_device)
 
-def convert_actions(action, real_y, real_dx):
+def convert_actions(action, real_y, real_dx, sim_device='cuda:0'):
 	# action will be in the format of [batchsize, y (1-6), dy]
 	# return in the form of [batchsize, real_y[y], z, real_dx[dx], dy]
 	# action = torch.tensor([[1, 1, 1], [2, 2, 2]]).to("cuda")
 	# action[:, 0] = torch.round(action[:, 0] * 5.0)
 	# action[:, 0] = 0
 	# print("action: ", action)
-	z = torch.ones((action.shape[0], 1)).to("cuda") * -0.05
+	action = action.to(sim_device)
+	z = torch.ones((action.shape[0], 1)).to(sim_device) * -0.05
 	# select the real y in each batch using the indicies specified in action[:, 0]
 	result_y = real_y.gather(1, action[:, 0].long().unsqueeze(1))
 	result_dx = (- real_dx.gather(1, (action[:, 0].long().unsqueeze(1)) // 2)) - 1.07
-	sign = torch.ones(action.shape[0]).to("cuda")
+	sign = torch.ones(action.shape[0]).to(sim_device)
 	sign[action[:, 0] % 2 == 1] = -1
 	action[:, 1] = action[:, 1] * 0.11 * sign
 	result_y = (result_y - 40) / 260 * (-0.35) + 0.12
