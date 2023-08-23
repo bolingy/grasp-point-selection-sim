@@ -35,7 +35,7 @@ def generate(bin_id, num_envs):
         sim_device="cuda:0",
         rl_device="cuda:0",
         multi_gpu=True,
-        headless=False,
+        headless=True,
         graphics_device_id=0,
         bin_id=bin_id,
         data_path=_get_data_path(bin_id),

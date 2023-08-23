@@ -23,90 +23,6 @@ if not os.path.exists(f"{home_path}extracted_meshes"):
     os.makedirs(f"{home_path}extracted_meshes")
 
 
-def authenticate(service_account_path='kernel/dynamo-grasp-sf-key.json'):
-    """Authenticate using a service account or fall back to OAuth2."""
-    SCOPES = ['https://www.googleapis.com/auth/drive.readonly']
-
-    # Try service account authentication first
-    if os.path.exists(service_account_path):
-        credentials = google.oauth2.service_account.Credentials.from_service_account_file(
-            service_account_path, scopes=SCOPES)
-        print("Authenticated using service account.")
-    else:
-        # Fall back to OAuth2 authentication
-        creds = None
-        if os.path.exists('kernel/token.pickle'):
-            with open('kernel/token.pickle', 'rb') as token:
-                creds = pickle.load(token)
-        if not creds or not creds.valid:
-            flow = InstalledAppFlow.from_client_secrets_file(
-                'kernel/credentials.json', SCOPES)
-            creds = flow.run_local_server(port=0)
-            with open('kernel/token.pickle', 'wb') as token:
-                pickle.dump(creds, token)
-        credentials = creds
-        print("Authenticated using OAuth2.")
-
-    return build('drive', 'v3', credentials=credentials)
-
-
-def download_folder(service, folder_id, output_folder):
-    """Download all files from a specified Google Drive folder."""
-    page_token = None
-    all_files = []
-
-    # Query the files in the folder with pagination
-    while True:
-        results = service.files().list(q=f"'{folder_id}' in parents",
-                                       pageSize=1000,
-                                       pageToken=page_token).execute()
-        items = results.get('files', [])
-        all_files.extend(items)
-        page_token = results.get('nextPageToken', None)
-        if page_token is None:
-            break
-
-    # Check if there are files in the folder
-    if not all_files:
-        print("No files found in the folder.")
-    else:
-        os.makedirs(output_folder, exist_ok=True)
-        for item in all_files:
-            download_file_with_retry(
-                service, item['id'], os.path.join(output_folder, item['name']))
-
-
-def download_file_with_retry(service, file_id, output_filename, retries=3, delay=5):
-    """Attempt to download a file with retries in case of an error."""
-    for attempt in range(retries):
-        try:
-            request = service.files().get_media(fileId=file_id)
-            with io.FileIO(output_filename, 'wb') as f:
-                downloader = MediaIoBaseDownload(f, request)
-                done = False
-                while not done:
-                    status, done = downloader.next_chunk()
-                    print(
-                        f"Downloaded {int(status.progress() * 100)}% of {output_filename}.")
-            return  # Exit function after successful download
-        except HttpError as error:
-            print(
-                f"Error encountered: {error}. Retrying in {delay} seconds...")
-            time.sleep(delay)
-    print(f"Failed to download {file_id} after {retries} attempts.")
-
-
-def download_file(service, file_id, output_filename):
-    request = service.files().get_media(fileId=file_id)
-    with io.FileIO(output_filename, 'wb') as f:
-        downloader = MediaIoBaseDownload(f, request)
-        done = False
-        while not done:
-            status, done = downloader.next_chunk()
-            print(
-                f"Downloaded {int(status.progress() * 100)}% of {output_filename}")
-
-
 def delete_all_contents_in_directory(directory_path):
     for filename in os.listdir(directory_path):
         file_path = os.path.join(directory_path, filename)
@@ -219,25 +135,19 @@ bin_id_resize_bounds = {
 
 @click.command()
 @click.option('--bin-id', type=click.Choice(['3H', '3E', '3F']), default='3F')
-@click.option('--num-envs', default=50)
-def main(bin_id, num_envs):
-    files = [f for f in os.listdir(f"{home_path}") if os.path.isfile(
-        os.path.join(f"{home_path}", f))]
-    if len(files) < 300:
-        service = authenticate(
-            service_account_path='kernel/dynamo-grasp-sf-key.json')
-        download_folder(
-            service, "1l9fd_i1NYM0V0xx08hQvxVIVr0GIYZ92", home_path)
-
+@click.option('--num-envs', default=10)
+@click.option('--objects-spawn', default=30)
+def main(bin_id, num_envs, objects_spawn):
     while True:
+        if not os.path.exists('assets/google_scanned_models'):
+            os.makedirs('assets/google_scanned_models')
+
         delete_all_contents_in_directory(
             'assets/google_scanned_models/')
-
-        num_samples = 30
         # List all files with the specified extension
         files = glob.glob(os.path.join(f'{home_path}', '*.zip'))
         # Randomly sample files
-        sampled_files = random.sample(files, num_samples)
+        sampled_files = random.sample(files, objects_spawn)
 
         for name_of_file in sampled_files:
             # getting rid of path and '.zip' extension string

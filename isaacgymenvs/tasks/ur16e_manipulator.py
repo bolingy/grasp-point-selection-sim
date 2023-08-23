@@ -31,7 +31,7 @@ from gqcnn_examples.policy_for_training import dexnet3
 from autolab_core import (YamlConfig, Logger, BinaryImage,
                           CameraIntrinsics, ColorImage, DepthImage, RgbdImage)
 
-import assets.urdf_models.models_data as md
+# import assets.urdf_models.models_data as md
 from homogeneous_trasnformation_and_conversion.rotation_conversions import *
 
 import time
@@ -73,7 +73,7 @@ class UR16eManipulation(VecTask):
         self.num_dofs = None                    # Total number of DOFs per env
         self.actions = None                     # Current actions to be deployed
 
-        self.models_lib = md.model_lib()
+        # self.models_lib = md.model_lib()
 
         # Tensor placeholders
         # State of root body        (n_envs, 13)
@@ -213,6 +213,7 @@ class UR16eManipulation(VecTask):
 
         self.env_reset_id_env = torch.ones(self.num_envs)
 
+        self.grasps_done_env = torch.zeros(self.num_envs)
         self.env_done_grasping = torch.zeros(self.num_envs)
 
         self.check_object_coord_bins = {
@@ -313,6 +314,12 @@ class UR16eManipulation(VecTask):
         asset_options.thickness = 0.001
         asset_options.default_dof_drive_mode = gymapi.DOF_MODE_EFFORT
         asset_options.use_mesh_materials = True
+        asset_options.mesh_normal_mode = gymapi.COMPUTE_PER_VERTEX
+        asset_options.override_com = True
+        asset_options.override_inertia = True
+        asset_options.vhacd_enabled = True
+        asset_options.vhacd_params = gymapi.VhacdParams()
+        asset_options.vhacd_params.resolution = 500000
 
         self.object_models = []
         items = os.listdir('assets/google_scanned_models/')
@@ -814,6 +821,7 @@ class UR16eManipulation(VecTask):
             self.offset_object_pose_retract[env_id] = None
             self.retract_up[env_id] = 0
             self.count_step_suction_score_calculator[env_id] = 0
+            self.grasps_done_env[env_id] = 0
 
         self.progress_buf[env_ids] = 0
         self.reset_buf[env_ids] = 0
@@ -1306,7 +1314,9 @@ class UR16eManipulation(VecTask):
                     self.dexnet_score_env[env_count] = self.dexnet_score_env[env_count][1:]
                     self.force_SI[env_count] = self.force_SI_env[env_count][0]
                     self.force_SI_env[env_count] = self.force_SI_env[env_count][1:]
-                    self.env_done_grasping[env_count] = 1
+                    self.grasps_done_env[env_count] += 1
+                    if (self.grasps_done_env[env_count] >= 20):
+                        self.env_done_grasping[env_count] = 1
                 else:
                     env_complete_reset = torch.cat(
                         (env_complete_reset, torch.tensor([env_count])), axis=0)
