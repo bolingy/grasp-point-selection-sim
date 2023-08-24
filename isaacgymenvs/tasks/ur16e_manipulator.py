@@ -314,12 +314,12 @@ class UR16eManipulation(VecTask):
         asset_options.thickness = 0.001
         asset_options.default_dof_drive_mode = gymapi.DOF_MODE_EFFORT
         asset_options.use_mesh_materials = True
-        asset_options.mesh_normal_mode = gymapi.COMPUTE_PER_VERTEX
+        # asset_options.mesh_normal_mode = gymapi.COMPUTE_PER_VERTEX
         asset_options.override_com = True
         asset_options.override_inertia = True
         asset_options.vhacd_enabled = True
-        asset_options.vhacd_params = gymapi.VhacdParams()
-        asset_options.vhacd_params.resolution = 500000
+        # asset_options.vhacd_params = gymapi.VhacdParams()
+        # asset_options.vhacd_params.resolution = 500000
 
         self.object_models = []
         items = os.listdir('assets/google_scanned_models/')
@@ -1064,6 +1064,8 @@ class UR16eManipulation(VecTask):
                 for object_id in self.selected_object_env[env_count]:
                     bin_objects_current_pose[int(object_id.item())] = self._root_state[env_count, self._object_model_id[int(object_id.item())-1], :][:7].type(
                         torch.float).clone().detach()
+                    # Adding a 3mm offset for stablizing the pose after reset
+                    bin_objects_current_pose[int(object_id.item())][2] += 0.003
                 self.object_pose_store[env_count] = bin_objects_current_pose
                 env_list_reset_objects = torch.cat(
                     (env_list_reset_objects, torch.tensor([env_count])), axis=0)

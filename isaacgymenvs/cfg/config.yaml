@@ -8,7 +8,7 @@ experiment: ''
 num_envs: ''
 
 # seed - set to -1 to choose random seed
-seed: 42
+seed: -1
 # set to True for deterministic performance
 torch_deterministic: False
 
@@ -27,9 +27,9 @@ rl_device: 'cuda:0'
 graphics_device_id: 0
 
 ## PhysX arguments
-num_threads: 4 # Number of worker threads per scene used by PhysX - for CPU PhysX only.
+num_threads: 8 # Number of worker threads per scene used by PhysX - for CPU PhysX only.
 solver_type: 1 # 0: pgs, 1: tgs
-num_subscenes: 4 # Splits the simulation into N physics scenes and runs each one in a separate thread
+num_subscenes: 8 # Splits the simulation into N physics scenes and runs each one in a separate thread
 
 # RLGames Arguments
 # test - if set, run policy in inference mode (requires setting checkpoint to load)
