@@ -216,6 +216,8 @@ class UR16eManipulation(VecTask):
         self.grasps_done_env = torch.zeros(self.num_envs)
         self.env_done_grasping = torch.zeros(self.num_envs)
 
+        self.is_grasp_angle_normal = torch.zeros(self.num_envs).type(torch.uint8)
+
         self.check_object_coord_bins = {
             "3F": [330, 549, 524, 752],
             "3E": [394, 510, 524, 752],
@@ -1232,8 +1234,9 @@ class UR16eManipulation(VecTask):
                         self.dexnet_score_temp = torch.Tensor()
                         max_num_grasps = len(self.grasps_and_predictions)
                         top_grasps = max_num_grasps if max_num_grasps <= 10 else 7
-                        # max_num_grasps = 1
-                        for i in range(max_num_grasps):
+                        max_num_grasps = 2
+                        for i in range(max_num_grasps*2):
+                            i = int(i/2)
                             grasp_point = torch.tensor(
                                 [self.grasps_and_predictions[i][0].center.x, self.grasps_and_predictions[i][0].center.y])
 
@@ -1243,6 +1246,7 @@ class UR16eManipulation(VecTask):
                             suction_deformation_score, xyz_point, grasp_angle = self.suction_score_object.calculator(
                                 depth_image_suction, segmask, rgb_image_copy, self.grasps_and_predictions[i][0], self.object_target_id[env_count], offset)
                             grasp_angle = torch.tensor([0, 0, 0])
+                            
                             self.suction_deformation_score_temp = torch.cat(
                                 (self.suction_deformation_score_temp, torch.tensor([suction_deformation_score]))).type(torch.float)
                             self.xyz_point_temp = torch.cat(
@@ -1286,6 +1290,7 @@ class UR16eManipulation(VecTask):
                     self.grasp_point_env[env_count] = self.grasp_point_temp
                     self.dexnet_score_env[env_count] = self.dexnet_score_temp
                     self.free_envs_list[env_count] = torch.tensor(0)
+                    self.is_grasp_angle_normal[env_count] = 0
 
                 elif (total_objects != objects_spawned and (self.free_envs_list[env_count] == torch.tensor(1))):
                     print(f"Object falled down in environment {env_count}")
@@ -1319,6 +1324,8 @@ class UR16eManipulation(VecTask):
                     self.grasps_done_env[env_count] += 1
                     if (self.grasps_done_env[env_count] >= 20):
                         self.env_done_grasping[env_count] = 1
+                        
+                    self.is_grasp_angle_normal[env_count] ^= 1
                 else:
                     env_complete_reset = torch.cat(
                         (env_complete_reset, torch.tensor([env_count])), axis=0)
@@ -1637,7 +1644,7 @@ class UR16eManipulation(VecTask):
                                                      action_orientation[1],
                                                      self.speed[env_count]*100*action_orientation[2], 1]], dtype=torch.float)
 
-                    if (not self.count_step_suction_score_calculator[env_count] % 10 and self.suction_deformation_score[env_count] > self.force_threshold and self.force_encounter[env_count] == 0):
+                    if ((self.count_step_suction_score_calculator[env_count] % 5 == 0) and (self.suction_deformation_score[env_count] > self.force_threshold) and (self.force_encounter[env_count] == 0)):
                         rgb_camera_tensor = self.gym.get_camera_image_gpu_tensor(
                             self.sim, self.envs[env_count], self.camera_handles[env_count][1], gymapi.IMAGE_COLOR)
                         torch_rgb_tensor = gymtorch.wrap_tensor(
@@ -1861,7 +1868,10 @@ class UR16eManipulation(VecTask):
                                 1000).to(self.device)
                         if (self.action_contrib[env_count] == 1):
                             self.xyz_point[env_count][0] += temp_xyz_point[0]
-                            self.grasp_angle[env_count] = temp_grasp
+                            if(self.is_grasp_angle_normal[env_count] == 0):
+                                self.grasp_angle[env_count] = torch.tensor([0, 0, 0]).to(self.device)
+                            else:
+                                self.grasp_angle[env_count] = temp_grasp
 
                     if (self.force_pre_physics > torch.max(torch.tensor([self.force_threshold, self.force_SI[env_count]])) and self.action_contrib[env_count] == 0 and self.force_encounter[env_count] == 0):
                         self.force_encounter[env_count] = 1
