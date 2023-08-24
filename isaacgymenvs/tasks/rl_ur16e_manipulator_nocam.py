@@ -362,8 +362,7 @@ class RL_UR16eManipulation_Nocam(VecTask):
         # Define start pose for ur16e
         ur16e_start_pose = gymapi.Transform()
         # gymapi.Vec3(-0.45, 0.0, 1.0 + table_thickness / 2 + table_stand_height)
-        ur16e_start_pose.p = gymapi.Vec3(0, 0, 2.020)
-
+        ur16e_start_pose.p = gymapi.Vec3(-0.22, 0, 2.020)
         quat = euler_angles_to_quaternion(torch.tensor(
             [180, 0, 0]).to(self.device), "XYZ", degrees=True)
         ur16e_start_pose.r = gymapi.Quat(quat[0], quat[1], quat[2], quat[3])
@@ -755,9 +754,9 @@ class RL_UR16eManipulation_Nocam(VecTask):
             env_count = env_count.item()
             # self.RL_flag[env_count] = 0
             # How many objects should we spawn 2 or 3
-            probabilities = [0.0, 0., 1.]
+            probabilities = [0.15, 0.5, 0.35]
             ##############################################
-            # probabilities = [1.0, 0.0, 0.0]
+            probabilities = [0.0, 0.0, 1.0]
             ##############################################
             random_number = self.random_number_with_probabilities(probabilities)
             random_number += 1
@@ -765,34 +764,38 @@ class RL_UR16eManipulation_Nocam(VecTask):
             object_set = range(1, self.object_count_unique+1)
             selected_object = random.sample(object_set, random_number)
             ##############################################
-            # selected_object = [1]
+            selected_object = [1, 5, 3]
             ##############################################
             list_objects_domain_randomizer = torch.tensor([])
             
-            offset_object1 = np.array([np.random.uniform(0.71, 0.71, 1).reshape(
-                    1,)[0], np.random.uniform(0., 0., 1).reshape(1,)[0], 1.53, 0.0,
+            offset_object1 = np.array([np.random.uniform(0.6, 0.6, 1).reshape(
+                    1,)[0], np.random.uniform(-0.1, -0.1, 1).reshape(1,)[0], 1.45, 0.0,
                     0.0, 0.0])
-            offset_object2 = np.array([np.random.uniform(0.78, 0.78, 1).reshape(
-                    1,)[0], np.random.uniform(0., 0., 1).reshape(1,)[0], 1.53, 0.0,
+            offset_object2 = np.array([np.random.uniform(0.7, 0.7, 1).reshape(
+                    1,)[0], np.random.uniform(-0., -0., 1).reshape(1,)[0], 1.45, 0.0,
                     0.0, 0.0])
-            offset_object3 = np.array([np.random.uniform(0.85, 0.85, 1).reshape(
-                    1,)[0], np.random.uniform(0., 0., 1).reshape(1,)[0], 1.53, 0.0,
+            offset_object3 = np.array([np.random.uniform(0.62, 0.62, 1).reshape(
+                    1,)[0], np.random.uniform(-0.1, -0.1, 1).reshape(1,)[0], 1.45, 0.0,
                     0.0, 0.0])
-            offset_objects = [offset_object1, offset_object2, offset_object3]
+            offset_objects = [offset_object2, offset_object3, offset_object1]
 
             for object_count in selected_object:
                 domain_randomizer = random_number = random.choice(
                     [1, 2, 3, 4, 5])
-                # offset_object = np.array([np.random.uniform(0.67, 0.7, 1).reshape(
-                #     1,)[0], np.random.uniform(-0.22, -0.12, 1).reshape(1,)[0], 1.3, random.choice([0, 1.57, 3.14]),
-                #     random.choice([0, 1.57, 3.14]), np.random.uniform(0.0, 3.14, 1).reshape(1,)[0]])
-                offset_object = np.array([np.random.uniform(0.67, 0.9, 1).reshape(
-                    1,)[0], np.random.uniform(-0.15, 0.10, 1).reshape(1,)[0], 1.55, 0.0,
+                # offset_object = np.array([np.random.uniform(0.67, 0.9, 1).reshape(
+                #     1,)[0], np.random.uniform(-0.15, 0.10, 1).reshape(1,)[0], 1.55, 0.0,
+                #     0.0, 0.0])
+                offset_object = np.array([np.random.uniform(0.7, 0.9, 1).reshape(
+                    1,)[0], np.random.uniform(-0.1, 0.06, 1).reshape(1,)[0], 1.55, 0.0,
                     0.0, 0.0])
                 ##############################################
                 domain_randomizer = random_number = random.choice(
                     [1])
-                # offset_object = offset_objects[object_count-1]
+                # print("object count", object_count)
+                if object_count == 5:
+                    offset_object = offset_objects[1]
+                else:
+                    offset_object = offset_objects[object_count-1]
                 ##############################################
                 quat = euler_angles_to_quaternion(
                     torch.tensor(offset_object[3:6]), "XYZ", degrees=False)
@@ -804,6 +807,7 @@ class RL_UR16eManipulation_Nocam(VecTask):
                     (list_objects_domain_randomizer, torch.tensor([item_config])))
             self.selected_object_env[env_count] = list_objects_domain_randomizer
             self.object_pose_store[env_count] = object_list_env
+
 
         # print(env_count, "objects spawned in each environment",
             #   self.selected_object_env)
@@ -961,7 +965,6 @@ class RL_UR16eManipulation_Nocam(VecTask):
         # _distance = torch.norm(_object_pos - _eef_pos, dim=1)
         # print("eef_pos", _eef_pos)
         # print("_object_pos", _object_pos)
-        # print("distance", self.min_distance)
         _eef_pos[:, 0] += 0.02
         _distance = torch.norm(_object_pos - _eef_pos, dim=1)
         # print("eef_pos", _eef_pos)
@@ -1209,11 +1212,11 @@ class RL_UR16eManipulation_Nocam(VecTask):
                     ))][:3] - self._root_state[env_count, self._object_model_id[int(object_id.item())-1], :][:3])
 
                     if (_all_objects_current_pose[int(object_id.item())][2] < torch.tensor(1.3) or _all_objects_current_pose[int(object_id.item())][2] > torch.tensor(1.7)
-                        or _all_objects_current_pose[int(object_id.item())][0] < torch.tensor(0.67) or _all_objects_current_pose[int(object_id.item())][0] > torch.tensor(0.9)
-                        or _all_objects_current_pose[int(object_id.item())][1] < torch.tensor(-0.17) or _all_objects_current_pose[int(object_id.item())][1] > torch.tensor(0.11)):
-                        env_complete_reset = torch.cat(
-                            (env_complete_reset, torch.tensor([env_count])), axis=0)
-                        print("Object outside bin error")
+                        or _all_objects_current_pose[int(object_id.item())][0] < torch.tensor(0.45) or _all_objects_current_pose[int(object_id.item())][0] > torch.tensor(1.0)
+                        or _all_objects_current_pose[int(object_id.item())][1] < torch.tensor(-0.18) or _all_objects_current_pose[int(object_id.item())][1] > torch.tensor(0.10)):
+                            env_complete_reset = torch.cat(
+                                (env_complete_reset, torch.tensor([env_count])), axis=0)
+                            print("Object out of bin 2")
                 _all_object_position_error = torch.abs(
                     _all_object_position_error)
                 # if (_all_object_position_error > torch.tensor(0.0055) and self.run_dexnet[env_count] == torch.tensor(0)):
@@ -1230,17 +1233,6 @@ class RL_UR16eManipulation_Nocam(VecTask):
                     '''
                     # print("!!!!!!!!!!!!!!!Running Dexnet 3.0")
                     if (self.RL_flag[env_count] == torch.tensor(1)):
-                        # Random object select
-                        # random_object_select = self.selected_object_env[env_count][0]
-                        # print("random_object_select", random_object_select)
-                        # random_object_select = random.sample(
-                        #     self.selected_object_env[env_count].tolist(), 1)
-
-                        # Select the first object in the list of selected objects
-                        self.object_target_id[env_count] = torch.tensor( 
-                            self.selected_object_env[env_count][0]).to(self.device).type(torch.int)
-                        
-                        # Select the object with the largest x-coordinate
                         max_x = 0.0
                         for i in range(len(self.selected_object_env[env_count])):
                             object_id = self.selected_object_env[env_count][i]
@@ -1320,7 +1312,7 @@ class RL_UR16eManipulation_Nocam(VecTask):
                         rotation_matrix_camera_to_object = euler_angles_to_matrix(torch.tensor(
                             [0, 0, 0]).to(self.device), "XYZ", degrees=False)
                         T_camera_to_object = transformation_matrix(
-                            rotation_matrix_camera_to_object, torch.tensor([1.1200, self.prim_y, self.prim_z]).to(self.device)) 
+                            rotation_matrix_camera_to_object, torch.tensor([0.900, self.prim_y, self.prim_z]).to(self.device)) 
                         # Transformation from base link to object
                         T_world_to_object = torch.matmul(
                             self.T_world_to_camera_link, T_camera_to_object)
@@ -1395,9 +1387,7 @@ class RL_UR16eManipulation_Nocam(VecTask):
                             if curr_prim == 2:
                                 self.prim[env_count] = 0
                                 # reset arm to init pose
-                                # self.deploy_actions(env_count, self.ur16e_default_dof_pos)
-                                env_list_reset_default_arm_pose = torch.cat(
-                                    (env_list_reset_default_arm_pose, torch.tensor([env_count])), axis=0)
+                                self.deploy_actions(env_count, self.ur16e_default_dof_pos)
                                 self.frame_count[env_count] = 0
                                 self.progress_buf[env_count] = 0
                                 # env_complete_reset[env_count] = 1
@@ -1521,11 +1511,11 @@ class RL_UR16eManipulation_Nocam(VecTask):
                         _all_object_rotation_error += torch.sum(e1-e2)
 
                         if (_all_objects_current_pose[int(object_id.item())][2] < torch.tensor(1.3) or _all_objects_current_pose[int(object_id.item())][2] > torch.tensor(1.7)
-                        or _all_objects_current_pose[int(object_id.item())][0] < torch.tensor(0.67) or _all_objects_current_pose[int(object_id.item())][0] > torch.tensor(0.9)
-                        or _all_objects_current_pose[int(object_id.item())][1] < torch.tensor(-0.17) or _all_objects_current_pose[int(object_id.item())][1] > torch.tensor(0.11)):
+                        or _all_objects_current_pose[int(object_id.item())][0] < torch.tensor(0.45) or _all_objects_current_pose[int(object_id.item())][0] > torch.tensor(1.0)
+                        or _all_objects_current_pose[int(object_id.item())][1] < torch.tensor(-0.18) or _all_objects_current_pose[int(object_id.item())][1] > torch.tensor(0.10)):
                             env_complete_reset = torch.cat(
                                 (env_complete_reset, torch.tensor([env_count])), axis=0)
-                            print("Object out of bin")
+                            print("Object out of bin 1")
                     _all_object_position_error = torch.abs(
                         _all_object_position_error)
                     _all_object_rotation_error = torch.abs(
