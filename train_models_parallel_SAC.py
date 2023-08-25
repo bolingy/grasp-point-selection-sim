@@ -53,45 +53,46 @@ has_continuous_action_space = True
 #max_ep_len = 2                     # max timesteps in one episode
 max_training_timesteps = int(1e5)   # break training loop if timeteps > max_training_timesteps
 
-print_freq = 240                  # print avg reward in the interval (in num timesteps)
+print_freq = 480                  # print avg reward in the interval (in num timesteps)
 log_freq = 90 #max_ep_len * 10      # log avg reward in the interval (in num timesteps)
-save_model_freq = 240      # save model frequency (in num timesteps)
+save_model_freq = 480      # save model frequency (in num timesteps)
 
 ## Note : print/log frequencies should be > than max_ep_len
 ################ SAC hyperparameters ################
 
 pick_len = 1
-update_size = pick_len * 240
+update_size = pick_len * 480
+start_steps = 480
 updates_per_step = 1
 max_size = 1000000
-actor_lr = 1e-5
-critic_lr = 3e-5
+actor_lr = 1e-6
+critic_lr = 3e-6
 alpha_lr = 0.00003
 gamma = 0.99                # discount factor
 tau = 0.005                 # target network update rate
 autoentropy = True          # automatically udpates alpha for entropy
 alpha = 0.9
 init_alpha = 0.2
-hidden_size = 64           # size of hidden layers
+hidden_size = 128           # size of hidden layers
 
 random_seed = 1       # set random seed if required (0 = no random seed)
 
 
 '''Training/Evaluation Parameter'''
-env_name = "RL_UR16eManipulation_Nocam"
-policy_name = "seq_multiobjreachori_SAC_masked_dones"
-head_less = False
-EVAL = True #if you want to evaluate the model
+env_name = "RL_UR16eManipulation_Full"
+policy_name = "seq_multiobjbinpick_SAC_masked_dones"
+ne = 20               # number of environments
+head_less = True
+EVAL = False #if you want to evaluate the model
 if EVAL:
     start_steps = 0
     autoentropy = False
     alpha = 0.0
-load_policy = True
+load_policy = False
 policy_name = "{0}_batch_{1}_actorlr_{2}_criticlr_{3}_gamma_{4}_tau_{5}".format(policy_name, update_size, actor_lr, critic_lr, gamma, tau)
 # policy_name = "seq_multiobjreachori_SAC_batch_1000_actorlr_0.001_criticlr_0.001_gamma_0.99_tau_0.005_3"
-load_policy_version = 9840                  # specify policy version (i.e. int, 50) when loading a trained policy
-ne = 2               # number of environments
-res_net = False
+load_policy_version = None                  # specify policy version (i.e. int, 50) when loading a trained policy
+res_net = True
 
 print("training environment name : " + env_name)
 if not EVAL:
@@ -133,7 +134,7 @@ state_dim = env.observation_space.shape[0]
 
 # action space dimension
 if has_continuous_action_space:
-    action_dim = env.action_space.shape[0] - 1 # -1 for poking behavior
+    action_dim = env.action_space.shape[0] # -1 for poking behavior
 else:
     action_dim = env.action_space.n
 
@@ -218,12 +219,10 @@ if random_seed:
 print("============================================================================================")
 
 ################# training procedure ################
-# state_dim = (state_dim, )
-state_dim = state_dim
 action_space = torch.zeros(action_dim)
 
 # initialize a PPO agent
-sac_agent = SAC(state_dim, action_space, gamma, tau, alpha, init_alpha, "Gaussian", 1, autoentropy, train_device, hidden_size, actor_lr, critic_lr, alpha_lr) 
+sac_agent = SAC(state_dim, action_space, gamma, tau, alpha, init_alpha, "Mixed", 1, autoentropy, train_device, hidden_size, actor_lr, critic_lr, alpha_lr, res_net)
 if load_policy:
     checkpoint_path = "checkpoints/sac_checkpoint_{}_{}_{}".format(env_name, policy_name, load_policy_version)
     if os.path.exists(checkpoint_path):
@@ -276,6 +275,7 @@ state, reward, done, true_indicies = step_primitives(actions, env) #env.reset() 
 # state, reward, done = state[None,:], reward[None, :], done[None, :] # remove when parallelized
 
 if res_net:
+    real_ys, real_dxs = get_real_ys_dxs(state)
     state = rearrange_state(state)
 
 curr_rewards = 0
@@ -285,16 +285,19 @@ time_step_update = 0
 # training loop
 while total_timesteps <= max_training_timesteps:
     if total_timesteps < start_steps:
-        # randomly sample actions between 0 and 1 in action space3
-        action = torch.rand(true_indicies.shape[0], action_dim).to(sim_device)
+        # randomly sample actions 
+        # action 1 is discrete (0-5), action 2 is continuous (0-1)
+        action_1 = torch.randint(0, 6, (state.shape[0], 1)).to(sim_device)
+        action_2 = torch.rand(state.shape[0], 1).to(sim_device)
+        action = torch.cat((action_1, action_2), dim = 1)
     else:
         action = sac_agent.select_action(state, EVAL)
-
     for i, true_i in enumerate(true_indicies):
         buf_envs[true_i].states.append(state[i][:, None].clone().detach())
         buf_envs[true_i].actions.append(action[i].clone().detach())
         if true_i == 0:
             print("action of env 0 updated", action[i])
+    action = convert_actions(action, real_ys, real_dxs, sim_device=sim_device)
 
     if len(memory) > update_size and not EVAL:
         # Number of updates per step in environment
@@ -304,10 +307,11 @@ while total_timesteps <= max_training_timesteps:
             updates += 1
             wandb.log({'critic_1_loss': critic_1_loss, 'critic_2_loss': critic_2_loss, 'policy_loss': policy_loss, 'ent_loss': ent_loss, 'alpha': alpha})
 
-    action = scale_actions(action).to(sim_device)
-    action = torch.cat((action, torch.zeros(true_indicies.shape[0], 1).to(sim_device)), dim=1)
+
+    # action = torch.cat((action, torch.zeros(true_indicies.shape[0], 1).to(sim_device)), dim=1)
     create_env_action_via_true_indicies(true_indicies, action, actions, ne, sim_device)
     state, reward, done, true_indicies = step_primitives(actions, env)
+    real_ys, real_dxs = get_real_ys_dxs(state)
     
     if EVAL and true_indicies[0] == 0 and res_net:
         imgs = state
@@ -349,7 +353,8 @@ while total_timesteps <= max_training_timesteps:
             print("target is back")
         else:
             print("target is x-middle")
-    
+
+    # state, reward, done, true_indicies = returns_to_device(state, reward, done, true_indicies, train_device)
     if res_net:
         state = rearrange_state(state)
 
@@ -368,6 +373,7 @@ while total_timesteps <= max_training_timesteps:
             print_running_episodes += 1
             # !!!!!!!!!!!mask (?)
             memory.push(buf_envs[true_i].states[-1], buf_envs[true_i].actions[-1], buf_envs[true_i].rewards[-1], new_state, ~ torch.tensor(buf_envs[true_i].is_terminals[-1], dtype=torch.bool))
+            wandb.log({"Buffer size": len(memory)})
             buf_envs[true_i].clear()
 
 

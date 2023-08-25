@@ -3,11 +3,11 @@ import torch
 import torch.nn.functional as F
 from torch.optim import Adam
 from rl.sac_utils import soft_update, hard_update
-from rl.sac_models import GaussianPolicy, QNetwork, DeterministicPolicy
+from rl.sac_models import GaussianPolicy, QNetwork, DeterministicPolicy, ActorTimestepPolicy, QResNetwork, ResidualBlock, ResNet
 
 
 class SAC(object):
-    def __init__(self, num_inputs, action_space, gamma, tau, alpha, init_alpha, policy, target_update_interval, automatic_entropy_tuning, device, hidden_size, actor_lr, critic_lr, alpha_lr):
+    def __init__(self, num_inputs, action_space, gamma, tau, alpha, init_alpha, policy, target_update_interval, automatic_entropy_tuning, device, hidden_size, actor_lr, critic_lr, alpha_lr, res_net):
 
         self.gamma = gamma
         self.tau = tau
@@ -18,11 +18,12 @@ class SAC(object):
         self.automatic_entropy_tuning = automatic_entropy_tuning
 
         self.device = device
+        self.res_net = res_net
 
-        self.critic = QNetwork(num_inputs, action_space.shape[0], hidden_size).to(device=self.device)
+        self.critic = QResNetwork(ResidualBlock, [3, 4, 6, 3]).to(self.device)
         self.critic_optim = Adam(self.critic.parameters(), lr=critic_lr)
 
-        self.critic_target = QNetwork(num_inputs, action_space.shape[0], hidden_size).to(self.device)
+        self.critic_target = QResNetwork(ResidualBlock, [3, 4, 6, 3]).to(self.device)
         hard_update(self.critic_target, self.critic)
 
         if self.policy_type == "Gaussian":
@@ -35,7 +36,15 @@ class SAC(object):
 
             self.policy = GaussianPolicy(num_inputs, action_space.shape[0], hidden_size, action_space).to(self.device)
             self.policy_optim = Adam(self.policy.parameters(), lr=actor_lr)
+        elif self.policy_type == "Mixed":
+            if self.automatic_entropy_tuning is True:
+                self.target_entropy = -torch.prod(torch.Tensor(action_space.shape).to(self.device)).item()
+                self.log_alpha = torch.log(torch.tensor([init_alpha])).to(self.device).requires_grad_()
+                # self.log_alpha = torch.zeros(1, requires_grad=True, device=self.device)
+                self.alpha_optim = Adam([self.log_alpha], lr=alpha_lr)
 
+            self.policy = ActorTimestepPolicy(ResidualBlock, [3, 4, 6, 3]).to(self.device)
+            self.policy_optim = Adam(self.policy.parameters(), lr=actor_lr)
         else:
             self.alpha = 0
             self.automatic_entropy_tuning = False
