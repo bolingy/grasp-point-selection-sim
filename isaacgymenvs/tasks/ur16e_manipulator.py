@@ -229,7 +229,7 @@ class UR16eManipulation(VecTask):
         }
 
         self.object_bin_prob_spawn = {
-            "3F": [0.025, 0.25, 0.7, 1],
+            "3F": [0.01, 0.2, 0.6, 1],
             "3E": [0.05, 0.5, 0.8, 1],
             "3H": [0.05, 0.5, 0.8, 1],
         }
