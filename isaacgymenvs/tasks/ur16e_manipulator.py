@@ -216,7 +216,8 @@ class UR16eManipulation(VecTask):
         self.grasps_done_env = torch.zeros(self.num_envs)
         self.env_done_grasping = torch.zeros(self.num_envs)
 
-        self.is_grasp_angle_normal = torch.zeros(self.num_envs).type(torch.uint8)
+        self.is_grasp_angle_normal = torch.zeros(
+            self.num_envs).type(torch.uint8)
 
         self.check_object_coord_bins = {
             "3F": [330, 549, 524, 752],
@@ -231,7 +232,7 @@ class UR16eManipulation(VecTask):
         }
 
         self.object_bin_prob_spawn = {
-            "3F": [0.025, 0.25, 0.7, 1],
+            "3F": [0.01, 0.2, 0.6, 1],
             "3E": [0.05, 0.5, 0.8, 1],
             "3H": [0.05, 0.5, 0.8, 1],
         }
@@ -847,8 +848,8 @@ class UR16eManipulation(VecTask):
                         object_pose_env = torch.tensor(
                             [[counter/4, 1, 0.5, 0.0, 0.0, 0.0, 1.0]]).to(self.device)
                     else:
-                        object_pose_env = torch.tensor(self.object_pose_store[env_count.item(
-                        )][counter+1]).to(self.device)
+                        object_pose_env = self.object_pose_store[env_count.item(
+                        )][counter+1].clone().detach().to(self.device)
                         # quat = self.object_pose_store[env_count.item(
                         # )][counter+1][3:7]
                         # object_pose_env = torch.cat([object_pose_env[:3], quat])
@@ -1246,7 +1247,7 @@ class UR16eManipulation(VecTask):
                             suction_deformation_score, xyz_point, grasp_angle = self.suction_score_object.calculator(
                                 depth_image_suction, segmask, rgb_image_copy, self.grasps_and_predictions[i][0], self.object_target_id[env_count], offset)
                             grasp_angle = torch.tensor([0, 0, 0])
-                            
+
                             self.suction_deformation_score_temp = torch.cat(
                                 (self.suction_deformation_score_temp, torch.tensor([suction_deformation_score]))).type(torch.float)
                             self.xyz_point_temp = torch.cat(
@@ -1324,13 +1325,13 @@ class UR16eManipulation(VecTask):
                     self.grasps_done_env[env_count] += 1
                     if (self.grasps_done_env[env_count] >= 20):
                         self.env_done_grasping[env_count] = 1
-                        
+
                     self.is_grasp_angle_normal[env_count] ^= 1
                 else:
                     env_complete_reset = torch.cat(
                         (env_complete_reset, torch.tensor([env_count])), axis=0)
                 try:
-                    if ((env_count in self.grasp_angle_env) and (torch.all(self.xyz_point[env_count]) == torch.tensor(0.))):
+                    if ((env_count in self.grasp_angle_env) and (torch.count_nonzero(self.xyz_point[env_count]) < 1)):
                         # error due to illegal 3d coordinate
                         print("xyz point error", self.xyz_point[env_count])
                         env_list_reset_arm_pose = torch.cat(
@@ -1868,8 +1869,9 @@ class UR16eManipulation(VecTask):
                                 1000).to(self.device)
                         if (self.action_contrib[env_count] == 1):
                             self.xyz_point[env_count][0] += temp_xyz_point[0]
-                            if(self.is_grasp_angle_normal[env_count] == 0):
-                                self.grasp_angle[env_count] = torch.tensor([0, 0, 0]).to(self.device)
+                            if (self.is_grasp_angle_normal[env_count] == 0):
+                                self.grasp_angle[env_count] = torch.tensor(
+                                    [0, 0, 0]).to(self.device)
                             else:
                                 self.grasp_angle[env_count] = temp_grasp
 

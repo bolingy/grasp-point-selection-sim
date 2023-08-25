@@ -7,13 +7,6 @@ import glob
 import subprocess
 import click
 import io
-from googleapiclient.discovery import build
-from googleapiclient.errors import HttpError
-from googleapiclient.http import MediaIoBaseDownload
-from google_auth_oauthlib.flow import InstalledAppFlow
-from google.oauth2.credentials import Credentials
-import google.auth.transport.requests
-import google.oauth2.service_account
 import pickle
 import time
 
@@ -127,9 +120,9 @@ def create_urdf_with_inertia(filename, mass, ixx, iyy, izz, ixy=0, ixz=0, iyz=0)
 
 
 bin_id_resize_bounds = {
-    "3F": [0.1, 0.2],
-    "3E": [0.075, 0.12],
-    "3H": [0.075, 0.13],
+    "3F": [0.1, 0.18],
+    "3E": [0.075, 0.11],
+    "3H": [0.075, 0.12],
 }
 
 

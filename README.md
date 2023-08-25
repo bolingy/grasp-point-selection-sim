@@ -51,13 +51,11 @@ pip install open3d
 pip install tensorflow==2.12.0 tensorflow-estimator==2.12.0 tensorflow-io-gcs-filesystem==0.32.0
 
 # Install cudatoolkit and cudnn libraries
-conda install cudatoolkit==11.8.0 -c nvidia
+conda install cudatoolkit==11.8.0
 conda install cudnn
 
-pip install --upgrade google-api-python-client google-auth-httplib2 google-auth-oauthlib
-
 # Also export the LD_LIBRARY_PATH for cuda
-export LD_LIBRARY_PATH=path/to/miniconda3/envs/isaac_ws_py38/lib
+export LD_LIBRARY_PATH=path/to/miniconda3/envs/myenv/lib
 
 # Outside this repo create two folders for saving the data(grasp point properties, depth image, segmentation mask and rgb image),
 mkdir System_Identification_Data && cd System_Identification_Data
@@ -65,10 +63,15 @@ mkdir Parallelization-Data
 ```
 
 ## Running
-To run the project, use the data_collection.py script:
+To run the project, use the kernel/object_spawning_kernel.py script for spawning 10 environments and 30 unique objects:
 ```bash
-python data_collection.py
+python kernel/object_spawning_kernel.py --bin-id 3F --num-envs 10 --objects-spawn 30
 ```
+
+Also download the google scanned objects from this link and paste it outside the `grasp-point-selection-sim` git folder: [google scanned objects link](https://drive.google.com/drive/folders/1uDtTad67tJ3GwaPDPTvR5TWf1iArYeq1?usp=sharing)
+Folder name is `Google Scanned Objects`
+
+
 ## python38
 If you would prefer to use Python 3.7 for this project, switch to the parallelization branch of the repository:
 ```bash
