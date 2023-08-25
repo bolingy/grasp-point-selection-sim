@@ -7,13 +7,6 @@ import glob
 import subprocess
 import click
 import io
-from googleapiclient.discovery import build
-from googleapiclient.errors import HttpError
-from googleapiclient.http import MediaIoBaseDownload
-from google_auth_oauthlib.flow import InstalledAppFlow
-from google.oauth2.credentials import Credentials
-import google.auth.transport.requests
-import google.oauth2.service_account
 import pickle
 import time
 

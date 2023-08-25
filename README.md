@@ -51,13 +51,11 @@ pip install open3d
 pip install tensorflow==2.12.0 tensorflow-estimator==2.12.0 tensorflow-io-gcs-filesystem==0.32.0
 
 # Install cudatoolkit and cudnn libraries
-conda install cudatoolkit==11.8.0 -c nvidia
+conda install cudatoolkit==11.8.0
 conda install cudnn
 
-pip install --upgrade google-api-python-client google-auth-httplib2 google-auth-oauthlib
-
 # Also export the LD_LIBRARY_PATH for cuda
-export LD_LIBRARY_PATH=path/to/miniconda3/envs/isaac_ws_py38/lib
+export LD_LIBRARY_PATH=path/to/miniconda3/envs/myenv/lib
 
 # Outside this repo create two folders for saving the data(grasp point properties, depth image, segmentation mask and rgb image),
 mkdir System_Identification_Data && cd System_Identification_Data
