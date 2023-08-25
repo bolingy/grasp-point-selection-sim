@@ -65,10 +65,15 @@ mkdir Parallelization-Data
 ```
 
 ## Running
-To run the project, use the data_collection.py script:
+To run the project, use the kernel/object_spawning_kernel.py script for spawning 10 environments and 30 unique objects:
 ```bash
-python data_collection.py
+python kernel/object_spawning_kernel.py --bin-id 3F --num-envs 10 --objects-spawn 30
 ```
+
+Also download the google scanned objects from this link and paste it outside the `grasp-point-selection-sim` git folder: [google scanned objects link](https://drive.google.com/drive/folders/1uDtTad67tJ3GwaPDPTvR5TWf1iArYeq1?usp=sharing)
+Folder name is `Google Scanned Objects`
+
+
 ## python38
 If you would prefer to use Python 3.7 for this project, switch to the parallelization branch of the repository:
 ```bash
