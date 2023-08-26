@@ -65,7 +65,12 @@ mkdir Parallelization-Data
 ## Running
 To run the project, use the kernel/object_spawning_kernel.py script for spawning 10 environments and 30 unique objects:
 ```bash
-python kernel/object_spawning_kernel.py --bin-id 3F --num-envs 10 --objects-spawn 30
+python kernel/object_spawning_kernel.py --bin-id 3F --num-envs 10 --objects-spawn 30 --num-runs 1
+```
+
+For help regarding arguments run,
+```bash
+python kernel/object_spawning_kernel.py --help
 ```
 
 Also download the google scanned objects from this link and paste it outside the `grasp-point-selection-sim` git folder: [google scanned objects link](https://drive.google.com/drive/folders/1uDtTad67tJ3GwaPDPTvR5TWf1iArYeq1?usp=sharing)
