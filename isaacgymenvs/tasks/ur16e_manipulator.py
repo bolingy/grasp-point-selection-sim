@@ -543,10 +543,12 @@ class UR16eManipulation(VecTask):
             self.camera_handles[i].append(camera_handle_gripper)
 
             l_color = gymapi.Vec3(1, 1, 1)
-            l_ambient = gymapi.Vec3(0.1, 0.1, 0.1)
+            l_ambient = gymapi.Vec3(0.05, 0.05, 0.05)
+
             l_direction = gymapi.Vec3(-1, -1, 1)
             self.gym.set_light_parameters(
                 self.sim, 0, l_color, l_ambient, l_direction)
+            
             l_direction = gymapi.Vec3(-1, 1, 1)
             self.gym.set_light_parameters(
                 self.sim, 1, l_color, l_ambient, l_direction)
@@ -1317,8 +1319,11 @@ class UR16eManipulation(VecTask):
                     self.force_SI[env_count] = self.force_SI_env[env_count][0]
                     self.force_SI_env[env_count] = self.force_SI_env[env_count][1:]
                     self.grasps_done_env[env_count] += 1
-                    if (self.grasps_done_env[env_count] >= 20):
-                        self.env_done_grasping[env_count] = 1
+                    '''
+                    Uncomment this if you want to only collect data from each environment only once
+                    '''
+                    # if (self.grasps_done_env[env_count] >= 20):
+                    #     self.env_done_grasping[env_count] = 1
                 else:
                     env_complete_reset = torch.cat(
                         (env_complete_reset, torch.tensor([env_count])), axis=0)
