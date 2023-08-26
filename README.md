@@ -51,7 +51,7 @@ pip install open3d
 pip install tensorflow==2.12.0 tensorflow-estimator==2.12.0 tensorflow-io-gcs-filesystem==0.32.0
 
 # Install cudatoolkit and cudnn libraries
-conda install cudatoolkit==11.8.0 -c nvidia
+conda install cudatoolkit==11.8.0
 conda install cudnn
 
 # Also export the LD_LIBRARY_PATH for cuda

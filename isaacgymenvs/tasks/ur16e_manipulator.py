@@ -217,7 +217,7 @@ class UR16eManipulation(VecTask):
         }
 
         self.object_bin_prob_spawn = {
-            "3F": [0.025, 0.35, 1],
+            "3F": [0.01, 0.4, 1],
             "3E": [0.05, 0.45, 1],
             "3H": [0.05, 0.45, 1],
         }
@@ -847,8 +847,8 @@ class UR16eManipulation(VecTask):
                     object_pose_env = torch.tensor(
                         [[counter/4, 1, 0.5, 0.0, 0.0, 0.0, 1.0]]).to(self.device)
                 else:
-                    object_pose_env = torch.tensor(self.object_pose_store[env_count.item(
-                    )][counter+1]).to(self.device)
+                    object_pose_env = self.object_pose_store[env_count.item(
+                    )][counter+1].clone().detach().to(self.device)
                     # quat = self.object_pose_store[env_count.item(
                     # )][counter+1][3:7]
                     # object_pose_env = torch.cat([object_pose_env[:3], quat])
@@ -1301,7 +1301,7 @@ class UR16eManipulation(VecTask):
                     env_complete_reset = torch.cat(
                         (env_complete_reset, torch.tensor([env_count])), axis=0)
                 try:
-                    if ((env_count in self.grasp_angle_env) and (torch.all(self.xyz_point[env_count]) == torch.tensor(0.))):
+                    if ((env_count in self.grasp_angle_env) and (torch.count_nonzero(self.xyz_point[env_count]) < 1)):
                         # error due to illegal 3d coordinate
                         print("xyz point error", self.xyz_point[env_count])
                         env_list_reset_arm_pose = torch.cat(
@@ -1555,7 +1555,7 @@ class UR16eManipulation(VecTask):
                                                      self.speed[env_count]*100 *
                                                      action_orientation[1],
                                                      self.speed[env_count]*100*action_orientation[2], 1]], dtype=torch.float)
-                    
+
                     if (not self.count_step_suction_score_calculator[env_count] % 10 and self.suction_deformation_score[env_count] > self.force_threshold and self.force_encounter[env_count] == 0):
                         rgb_camera_tensor = self.gym.get_camera_image_gpu_tensor(
                             self.sim, self.envs[env_count], self.camera_handles[env_count][1], gymapi.IMAGE_COLOR)
