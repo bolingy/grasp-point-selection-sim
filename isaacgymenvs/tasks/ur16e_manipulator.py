@@ -1722,7 +1722,7 @@ class UR16eManipulation(VecTask):
                                 (env_list_reset_arm_pose, torch.tensor([env_count])), axis=0)
                             env_list_reset_objects = torch.cat(
                                 (env_list_reset_objects, torch.tensor([env_count])), axis=0)
-                            print(env_count, "reset because of arm angle errror")
+                            print(env_count, "reset because of arm angle error")
                             oscillation = False
                             success = False
                             json_save = {
