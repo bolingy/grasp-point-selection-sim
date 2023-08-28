@@ -799,8 +799,8 @@ class RL_UR16eManipulation(VecTask):
                     [1, 2, 3, 4, 5])
                 if self.obj_randomization:
                     offset_object = np.array([np.random.uniform(0.57, 0.7, 1).reshape(
-                        1,)[0], np.random.uniform(-0.15, 0.10, 1).reshape(1,)[0], 1.55, 0.0,
-                        0.0, 0.0])
+                        1,)[0], np.random.uniform(-0.15, 0.10, 1).reshape(1,)[0], 1.55, np.random.uniform(-math.pi/2, math.pi/2, 1).reshape(1,)[0],
+                        np.random.uniform(-math.pi/2, math.pi/2, 1).reshape(1,)[0], np.random.uniform(-math.pi/2, math.pi/2, 1).reshape(1,)[0]])
                     domain_randomizer = random_number = random.choice(
                     [1, 2, 3, 4, 5])
                 else:
