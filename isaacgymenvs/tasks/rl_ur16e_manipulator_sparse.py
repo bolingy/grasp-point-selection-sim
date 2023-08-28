@@ -841,8 +841,7 @@ class RL_UR16eManipulation(VecTask):
             self.return_pre_grasp[env_id] = torch.tensor(0)
             self.primitive_count[env_id.item()] = torch.tensor(1)
             self.min_distance[env_id] = torch.tensor(100)
-            self.torch_target_area_tensor = torch.zeros(self.num_envs).to(self.device)
-
+            self.torch_target_area_tensor[env_id] = 0
         self.progress_buf[env_ids] = 0
         self.reset_buf[env_ids] = 0
 
