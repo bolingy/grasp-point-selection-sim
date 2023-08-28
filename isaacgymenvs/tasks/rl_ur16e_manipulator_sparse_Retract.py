@@ -1010,7 +1010,7 @@ class RL_UR16eManipulation(VecTask):
         # image observations
         self.obs_buf = torch.zeros(93600).to(self.device)
         
-        
+        # print("object disp save", self.object_disp_save[0])
 
         # torch_rgb_cameras = torch.FloatTensor(self.rgb_camera_tensors).to(self.device)
 
@@ -1260,7 +1260,7 @@ class RL_UR16eManipulation(VecTask):
                         torch.float).detach().clone()
                     _all_object_position_error += torch.sum(self.object_pose_store[env_count][int(object_id.item(
                     ))][:3] - self._root_state[env_count, self._object_model_id[int(object_id.item())-1], :][:3])
-
+    
                     if (_all_objects_current_pose[int(object_id.item())][2] < torch.tensor(1.3) or _all_objects_current_pose[int(object_id.item())][2] > torch.tensor(1.7)
                         or _all_objects_current_pose[int(object_id.item())][0] < torch.tensor(0.4) or _all_objects_current_pose[int(object_id.item())][0] > torch.tensor(1.0)
                         or _all_objects_current_pose[int(object_id.item())][1] < torch.tensor(-0.18) or _all_objects_current_pose[int(object_id.item())][1] > torch.tensor(0.10)):
@@ -1791,12 +1791,14 @@ class RL_UR16eManipulation(VecTask):
                         e2 = quaternion_to_euler_angles(q2, "XYZ", False)
                         _all_object_rotation_error += torch.sum(e1-e2)
 
-                        # if (_all_objects_current_pose[int(object_id.item())][2] < torch.tensor(1.3) or _all_objects_current_pose[int(object_id.item())][2] > torch.tensor(1.7)
-                        # or _all_objects_current_pose[int(object_id.item())][0] < torch.tensor(0.4) or _all_objects_current_pose[int(object_id.item())][0] > torch.tensor(1.0)
-                        # or _all_objects_current_pose[int(object_id.item())][1] < torch.tensor(-0.18) or _all_objects_current_pose[int(object_id.item())][1] > torch.tensor(0.10)):
-                        #     env_complete_reset = torch.cat(
-                        #         (env_complete_reset, torch.tensor([env_count])), axis=0)
-                        #     print("Object out of bin 1")
+                        if (_all_objects_current_pose[int(object_id.item())][2] < torch.tensor(1.3) or _all_objects_current_pose[int(object_id.item())][2] > torch.tensor(1.7)
+                        or _all_objects_current_pose[int(object_id.item())][0] < torch.tensor(0.2) or _all_objects_current_pose[int(object_id.item())][0] > torch.tensor(1.0)
+                        or _all_objects_current_pose[int(object_id.item())][1] < torch.tensor(-0.18) or _all_objects_current_pose[int(object_id.item())][1] > torch.tensor(0.10)):
+                            env_complete_reset = torch.cat(
+                                (env_complete_reset, torch.tensor([env_count])), axis=0)
+                            print("Object out of bin 1")
+                            self.success[env_count] = False
+
                     _all_object_position_error = torch.abs(
                         _all_object_position_error)
                     _all_object_rotation_error = torch.abs(
