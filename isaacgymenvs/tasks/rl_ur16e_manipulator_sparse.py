@@ -760,17 +760,19 @@ class RL_UR16eManipulation(VecTask):
                 probabilities = [0.0, 0.0, 1.0]
             else:
                 probabilities = [0.0, 0.0, 1.0]
+            # randomly select number of objs
             random_number = self.random_number_with_probabilities(probabilities)
             random_number += 1
             object_list_env = {}
+            # Sample objects from object set
             object_set = range(1, self.object_count_unique+1)
             if self.obj_randomization:
                 selected_object = random.sample(object_set, random_number)
             else:
                 selected_object = [1, 5, 3]
-            
+            # store the sampled weight for each obj
             list_objects_domain_randomizer = torch.tensor([])
-            
+            # Fixed obj pose for fixed scene
             offset_object1 = np.array([np.random.uniform(0.6, 0.6, 1).reshape(
                     1,)[0], np.random.uniform(-0.1, -0.1, 1).reshape(1,)[0], 1.45, 0.0,
                     0.0, 0.0])
@@ -781,17 +783,20 @@ class RL_UR16eManipulation(VecTask):
                     1,)[0], np.random.uniform(-0.1, -0.1, 1).reshape(1,)[0], 1.45, 0.0,
                     0.0, 0.0])
             offset_objects = [offset_object2, offset_object3, offset_object1]
-
+            # apply sampled object pose and weight
             for object_count in selected_object:
                 domain_randomizer = random_number = random.choice(
                     [1, 2, 3, 4, 5])
                 if self.obj_randomization:
+                    # pose
                     offset_object = np.array([np.random.uniform(0.57, 0.7, 1).reshape(
                         1,)[0], np.random.uniform(-0.15, 0.10, 1).reshape(1,)[0], 1.55, 0.0,
                         0.0, 0.0])
+                    # weight
                     domain_randomizer = random_number = random.choice(
                     [1, 2, 3, 4, 5])
                 else:
+                    # apply fixed poses and weights
                     offset_object = np.array([np.random.uniform(0.7, 0.9, 1).reshape(
                         1,)[0], np.random.uniform(-0.1, 0.06, 1).reshape(1,)[0], 1.55, 0.0,
                         0.0, 0.0])
@@ -805,14 +810,18 @@ class RL_UR16eManipulation(VecTask):
                 elif not self.obj_randomization: 
                     offset_object = offset_objects[object_count-1]
                 ##############################################
+                # set position and orientation
                 quat = euler_angles_to_quaternion(
                     torch.tensor(offset_object[3:6]), "XYZ", degrees=False)
                 offset_object = np.concatenate(
                     [offset_object[:3], quat.cpu().numpy()])
+                # calculate buffer index
                 item_config = (object_count-1)*5 + domain_randomizer
+                # change buffer values
                 object_list_env[item_config] = torch.tensor(offset_object)
                 list_objects_domain_randomizer = torch.cat(
                     (list_objects_domain_randomizer, torch.tensor([item_config])))
+            # signify env for selected objs and poses
             self.selected_object_env[env_count] = list_objects_domain_randomizer
             self.object_pose_store[env_count] = object_list_env
 
@@ -823,9 +832,8 @@ class RL_UR16eManipulation(VecTask):
         pos = tensor_clamp(self.ur16e_default_dof_pos.unsqueeze(
             0), self.ur16e_dof_lower_limits.unsqueeze(0), self.ur16e_dof_upper_limits)
         pos = pos.repeat(len(env_ids), 1)
-        # print("pos calucalte in init arm pose", pos)
 
-        # reinitializing the variables
+        # reinitializing the variables - TODO: Parallelization
         for env_id in env_ids:
             self.action_contrib[env_id] = 2
             self.force_encounter[env_id] = 0
