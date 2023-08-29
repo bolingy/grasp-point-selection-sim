@@ -24,10 +24,12 @@ def _get_data_path(bin_id):
     return os.path.expanduser(temp_path)
 
 
+
 @click.command()
 @click.option('--bin-id', type=click.Choice(['3H', '3E', '3F']), default='3F')
 @click.option('--num-envs', default=50)
-def generate(bin_id, num_envs):
+@click.option('--google-scanned-objects-path', default='assets/')
+def generate(bin_id, num_envs, google_scanned_objects_path):
     envs = isaacgymenvs.make(
         seed=0,
         task="UR16eManipulation",
@@ -39,6 +41,7 @@ def generate(bin_id, num_envs):
         graphics_device_id=0,
         bin_id=bin_id,
         data_path=_get_data_path(bin_id),
+        google_scanned_objects_path=google_scanned_objects_path,
     )
     print("Observation space is", envs.observation_space)
     print("Action space is", envs.action_space)

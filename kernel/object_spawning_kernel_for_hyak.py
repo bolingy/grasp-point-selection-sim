@@ -11,7 +11,7 @@ import pickle
 import time
 import itertools
 
-home_path = '../Google_Scanned_Objects/'
+home_path = '/tmp/Google_Scanned_Objects/'
 
 if not os.path.exists(f"{home_path}extracted_meshes"):
     os.makedirs(f"{home_path}extracted_meshes")
@@ -135,11 +135,11 @@ bin_id_resize_bounds = {
 
 def main(bin_id, num_envs, objects_spawn, num_runs):
     for _ in range(int(num_runs)) if int(num_runs) != -1 else itertools.count():
-        if not os.path.exists('assets/google_scanned_models'):
-            os.makedirs('assets/google_scanned_models')
+        if not os.path.exists('/tmp/assets/google_scanned_models'):
+            os.makedirs('/tmp/assets/google_scanned_models')
 
         delete_all_contents_in_directory(
-            'assets/google_scanned_models/')
+            '/tmp/assets/google_scanned_models/')
         # List all files with the specified extension
         files = glob.glob(os.path.join(f'{home_path}', '*.zip'))
         # Randomly sample files
@@ -149,7 +149,7 @@ def main(bin_id, num_envs, objects_spawn, num_runs):
             # getting rid of path and '.zip' extension string
             name_of_file = os.path.basename(name_of_file)
             name_of_file = name_of_file[:-4]
-            folder_path = f"assets/google_scanned_models/{name_of_file}"
+            folder_path = f"/tmp/assets/google_scanned_models/{name_of_file}"
             if not os.path.exists(folder_path):
                 os.makedirs(folder_path)
 
@@ -178,13 +178,13 @@ def main(bin_id, num_envs, objects_spawn, num_runs):
             create_urdf_with_inertia(f"{home_path}extracted_meshes/temp/meshes/model.urdf", mass,
                                      inertia_tensor_scaled[0, 0], inertia_tensor_scaled[1, 1], inertia_tensor_scaled[2, 2])
             shutil.move(f"{home_path}extracted_meshes/temp/meshes/texture.png",
-                        f"assets/google_scanned_models/{name_of_file}/texture.png")
+                        f"/tmp/assets/google_scanned_models/{name_of_file}/texture.png")
             shutil.move(f"{home_path}extracted_meshes/temp/meshes/material.mtl",
-                        f"assets/google_scanned_models/{name_of_file}/material.mtl")
+                        f"/tmp/assets/google_scanned_models/{name_of_file}/material.mtl")
             shutil.move(f"{home_path}extracted_meshes/temp/meshes/resized_model.obj",
-                        f"assets/google_scanned_models/{name_of_file}/resized_model.obj")
+                        f"/tmp/assets/google_scanned_models/{name_of_file}/resized_model.obj")
             shutil.move(f"{home_path}extracted_meshes/temp/meshes/model.urdf",
-                        f"assets/google_scanned_models/{name_of_file}/model.urdf")
+                        f"/tmp/assets/google_scanned_models/{name_of_file}/model.urdf")
 
             delete_all_contents_in_directory(
                 f"{home_path}extracted_meshes/temp")
@@ -192,10 +192,12 @@ def main(bin_id, num_envs, objects_spawn, num_runs):
 
         delete_all_contents_in_directory(
             f"{home_path}extracted_meshes/")
-
+        
+        if not os.path.exists("tmp/assets/"):
+                os.makedirs("tmp/assets/")
 
         command = ["python", "data_collection.py", "--bin-id",
-                   f"{bin_id}", "--num-envs", f"{num_envs}", "--google-scanned-objects-path", f"assets/"]
+                   f"{bin_id}", "--num-envs", f"{num_envs}", "--google-scanned-objects-path", f"/tmp/assets/"]
         result = subprocess.run(command)
 
         if result.returncode == 0:

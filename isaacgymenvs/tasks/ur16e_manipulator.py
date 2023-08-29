@@ -43,7 +43,7 @@ import glob
 
 class UR16eManipulation(VecTask):
 
-    def __init__(self, cfg, rl_device, sim_device, graphics_device_id, headless, virtual_screen_capture, force_render, bin_id, data_path=None):
+    def __init__(self, cfg, rl_device, sim_device, graphics_device_id, headless, virtual_screen_capture, force_render, bin_id, data_path=None, google_scanned_objects_path=None):
         self.cfg = cfg
 
         self.max_episode_length = self.cfg["env"]["episodeLength"]
@@ -53,6 +53,8 @@ class UR16eManipulation(VecTask):
 
         # Bin ID (bin size)
         self.bin_id = bin_id
+
+        self.google_scanned_objects_path = google_scanned_objects_path
 
         # Controller type
         self.control_type = self.cfg["env"]["controlType"]
@@ -279,8 +281,7 @@ class UR16eManipulation(VecTask):
         lower = gymapi.Vec3(-spacing, -spacing, 0.0)
         upper = gymapi.Vec3(spacing, spacing, spacing)
 
-        asset_root = os.path.join(os.path.dirname(
-            os.path.abspath(__file__)), "../../assets")
+        asset_root = "assets"
         ur16e_asset_file = "urdf/Aurmar_description/robots/ur16e.urdf"
 
         # load ur16e asset
@@ -322,9 +323,10 @@ class UR16eManipulation(VecTask):
         # asset_options.vhacd_params.resolution = 500000
 
         self.object_models = []
-        items = os.listdir('assets/google_scanned_models/')
+        google_scanned_objects_relative_path = self.google_scanned_objects_path+"/google_scanned_models/"
+        items = os.listdir(google_scanned_objects_relative_path)
         directories = [d for d in items if os.path.isdir(
-            os.path.join('assets/google_scanned_models/', d))]
+            os.path.join(google_scanned_objects_relative_path, d))]
 
         self.object_count_unique = 0
         for object_name in directories:
@@ -334,11 +336,12 @@ class UR16eManipulation(VecTask):
         object_model_asset_file = []
         object_model_asset = []
         for counter, model in enumerate(self.object_models):
+            print(model)
             object_model_asset_file.append(
                 "google_scanned_models/"+model+"/model.urdf")
 
             object_model_asset.append(self.gym.load_asset(
-                self.sim, asset_root, object_model_asset_file[counter], asset_options))
+                self.sim, self.google_scanned_objects_path, object_model_asset_file[counter], asset_options))
 
         self.num_ur16e_bodies = self.gym.get_asset_rigid_body_count(
             ur16e_asset)
