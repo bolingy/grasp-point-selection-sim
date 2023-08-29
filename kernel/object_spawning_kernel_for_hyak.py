@@ -10,11 +10,9 @@ import io
 import pickle
 import time
 import itertools
+import tempfile
 
 home_path = '/tmp/Google_Scanned_Objects/'
-
-if not os.path.exists(f"{home_path}extracted_meshes"):
-    os.makedirs(f"{home_path}extracted_meshes")
 
 
 def delete_all_contents_in_directory(directory_path):
@@ -60,9 +58,9 @@ def scale_mesh_within_bounds(obj_file_path, output_path, length_bounds=0.08, wid
     return new_length, new_width, new_height
 
 
-def add_texture_to_mtl(mtl_filepath, texture_filename="texture.png"):
-    shutil.move(f"{home_path}extracted_meshes/temp/materials/textures/texture.png",
-                f"{home_path}extracted_meshes/temp/meshes/texture.png")
+def add_texture_to_mtl(mtl_filepath, temp_dir, texture_filename="texture.png"):
+    shutil.move(f"{temp_dir}/materials/textures/texture.png",
+                f"{temp_dir}/meshes/texture.png")
     with open(mtl_filepath, 'r') as file:
         content = file.readlines()
     # Append the texture mapping line to the content
@@ -134,12 +132,16 @@ bin_id_resize_bounds = {
 @click.option('--num-runs', default=1, help = 'Enter num-runs for number of complete runs for each enviornment and for infinite runs enter -1')
 
 def main(bin_id, num_envs, objects_spawn, num_runs):
-    for _ in range(int(num_runs)) if int(num_runs) != -1 else itertools.count():
-        if not os.path.exists('/tmp/assets/google_scanned_models'):
-            os.makedirs('/tmp/assets/google_scanned_models')
 
-        delete_all_contents_in_directory(
-            '/tmp/assets/google_scanned_models/')
+
+    target_base_dir = '/tmp/assets/google_scanned_models/'
+
+    os.makedirs(target_base_dir, exist_ok=True)
+
+    for _ in range(int(num_runs)) if int(num_runs) != -1 else itertools.count():
+
+
+        delete_all_contents_in_directory(target_base_dir)
         
         # List all files with the specified extension
         files = glob.glob(os.path.join(f'{home_path}', '*.zip'))
@@ -149,19 +151,15 @@ def main(bin_id, num_envs, objects_spawn, num_runs):
         sampled_files = random.sample(files, objects_spawn)
 
         for name_of_file in sampled_files:
+            extract_temp_dir = tempfile.mkdtemp()
+
             # getting rid of path and '.zip' extension string
             name_of_file = os.path.basename(name_of_file)
             name_of_file = name_of_file[:-4]
-            folder_path = f"/tmp/assets/google_scanned_models/{name_of_file}"
-            if not os.path.exists(folder_path):
-                os.makedirs(folder_path)
+            target_object_dir = os.path.join(target_base_dir, name_of_file)
+            os.makedirs(target_object_dir, exist_ok=True)
 
-            folder_path = f"{home_path}extracted_meshes/temp"
-            if not os.path.exists(folder_path):
-                os.makedirs(folder_path)
-
-            unzip_file(f"{home_path}{name_of_file}.zip",
-                       f"{home_path}extracted_meshes/temp")
+            unzip_file(f"{home_path}{name_of_file}.zip", extract_temp_dir)
 
             length_bounds = random.uniform(
                 bin_id_resize_bounds[bin_id][0], bin_id_resize_bounds[bin_id][1])
@@ -169,38 +167,21 @@ def main(bin_id, num_envs, objects_spawn, num_runs):
                 bin_id_resize_bounds[bin_id][0], bin_id_resize_bounds[bin_id][1])
             height_bounds = random.uniform(
                 bin_id_resize_bounds[bin_id][0], bin_id_resize_bounds[bin_id][1])
-            scale_mesh_within_bounds(f"{home_path}extracted_meshes/temp/meshes/model.obj",
-                                     f"{home_path}extracted_meshes/temp/meshes/resized_model.obj", length_bounds, width_bounds, height_bounds)
+            scale_mesh_within_bounds(f"{extract_temp_dir}/meshes/model.obj", f"{extract_temp_dir}/meshes/resized_model.obj", length_bounds, width_bounds, height_bounds)
 
             mass = random.uniform(0.2, 1)
 
-            inertia_tensor_scaled = get_mesh_inertia(
-                f"{home_path}extracted_meshes/temp/meshes/resized_model.obj", mass)
-            add_texture_to_mtl(
-                f"{home_path}extracted_meshes/temp/meshes/material.mtl")
-            create_urdf_with_inertia(f"{home_path}extracted_meshes/temp/meshes/model.urdf", mass,
-                                     inertia_tensor_scaled[0, 0], inertia_tensor_scaled[1, 1], inertia_tensor_scaled[2, 2])
-            shutil.move(f"{home_path}extracted_meshes/temp/meshes/texture.png",
-                        f"/tmp/assets/google_scanned_models/{name_of_file}/texture.png")
-            shutil.move(f"{home_path}extracted_meshes/temp/meshes/material.mtl",
-                        f"/tmp/assets/google_scanned_models/{name_of_file}/material.mtl")
-            shutil.move(f"{home_path}extracted_meshes/temp/meshes/resized_model.obj",
-                        f"/tmp/assets/google_scanned_models/{name_of_file}/resized_model.obj")
-            shutil.move(f"{home_path}extracted_meshes/temp/meshes/model.urdf",
-                        f"/tmp/assets/google_scanned_models/{name_of_file}/model.urdf")
+            inertia_tensor_scaled = get_mesh_inertia(f"{extract_temp_dir}/meshes/resized_model.obj", mass)
+            add_texture_to_mtl(f"{extract_temp_dir}/meshes/material.mtl", extract_temp_dir)
+            create_urdf_with_inertia(f"{extract_temp_dir}/meshes/model.urdf", mass, inertia_tensor_scaled[0, 0], inertia_tensor_scaled[1, 1], inertia_tensor_scaled[2, 2])
 
-            delete_all_contents_in_directory(
-                f"{home_path}extracted_meshes/temp")
-            shutil.rmtree(f"{home_path}extracted_meshes/temp")
+            for file_name in ["texture.png", "material.mtl", "resized_model.obj", "model.urdf"]:
+                shutil.move(f"{extract_temp_dir}/meshes/{file_name}", os.path.join(target_object_dir, file_name))
 
-        delete_all_contents_in_directory(
-            f"{home_path}extracted_meshes/")
+            shutil.rmtree(extract_temp_dir)
         
-        if not os.path.exists("tmp/assets/"):
-                os.makedirs("tmp/assets/")
-
         command = ["python", "data_collection.py", "--bin-id",
-                   f"{bin_id}", "--num-envs", f"{num_envs}", "--google-scanned-objects-path", f"/tmp/assets/"]
+                   f"{bin_id}", "--num-envs", f"{num_envs}", "--google-scanned-objects-path", "/tmp/assets/"]
         result = subprocess.run(command)
 
         if result.returncode == 0:
