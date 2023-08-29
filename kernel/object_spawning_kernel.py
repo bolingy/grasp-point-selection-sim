@@ -193,7 +193,7 @@ def main(bin_id, num_envs, objects_spawn, num_runs):
             f"{home_path}extracted_meshes/")
 
         command = ["python", "data_collection.py", "--bin-id",
-                   f"{bin_id}", "--num-envs", f"{num_envs}"]
+                   f"{bin_id}", "--num-envs", f"{num_envs}", "--google-scanned-objects-path", f"assets/"]
         result = subprocess.run(command)
 
         if result.returncode == 0:

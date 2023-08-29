@@ -53,6 +53,7 @@ def get_rlgames_env_creator(
         force_render: bool = False,
         bin_id: str = None,
         data_path: str = None,
+        google_scanned_objects_path: str = None,
 ):
     """Parses the configuration parameters for the environment task and creates a VecTask
 
@@ -87,6 +88,7 @@ def get_rlgames_env_creator(
             force_render=force_render,
             bin_id=bin_id,
             data_path=data_path,
+            google_scanned_objects_path=google_scanned_objects_path,
         )
 
         if post_create_hook is not None:

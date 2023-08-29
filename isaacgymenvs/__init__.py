@@ -25,6 +25,7 @@ def make(
     cfg: DictConfig = None,   
     bin_id: str = None, 
     data_path: str = None,
+    google_scanned_objects_path: str = None,
 ): 
     from isaacgymenvs.utils.rlgames_utils import get_rlgames_env_creator
     # create hydra config if no config passed in
@@ -55,6 +56,7 @@ def make(
         force_render=force_render,
         bin_id=bin_id,
         data_path=data_path,
+        google_scanned_objects_path=google_scanned_objects_path,
     )
 
     return create_rlgpu_env()
