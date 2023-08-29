@@ -12,7 +12,7 @@ import time
 import itertools
 import tempfile
 
-home_path = '/tmp/Google_Scanned_Objects/'
+object_database_path = '/tmp/Google_Scanned_Objects/'
 
 
 def delete_all_contents_in_directory(directory_path):
@@ -144,7 +144,7 @@ def main(bin_id, num_envs, objects_spawn, num_runs):
         delete_all_contents_in_directory(target_base_dir)
         
         # List all files with the specified extension
-        files = glob.glob(os.path.join(f'{home_path}', '*.zip'))
+        files = glob.glob(os.path.join(f'{object_database_path}', '*.zip'))
         if(objects_spawn == -1):
             objects_spawn = len(files)
         # Randomly sample files
@@ -159,7 +159,7 @@ def main(bin_id, num_envs, objects_spawn, num_runs):
             target_object_dir = os.path.join(target_base_dir, name_of_file)
             os.makedirs(target_object_dir, exist_ok=True)
 
-            unzip_file(f"{home_path}{name_of_file}.zip", extract_temp_dir)
+            unzip_file(f"{object_database_path}{name_of_file}.zip", extract_temp_dir)
 
             length_bounds = random.uniform(
                 bin_id_resize_bounds[bin_id][0], bin_id_resize_bounds[bin_id][1])
