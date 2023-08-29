@@ -11,6 +11,7 @@ env:
   enableDebugVis: False
 
   objRandomization: False
+  retract: False
 
   clipObservations: 255.0
   clipActions: 1.0
