@@ -323,7 +323,8 @@ class UR16eManipulation(VecTask):
         # asset_options.vhacd_params.resolution = 500000
 
         self.object_models = []
-        google_scanned_objects_relative_path = self.google_scanned_objects_path+"/google_scanned_models/"
+        google_scanned_objects_relative_path = self.google_scanned_objects_path + \
+            "/google_scanned_models/"
         items = os.listdir(google_scanned_objects_relative_path)
         directories = [d for d in items if os.path.isdir(
             os.path.join(google_scanned_objects_relative_path, d))]
@@ -551,7 +552,7 @@ class UR16eManipulation(VecTask):
             l_direction = gymapi.Vec3(-1, -1, 1)
             self.gym.set_light_parameters(
                 self.sim, 0, l_color, l_ambient, l_direction)
-            
+
             l_direction = gymapi.Vec3(-1, 1, 1)
             self.gym.set_light_parameters(
                 self.sim, 1, l_color, l_ambient, l_direction)
@@ -794,7 +795,7 @@ class UR16eManipulation(VecTask):
                     torch.tensor(offset_object[3:6]), "XYZ", degrees=False)
                 offset_object = np.concatenate(
                     [offset_object[:3], quat.cpu().numpy()])
-                item_config = object_count-1
+                item_config = object_count
                 object_list_env[item_config] = torch.tensor(offset_object)
                 list_objects_domain_randomizer = torch.cat(
                     (list_objects_domain_randomizer, torch.tensor([item_config])))
@@ -1070,7 +1071,7 @@ class UR16eManipulation(VecTask):
                     bin_objects_current_pose[int(object_id.item())] = self._root_state[env_count, self._object_model_id[int(object_id.item())-1], :][:7].type(
                         torch.float).clone().detach()
                     # Adding a 3mm offset for stablizing the pose after reset
-                    bin_objects_current_pose[int(object_id.item())][2] += 0.003
+                    # bin_objects_current_pose[int(object_id.item())][2] += 0.003
                 self.object_pose_store[env_count] = bin_objects_current_pose
                 env_list_reset_objects = torch.cat(
                     (env_list_reset_objects, torch.tensor([env_count])), axis=0)
@@ -1108,12 +1109,15 @@ class UR16eManipulation(VecTask):
                     ))][:3] - self._root_state[env_count, self._object_model_id[int(object_id.item())-1], :][:3])
 
                     if (_all_objects_current_pose[int(object_id.item())][2] < torch.tensor(0.5)):
+                        print(
+                            f"Object falled down in environment {env_count} where total objects are {total_objects} and only {objects_spawned} were spawned inside the bin")
                         env_complete_reset = torch.cat(
                             (env_complete_reset, torch.tensor([env_count])), axis=0)
                 _all_object_position_error = torch.abs(
                     _all_object_position_error)
                 if (_all_object_position_error > torch.tensor(0.0055)):
-                    print(env_count, " object moved inside bin error")
+                    print(
+                        env_count, f" object moved inside bin error with {_all_object_position_error} meters")
                     env_complete_reset = torch.cat(
                         (env_complete_reset, torch.tensor([env_count])), axis=0)
                     total_objects = 1000
@@ -1293,7 +1297,8 @@ class UR16eManipulation(VecTask):
                     self.free_envs_list[env_count] = torch.tensor(0)
 
                 elif (total_objects != objects_spawned and (self.free_envs_list[env_count] == torch.tensor(1))):
-                    print(f"Object falled down in environment {env_count}")
+                    print(
+                        f"Object falled down in environment {env_count} where total objects are {total_objects} and only {objects_spawned} were spawned")
                     env_complete_reset = torch.cat(
                         (env_complete_reset, torch.tensor([env_count])), axis=0)
                 elif (all(self.env_done_grasping == 1) and all(self.free_envs_list == 1)):
@@ -1616,9 +1621,10 @@ class UR16eManipulation(VecTask):
                     translation_grasp_pose = torch.matmul(
                         rotation_matrix_grasp_pose, translation_grasp_pose)
 
-                    start_point = T_world_to_pre_grasp_pose[:3, 3]
-                    end_point = T_world_to_object[:3, 3]
-                    current_point = T_world_to_ee_pose[:3, 3]
+                    start_point = T_world_to_pre_grasp_pose[:3, 3].clone(
+                    ).detach()
+                    end_point = T_world_to_object[:3, 3].clone().detach()
+                    current_point = T_world_to_ee_pose[:3, 3].clone().detach()
                     v = torch.tensor([end_point[0] - start_point[0], end_point[1] -
                                      start_point[1], end_point[2] - start_point[2]])
                     # Calculate the vector connecting p1 to p
@@ -1878,9 +1884,11 @@ class UR16eManipulation(VecTask):
                             torch.float).clone().detach()
 
                         self.offset_object_pose_retract[env_count] = object_pose_at_contact[:3] - \
-                            T_world_to_ee_pose[:3, 3] + \
+                            T_world_to_ee_pose[:3, 3].clone().detach() + \
                             torch.tensor([0.005, 0, 0]).to(self.device)
-                        self.retract_start_pose[env_count] = T_world_to_ee_pose[:3, 3]
+                        self.retract_start_pose[env_count] = T_world_to_ee_pose[:3, 3].clone(
+                        ).detach()
+
                         '''
                         Gripper camera
                         '''
@@ -1974,8 +1982,10 @@ class UR16eManipulation(VecTask):
                             ).detach()
                             end_point[2] += 0.03
 
-                        start_point = self.retract_start_pose[env_count]
-                        current_point = T_world_to_ee_pose[:3, 3]
+                        start_point = self.retract_start_pose[env_count].clone(
+                        ).detach()
+                        current_point = T_world_to_ee_pose[:3, 3].clone(
+                        ).detach()
                         v = torch.tensor([end_point[0] - start_point[0], end_point[1] -
                                           start_point[1], end_point[2] - start_point[2]])
                         # Calculate the vector connecting p1 to p
@@ -2032,7 +2042,7 @@ class UR16eManipulation(VecTask):
                                                              3:7] = self._init_object_model_state[self.object_target_id[env_count]-1][env_count][3:7]
 
                         self.retract_object_state[env_count][:, :3] = T_world_to_ee_pose[:3,
-                                                                                         3] + self.offset_object_pose_retract[env_count]
+                                                                                         3].clone().detach() + self.offset_object_pose_retract[env_count].clone().detach()
                         this_object_state_all = self._init_object_model_state[
                             self.object_target_id[env_count]-1]
 
