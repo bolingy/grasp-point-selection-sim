@@ -324,7 +324,14 @@ class UR16eManipulation(VecTask):
 
         self.object_models = []
         items = os.listdir(self.google_scanned_objects_path)
-        directories = [d for d in items if os.path.isdir(os.path.join(self.google_scanned_objects_path, d))]
+        directories = [d for d in items if os.path.isdir(
+            os.path.join(self.google_scanned_objects_path, d))]
+
+        # google_scanned_objects_relative_path = self.google_scanned_objects_path + \
+        #     "/google_scanned_models/"
+        # items = os.listdir(google_scanned_objects_relative_path)
+        # directories = [d for d in items if os.path.isdir(
+        #     os.path.join(google_scanned_objects_relative_path, d))]
 
         self.object_count_unique = 0
         for object_name in directories:
@@ -335,6 +342,8 @@ class UR16eManipulation(VecTask):
         object_model_asset = []
         for counter, model in enumerate(self.object_models):
             object_model_asset_file.append(f"{model}/model.urdf")
+            # object_model_asset_file.append(
+            #     "google_scanned_models/"+model+"/model.urdf")
 
             object_model_asset.append(self.gym.load_asset(
                 self.sim, self.google_scanned_objects_path, object_model_asset_file[counter], asset_options))
