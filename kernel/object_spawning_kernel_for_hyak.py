@@ -12,17 +12,9 @@ import time
 import itertools
 import tempfile
 
+import numpy as np
+
 object_database_path = '/tmp/Google_Scanned_Objects/'
-
-
-def delete_all_contents_in_directory(directory_path):
-    for filename in os.listdir(directory_path):
-        file_path = os.path.join(directory_path, filename)
-        if os.path.isfile(file_path):
-            os.remove(file_path)
-        elif os.path.isdir(file_path):
-            shutil.rmtree(file_path)
-
 
 def unzip_file(zip_filepath, dest_folder):
     with zipfile.ZipFile(zip_filepath, 'r') as zip_ref:
@@ -133,18 +125,17 @@ bin_id_resize_bounds = {
 
 def main(bin_id, num_envs, objects_spawn, num_runs):
 
+    if not os.path.isdir(object_database_path):
+        print(f"ERROR. Unable to find object database at {object_database_path}")
+        return
 
-    target_base_dir = '/tmp/assets/google_scanned_models/'
-
-    os.makedirs(target_base_dir, exist_ok=True)
 
     for _ in range(int(num_runs)) if int(num_runs) != -1 else itertools.count():
 
-
-        delete_all_contents_in_directory(target_base_dir)
+        target_base_dir = tempfile.mkdtemp(prefix="google_scanned_models")
         
         # List all files with the specified extension
-        files = glob.glob(os.path.join(f'{object_database_path}', '*.zip'))
+        files = glob.glob(os.path.join(object_database_path, '*.zip'))
         if(objects_spawn == -1):
             objects_spawn = len(files)
         # Randomly sample files
@@ -156,18 +147,15 @@ def main(bin_id, num_envs, objects_spawn, num_runs):
             # getting rid of path and '.zip' extension string
             name_of_file = os.path.basename(name_of_file)
             name_of_file = name_of_file[:-4]
+
             target_object_dir = os.path.join(target_base_dir, name_of_file)
-            os.makedirs(target_object_dir, exist_ok=True)
+            os.makedirs(target_object_dir)
 
             unzip_file(f"{object_database_path}{name_of_file}.zip", extract_temp_dir)
 
-            length_bounds = random.uniform(
-                bin_id_resize_bounds[bin_id][0], bin_id_resize_bounds[bin_id][1])
-            width_bounds = random.uniform(
-                bin_id_resize_bounds[bin_id][0], bin_id_resize_bounds[bin_id][1])
-            height_bounds = random.uniform(
-                bin_id_resize_bounds[bin_id][0], bin_id_resize_bounds[bin_id][1])
-            scale_mesh_within_bounds(f"{extract_temp_dir}/meshes/model.obj", f"{extract_temp_dir}/meshes/resized_model.obj", length_bounds, width_bounds, height_bounds)
+            bounds = np.random.uniform(*bin_id_resize_bounds[bin_id], size=3)
+
+            scale_mesh_within_bounds(f"{extract_temp_dir}/meshes/model.obj", f"{extract_temp_dir}/meshes/resized_model.obj", *bounds)
 
             mass = random.uniform(0.2, 1)
 
@@ -181,7 +169,7 @@ def main(bin_id, num_envs, objects_spawn, num_runs):
             shutil.rmtree(extract_temp_dir)
         
         command = ["python", "data_collection.py", "--bin-id",
-                   f"{bin_id}", "--num-envs", f"{num_envs}", "--google-scanned-objects-path", "/tmp/assets/"]
+                   f"{bin_id}", "--num-envs", f"{num_envs}", "--google-scanned-objects-path", target_base_dir]
         result = subprocess.run(command)
 
         if result.returncode == 0:
@@ -189,6 +177,8 @@ def main(bin_id, num_envs, objects_spawn, num_runs):
         else:
             print(
                 f"Simulation exit failed with return code {result.returncode}.")
+
+        shutil.rmtree(target_base_dir)
 
 
 if __name__ == "__main__":
