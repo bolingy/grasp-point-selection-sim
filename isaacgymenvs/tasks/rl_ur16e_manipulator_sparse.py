@@ -1505,30 +1505,30 @@ class RL_UR16eManipulation(VecTask):
                             (env_list_reset_objects, torch.tensor([env_count])), axis=0)
                         oscillation = False
                         success = False
-                        # saving all the properties of a single pick
-                        json_save = {
-                            "force_array": [],
-                            "object_disp": {},
-                            "grasp point": self.grasp_point[env_count].tolist(),
-                            "grasp_angle": self.grasp_angle[env_count].tolist(),
-                            "suction_deformation_score": self.suction_deformation_score[env_count].item(),
-                            "oscillation": oscillation,
-                            "gripper_score": 0,
-                            "success": success,
-                            "object_id": self.object_target_id[env_count].item(),
-                            "penetration": False,
-                            "unreachable": True
-                        }
-                        new_dir_name = str(
-                            env_count)+"_"+str(self.track_save[env_count].type(torch.int).item())
-                        save_dir_json = cur_path+"/../../System_Identification_Data/Parallelization-Data/" + \
-                                str(env_count)+"/json_data_"+new_dir_name+"_" + \
-                                str(self.config_env_count[env_count].type(
-                                    torch.int).item())+".json"
-                        with open(save_dir_json, 'w') as json_file:
-                            json.dump(json_save, json_file)
-                        self.track_save[env_count] = self.track_save[env_count] + \
-                            torch.tensor(1)
+                        # Not Needed for Non-prehensile project - saving all the properties of a single pick
+                        # json_save = {
+                        #     "force_array": [],
+                        #     "object_disp": {},
+                        #     "grasp point": self.grasp_point[env_count].tolist(),
+                        #     "grasp_angle": self.grasp_angle[env_count].tolist(),
+                        #     "suction_deformation_score": self.suction_deformation_score[env_count].item(),
+                        #     "oscillation": oscillation,
+                        #     "gripper_score": 0,
+                        #     "success": success,
+                        #     "object_id": self.object_target_id[env_count].item(),
+                        #     "penetration": False,
+                        #     "unreachable": True
+                        # }
+                        # new_dir_name = str(
+                        #     env_count)+"_"+str(self.track_save[env_count].type(torch.int).item())
+                        # save_dir_json = cur_path+"/../../System_Identification_Data/Parallelization-Data/" + \
+                        #         str(env_count)+"/json_data_"+new_dir_name+"_" + \
+                        #         str(self.config_env_count[env_count].type(
+                        #             torch.int).item())+".json"
+                        # with open(save_dir_json, 'w') as json_file:
+                        #     json.dump(json_save, json_file)
+                        # self.track_save[env_count] = self.track_save[env_count] + \
+                        #     torch.tensor(1)
                     
                 except Exception as error:
                     env_complete_reset = torch.cat(
@@ -2044,6 +2044,8 @@ class RL_UR16eManipulation(VecTask):
                             depth_numpy_gripper = depth_image.clone().detach()
                             self.suction_deformation_score[env_count], temp_xyz_point, temp_grasp = self.suction_score_object_gripper.calculator(
                                 depth_numpy_gripper, segmask_gripper, rgb_image_copy_gripper, None, self.object_target_id[env_count])
+                            # no orientation change for centroid method
+                            temp_grasp = torch.tensor([0, 0, 0])
                             self.suction_score_store_env[env_count] = self.suction_deformation_score_temp
 
                             if (self.suction_deformation_score[env_count] > self.force_threshold):
@@ -2101,29 +2103,29 @@ class RL_UR16eManipulation(VecTask):
                             if (score_gripper == torch.tensor(0)):
                                 penetration = True
                             # saving the grasp point ad its properties if it was a successfull grasp
-                            json_save = {
-                                "force_array": self.force_list_save[env_count].tolist(),
-                                "grasp point": self.grasp_point[env_count].tolist(),
-                                "grasp_angle": self.grasp_angle[env_count].tolist(),
-                                "suction_deformation_score": self.suction_deformation_score[env_count].item(),
-                                "oscillation": oscillation,
-                                "gripper_score": score_gripper.item(),
-                                "success": self.success[env_count].item(),
-                                "object_id": self.object_target_id[env_count].item(),
-                                "penetration": penetration,
-                                "unreachable": False
-                            }
-                            print("success: ", self.success[env_count].item())
-                            new_dir_name = str(
-                                env_count)+"_"+str(self.track_save[env_count].type(torch.int).item())
-                            save_dir_json = cur_path+"/../../System_Identification_Data/Parallelization-Data/" + \
-                                str(env_count)+"/json_data_"+new_dir_name+"_" + \
-                                str(self.config_env_count[env_count].type(
-                                    torch.int).item())+".json"
-                            with open(save_dir_json, 'w') as json_file:
-                                json.dump(json_save, json_file)
-                            self.track_save[env_count] = self.track_save[env_count] + \
-                                torch.tensor(1)
+                            # json_save = {
+                            #     "force_array": self.force_list_save[env_count].tolist(),
+                            #     "grasp point": self.grasp_point[env_count].tolist(),
+                            #     "grasp_angle": self.grasp_angle[env_count].tolist(),
+                            #     "suction_deformation_score": self.suction_deformation_score[env_count].item(),
+                            #     "oscillation": oscillation,
+                            #     "gripper_score": score_gripper.item(),
+                            #     "success": self.success[env_count].item(),
+                            #     "object_id": self.object_target_id[env_count].item(),
+                            #     "penetration": penetration,
+                            #     "unreachable": False
+                            # }
+                            print('Env', env_count, "success: ", self.success[env_count].item())
+                            # new_dir_name = str(
+                            #     env_count)+"_"+str(self.track_save[env_count].type(torch.int).item())
+                            # save_dir_json = cur_path+"/../../System_Identification_Data/Parallelization-Data/" + \
+                            #     str(env_count)+"/json_data_"+new_dir_name+"_" + \
+                            #     str(self.config_env_count[env_count].type(
+                            #         torch.int).item())+".json"
+                            # with open(save_dir_json, 'w') as json_file:
+                            #     json.dump(json_save, json_file)
+                            # self.track_save[env_count] = self.track_save[env_count] + \
+                            #     torch.tensor(1)
 
                         # If the arm collided with the environment
                         elif (self.force_pre_physics > torch.tensor(10) and self.action_contrib[env_count] == 1):
@@ -2135,29 +2137,29 @@ class RL_UR16eManipulation(VecTask):
                                 (env_list_reset_objects, torch.tensor([env_count])), axis=0)
                             oscillation = False
                             self.success[env_count] = 0
-                            json_save = {
-                                "force_array": [],
-                                "grasp point": self.grasp_point[env_count].tolist(),
-                                "grasp_angle": self.grasp_angle[env_count].tolist(),
-                                "suction_deformation_score": self.suction_deformation_score[env_count].item(),
-                                "oscillation": oscillation,
-                                "gripper_score": 0,
-                                "success": self.success[env_count].item(),
-                                "object_id": self.object_target_id[env_count].item(),
-                                "penetration": False,
-                                "unreachable": True
-                            }
+                            # json_save = {
+                            #     "force_array": [],
+                            #     "grasp point": self.grasp_point[env_count].tolist(),
+                            #     "grasp_angle": self.grasp_angle[env_count].tolist(),
+                            #     "suction_deformation_score": self.suction_deformation_score[env_count].item(),
+                            #     "oscillation": oscillation,
+                            #     "gripper_score": 0,
+                            #     "success": self.success[env_count].item(),
+                            #     "object_id": self.object_target_id[env_count].item(),
+                            #     "penetration": False,
+                            #     "unreachable": True
+                            # }
                             print("success: ", self.success[env_count].item())
-                            new_dir_name = str(
-                                env_count)+"_"+str(self.track_save[env_count].type(torch.int).item())
-                            save_dir_json = cur_path+"/../../System_Identification_Data/Parallelization-Data/" + \
-                                str(env_count)+"/json_data_"+new_dir_name+"_" + \
-                                str(self.config_env_count[env_count].type(
-                                    torch.int).item())+".json"
-                            with open(save_dir_json, 'w') as json_file:
-                                json.dump(json_save, json_file)
-                            self.track_save[env_count] = self.track_save[env_count] + \
-                                torch.tensor(1)
+                            # new_dir_name = str(
+                            #     env_count)+"_"+str(self.track_save[env_count].type(torch.int).item())
+                            # save_dir_json = cur_path+"/../../System_Identification_Data/Parallelization-Data/" + \
+                            #     str(env_count)+"/json_data_"+new_dir_name+"_" + \
+                            #     str(self.config_env_count[env_count].type(
+                            #         torch.int).item())+".json"
+                            # with open(save_dir_json, 'w') as json_file:
+                            #     json.dump(json_save, json_file)
+                            # self.track_save[env_count] = self.track_save[env_count] + \
+                            #     torch.tensor(1)
                         if (self.force_encounter[env_count] == 1 and self.retract):
                             # Transformation for grasp pose (wg --> wo*og)
                             rotation_matrix_grasp_pose = euler_angles_to_matrix(torch.tensor(
@@ -2274,24 +2276,24 @@ class RL_UR16eManipulation(VecTask):
                                     object_disp_json_save[int(object_id.item(
                                     ))] = object_disp_json_save[int(object_id.item())].tolist()
 
-                                json_save = {
-                                    "force_array": self.force_list_save[env_count].tolist(),
-                                    "object_disp": object_disp_json_save,
-                                    "grasp point": self.grasp_point[env_count].tolist(),
-                                    "grasp_angle": self.grasp_angle[env_count].tolist(),
-                                    "suction_deformation_score": self.suction_deformation_score[env_count].item(),
-                                    "gripper_score": self.suction_score_store_env[env_count].item(),
-                                    "success": success,
-                                    "object_id": self.object_target_id[env_count].item(),
-                                    "penetration": penetration,
-                                    "unreachable": False,
-                                    "retract": False
-                                }
-                                new_dir_name = str(
-                                    env_count)+"_"+str(self.track_save[env_count].type(torch.int).item())
+                                # json_save = {
+                                #     "force_array": self.force_list_save[env_count].tolist(),
+                                #     "object_disp": object_disp_json_save,
+                                #     "grasp point": self.grasp_point[env_count].tolist(),
+                                #     "grasp_angle": self.grasp_angle[env_count].tolist(),
+                                #     "suction_deformation_score": self.suction_deformation_score[env_count].item(),
+                                #     "gripper_score": self.suction_score_store_env[env_count].item(),
+                                #     "success": success,
+                                #     "object_id": self.object_target_id[env_count].item(),
+                                #     "penetration": penetration,
+                                #     "unreachable": False,
+                                #     "retract": False
+                                # }
+                                # new_dir_name = str(
+                                #     env_count)+"_"+str(self.track_save[env_count].type(torch.int).item())
 
-                                self.track_save[env_count] = self.track_save[env_count] + \
-                                    torch.tensor(1)
+                                # self.track_save[env_count] = self.track_save[env_count] + \
+                                #     torch.tensor(1)
 
                             if (self.retract_up[env_count] == 0 and current_point[2] >= end_point[2]):
                                 self.retract_up[env_count] = 1
