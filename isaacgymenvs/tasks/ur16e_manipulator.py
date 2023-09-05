@@ -1654,7 +1654,7 @@ class UR16eManipulation(VecTask):
                                                      action_orientation[1],
                                                      self.speed[env_count]*100*action_orientation[2], 1]], dtype=torch.float)
 
-                    if ((self.count_step_suction_score_calculator[env_count] % 10 == 0) and (self.suction_deformation_score[env_count] > self.force_threshold) and (self.force_encounter[env_count] == 0)):
+                    if (not self.count_step_suction_score_calculator[env_count] % 10 and self.suction_deformation_score[env_count] > self.force_threshold and self.force_encounter[env_count] == 0):
                         rgb_camera_tensor = self.gym.get_camera_image_gpu_tensor(
                             self.sim, self.envs[env_count], self.camera_handles[env_count][1], gymapi.IMAGE_COLOR)
                         torch_rgb_tensor = gymtorch.wrap_tensor(

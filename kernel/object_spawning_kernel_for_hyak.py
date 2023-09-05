@@ -120,8 +120,8 @@ bin_id_resize_bounds = {
 @click.command()
 @click.option('--bin-id', type=click.Choice(['3H', '3E', '3F']), default='3F', help='Select bin-id between 3H, 3E and 3F')
 @click.option('--num-envs', default=10, help = 'Enter num-envs as per the gpu capability')
-@click.option('--objects-spawn', default=-1, help = 'Enter objects-spawn for number of objects to be spawned and -1 for all objects to be spawned')
-@click.option('--num-runs', default=1, help = 'Enter num-runs for number of complete runs for each enviornment and for infinite runs enter -1')
+@click.option('--objects-spawn', default=30, help = 'Enter objects-spawn for number of objects to be spawned')
+@click.option('--num-runs', default=1, help = 'Enter num-runs for number of complete runs for each environment and for infinite runs enter -1')
 
 def main(bin_id, num_envs, objects_spawn, num_runs):
 
@@ -136,8 +136,6 @@ def main(bin_id, num_envs, objects_spawn, num_runs):
         
         # List all files with the specified extension
         files = glob.glob(os.path.join(object_database_path, '*.zip'))
-        if(objects_spawn == -1):
-            objects_spawn = len(files)
         # Randomly sample files
         sampled_files = random.sample(files, objects_spawn)
 
