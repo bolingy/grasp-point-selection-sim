@@ -327,12 +327,6 @@ class UR16eManipulation(VecTask):
         directories = [d for d in items if os.path.isdir(
             os.path.join(self.google_scanned_objects_path, d))]
 
-        # google_scanned_objects_relative_path = self.google_scanned_objects_path + \
-        #     "/google_scanned_models/"
-        # items = os.listdir(google_scanned_objects_relative_path)
-        # directories = [d for d in items if os.path.isdir(
-        #     os.path.join(google_scanned_objects_relative_path, d))]
-
         self.object_count_unique = 0
         for object_name in directories:
             self.object_count_unique += 1
@@ -342,8 +336,6 @@ class UR16eManipulation(VecTask):
         object_model_asset = []
         for counter, model in enumerate(self.object_models):
             object_model_asset_file.append(f"{model}/model.urdf")
-            # object_model_asset_file.append(
-            #     "google_scanned_models/"+model+"/model.urdf")
 
             object_model_asset.append(self.gym.load_asset(
                 self.sim, self.google_scanned_objects_path, object_model_asset_file[counter], asset_options))
@@ -1114,9 +1106,10 @@ class UR16eManipulation(VecTask):
 
                     if (_all_objects_current_pose[int(object_id.item())][2] < torch.tensor(0.5)):
                         print(
-                            f"Object falled down in environment {env_count} where total objects are {total_objects} and only {objects_spawned} were spawned inside the bin")
+                            f"Object falled down in environment {env_count}, where total objects are {total_objects} and only {objects_spawned} were spawned inside the bin")
                         env_complete_reset = torch.cat(
                             (env_complete_reset, torch.tensor([env_count])), axis=0)
+                        break
                 _all_object_position_error = torch.abs(
                     _all_object_position_error)
                 if (_all_object_position_error > torch.tensor(0.0055)):
@@ -1301,8 +1294,6 @@ class UR16eManipulation(VecTask):
                     self.free_envs_list[env_count] = torch.tensor(0)
 
                 elif (total_objects != objects_spawned and (self.free_envs_list[env_count] == torch.tensor(1))):
-                    print(
-                        f"Object falled down in environment {env_count} where total objects are {total_objects} and only {objects_spawned} were spawned")
                     env_complete_reset = torch.cat(
                         (env_complete_reset, torch.tensor([env_count])), axis=0)
                 elif (all(self.env_done_grasping == 1) and all(self.free_envs_list == 1)):
@@ -1485,7 +1476,7 @@ class UR16eManipulation(VecTask):
                     _all_object_rotation_error += torch.sum(e1-e2)
 
                     if (_all_objects_current_pose[int(object_id.item())][2] < torch.tensor(0.5) and self.force_encounter[env_count] == 0):
-                        print("object falled down in env, ", env_count)
+                        print(f"object falled down in environment {env_count} while reaching the grasping point")
                         env_list_reset_arm_pose = torch.cat(
                             (env_list_reset_arm_pose, torch.tensor([env_count])), axis=0)
                         env_list_reset_objects = torch.cat(
