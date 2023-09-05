@@ -1001,8 +1001,8 @@ class DepthImageSuctionPointGridSampler(ImageGraspSampler):
             bbox = x_min, x_max, y_min, y_max
 
         depth_im_ = depth_im.data
-        depth_left = depth_im_[y_min, x_min]+0.5
-        depth_right = depth_im_[y_max, x_max]+0.5
+        depth_left = depth_im_[y_min, x_min]+0.2
+        depth_right = depth_im_[y_max, x_max]+0.2
         width = 640
         height = 480
         fx = 762.7223
