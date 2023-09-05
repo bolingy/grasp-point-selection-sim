@@ -284,8 +284,7 @@ class UR16eManipulation(VecTask):
         lower = gymapi.Vec3(-spacing, -spacing, 0.0)
         upper = gymapi.Vec3(spacing, spacing, spacing)
 
-        asset_root = os.path.join(os.path.dirname(
-            os.path.abspath(__file__)), "../../assets")
+        asset_root = "assets"
         ur16e_asset_file = "urdf/Aurmar_description/robots/ur16e.urdf"
 
         # load ur16e asset
@@ -547,7 +546,7 @@ class UR16eManipulation(VecTask):
             self.camera_handles[i].append(camera_handle_gripper)
 
             l_color = gymapi.Vec3(1, 1, 1)
-            l_ambient = gymapi.Vec3(0.1, 0.1, 0.1)
+            l_ambient = gymapi.Vec3(0.05, 0.05, 0.05)
             l_direction = gymapi.Vec3(-1, -1, 1)
             self.gym.set_light_parameters(
                 self.sim, 0, l_color, l_ambient, l_direction)
@@ -1109,7 +1108,7 @@ class UR16eManipulation(VecTask):
 
                     if (_all_objects_current_pose[int(object_id.item())][2] < torch.tensor(0.5)):
                         print(
-                            f"Object falled down in environment {env_count} where total objects are {total_objects} and only {objects_spawned} were spawned inside the bin")
+                            f"Object falled down in environment {env_count}, where total objects are {total_objects} and only {objects_spawned} were spawned inside the bin")
                         env_complete_reset = torch.cat(
                             (env_complete_reset, torch.tensor([env_count])), axis=0)
                         break
@@ -1241,7 +1240,7 @@ class UR16eManipulation(VecTask):
                         self.dexnet_score_temp = torch.Tensor()
                         max_num_grasps = len(self.grasps_and_predictions)
                         top_grasps = max_num_grasps if max_num_grasps <= 10 else 7
-                        max_num_grasps = 2
+                        # max_num_grasps = 1
                         for i in range(max_num_grasps*2):
                             i = int(i/2)
                             grasp_point = torch.tensor(
@@ -1328,8 +1327,11 @@ class UR16eManipulation(VecTask):
                     self.force_SI[env_count] = self.force_SI_env[env_count][0]
                     self.force_SI_env[env_count] = self.force_SI_env[env_count][1:]
                     self.grasps_done_env[env_count] += 1
-                    if (self.grasps_done_env[env_count] >= 20):
-                        self.env_done_grasping[env_count] = 1
+                    '''
+-                   Uncomment this if you want to only collect data from each environment only once
+-                   '''
+                    # if (self.grasps_done_env[env_count] >= 20):
+                    #     self.env_done_grasping[env_count] = 1
 
                     self.is_grasp_angle_normal[env_count] ^= 1
                 else:
@@ -1482,7 +1484,7 @@ class UR16eManipulation(VecTask):
 
                     if (_all_objects_current_pose[int(object_id.item())][2] < torch.tensor(0.5) and self.force_encounter[env_count] == 0):
                         print(
-                            f"object falled down in environment {env_count} while reaching the grasping point")
+                            + f"object falled down in environment {env_count} while reaching the grasping point")
                         env_list_reset_arm_pose = torch.cat(
                             (env_list_reset_arm_pose, torch.tensor([env_count])), axis=0)
                         env_list_reset_objects = torch.cat(
@@ -1652,7 +1654,7 @@ class UR16eManipulation(VecTask):
                                                      action_orientation[1],
                                                      self.speed[env_count]*100*action_orientation[2], 1]], dtype=torch.float)
 
-                    if ((self.count_step_suction_score_calculator[env_count] % 5 == 0) and (self.suction_deformation_score[env_count] > self.force_threshold) and (self.force_encounter[env_count] == 0)):
+                    if ((self.count_step_suction_score_calculator[env_count] % 10 == 0) and (self.suction_deformation_score[env_count] > self.force_threshold) and (self.force_encounter[env_count] == 0)):
                         rgb_camera_tensor = self.gym.get_camera_image_gpu_tensor(
                             self.sim, self.envs[env_count], self.camera_handles[env_count][1], gymapi.IMAGE_COLOR)
                         torch_rgb_tensor = gymtorch.wrap_tensor(
@@ -1891,7 +1893,8 @@ class UR16eManipulation(VecTask):
                         self.offset_object_pose_retract[env_count] = object_pose_at_contact[:3] - \
                             T_world_to_ee_pose[:3, 3].clone().detach() + \
                             torch.tensor([0.005, 0, 0]).to(self.device)
-                        self.retract_start_pose[env_count] = T_world_to_ee_pose[:3, 3]
+                        self.retract_start_pose[env_count] = T_world_to_ee_pose[:3, 3].clone(
+                        ).detach()
                         '''
                         Gripper camera
                         '''
@@ -1985,8 +1988,10 @@ class UR16eManipulation(VecTask):
                             ).detach()
                             end_point[2] += 0.03
 
-                        start_point = self.retract_start_pose[env_count]
-                        current_point = T_world_to_ee_pose[:3, 3]
+                        start_point = self.retract_start_pose[env_count].clone(
+                        ).detach()
+                        current_point = T_world_to_ee_pose[:3, 3].clone(
+                        ).detach()
                         v = torch.tensor([end_point[0] - start_point[0], end_point[1] -
                                           start_point[1], end_point[2] - start_point[2]])
                         # Calculate the vector connecting p1 to p
