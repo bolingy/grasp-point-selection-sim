@@ -1328,8 +1328,8 @@ class UR16eManipulation(VecTask):
                     self.force_SI_env[env_count] = self.force_SI_env[env_count][1:]
                     self.grasps_done_env[env_count] += 1
                     '''
--                   Uncomment this if you want to only collect data from each environment only once
--                   '''
+                    Uncomment this if you want to only collect data from each environment only once
+                    '''
                     # if (self.grasps_done_env[env_count] >= 20):
                     #     self.env_done_grasping[env_count] = 1
 
@@ -1483,8 +1483,7 @@ class UR16eManipulation(VecTask):
                     _all_object_rotation_error += torch.sum(e1-e2)
 
                     if (_all_objects_current_pose[int(object_id.item())][2] < torch.tensor(0.5) and self.force_encounter[env_count] == 0):
-                        print(
-                            + f"object falled down in environment {env_count} while reaching the grasping point")
+                        print(f"object falled down in environment {env_count} while reaching the grasping point")
                         env_list_reset_arm_pose = torch.cat(
                             (env_list_reset_arm_pose, torch.tensor([env_count])), axis=0)
                         env_list_reset_objects = torch.cat(

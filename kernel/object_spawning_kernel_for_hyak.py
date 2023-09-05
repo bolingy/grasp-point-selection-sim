@@ -16,6 +16,7 @@ import numpy as np
 
 object_database_path = '/tmp/Google_Scanned_Objects/'
 
+
 def unzip_file(zip_filepath, dest_folder):
     with zipfile.ZipFile(zip_filepath, 'r') as zip_ref:
         zip_ref.extractall(dest_folder)
@@ -119,23 +120,24 @@ bin_id_resize_bounds = {
 
 @click.command()
 @click.option('--bin-id', type=click.Choice(['3H', '3E', '3F']), default='3F', help='Select bin-id between 3H, 3E and 3F')
-@click.option('--num-envs', default=10, help = 'Enter num-envs as per the gpu capability')
-@click.option('--objects-spawn', default=30, help = 'Enter objects-spawn for number of objects to be spawned')
-@click.option('--num-runs', default=1, help = 'Enter num-runs for number of complete runs for each environment and for infinite runs enter -1')
-
+@click.option('--num-envs', default=10, help='Enter num-envs as per the gpu capability')
+@click.option('--objects-spawn', default=-1, help='Enter objects-spawn for number of objects to be spawned and -1 for all objects to be spawned')
+@click.option('--num-runs', default=1, help='Enter num-runs for number of complete runs for each enviornment and for infinite runs enter -1')
 def main(bin_id, num_envs, objects_spawn, num_runs):
 
     if not os.path.isdir(object_database_path):
-        print(f"ERROR. Unable to find object database at {object_database_path}")
+        print(
+            f"ERROR. Unable to find object database at {object_database_path}")
         return
-
 
     for _ in range(int(num_runs)) if int(num_runs) != -1 else itertools.count():
 
         target_base_dir = tempfile.mkdtemp(prefix="google_scanned_models")
-        
+
         # List all files with the specified extension
         files = glob.glob(os.path.join(object_database_path, '*.zip'))
+        if (objects_spawn == -1):
+            objects_spawn = len(files)
         # Randomly sample files
         sampled_files = random.sample(files, objects_spawn)
 
@@ -149,23 +151,29 @@ def main(bin_id, num_envs, objects_spawn, num_runs):
             target_object_dir = os.path.join(target_base_dir, name_of_file)
             os.makedirs(target_object_dir)
 
-            unzip_file(f"{object_database_path}{name_of_file}.zip", extract_temp_dir)
+            unzip_file(
+                f"{object_database_path}{name_of_file}.zip", extract_temp_dir)
 
             bounds = np.random.uniform(*bin_id_resize_bounds[bin_id], size=3)
 
-            scale_mesh_within_bounds(f"{extract_temp_dir}/meshes/model.obj", f"{extract_temp_dir}/meshes/resized_model.obj", *bounds)
+            scale_mesh_within_bounds(f"{extract_temp_dir}/meshes/model.obj",
+                                     f"{extract_temp_dir}/meshes/resized_model.obj", *bounds)
 
             mass = random.uniform(0.2, 1)
 
-            inertia_tensor_scaled = get_mesh_inertia(f"{extract_temp_dir}/meshes/resized_model.obj", mass)
-            add_texture_to_mtl(f"{extract_temp_dir}/meshes/material.mtl", extract_temp_dir)
-            create_urdf_with_inertia(f"{extract_temp_dir}/meshes/model.urdf", mass, inertia_tensor_scaled[0, 0], inertia_tensor_scaled[1, 1], inertia_tensor_scaled[2, 2])
+            inertia_tensor_scaled = get_mesh_inertia(
+                f"{extract_temp_dir}/meshes/resized_model.obj", mass)
+            add_texture_to_mtl(
+                f"{extract_temp_dir}/meshes/material.mtl", extract_temp_dir)
+            create_urdf_with_inertia(f"{extract_temp_dir}/meshes/model.urdf", mass,
+                                     inertia_tensor_scaled[0, 0], inertia_tensor_scaled[1, 1], inertia_tensor_scaled[2, 2])
 
             for file_name in ["texture.png", "material.mtl", "resized_model.obj", "model.urdf"]:
-                shutil.move(f"{extract_temp_dir}/meshes/{file_name}", os.path.join(target_object_dir, file_name))
+                shutil.move(f"{extract_temp_dir}/meshes/{file_name}",
+                            os.path.join(target_object_dir, file_name))
 
             shutil.rmtree(extract_temp_dir)
-        
+
         command = ["python", "data_collection.py", "--bin-id",
                    f"{bin_id}", "--num-envs", f"{num_envs}", "--google-scanned-objects-path", target_base_dir]
         result = subprocess.run(command)
