@@ -247,6 +247,7 @@ class RL_UR16eManipulation(VecTask):
         self.return_pre_grasp = torch.zeros(self.num_envs).to(self.device)
         self.go_to_start = torch.ones(self.num_envs).to(self.device)
         self.success = torch.zeros(self.num_envs).to(self.device)
+        self.suction_flag = torch.zeros(self.num_envs).to(self.device)
         self.min_distance = torch.ones(self.num_envs).to(self.device) * 100
 
         self.weight_distance = 1.0
@@ -1052,10 +1053,10 @@ class RL_UR16eManipulation(VecTask):
             self.torch_target_area_tensor[envs_finished_prim] = torch_target_area_tensor.float()
             scaled_diff = torch.tensor(1e-5).to(self.device)
             scaled_diff_tensor = diff_target_area_tensor.to(self.device) * scaled_diff
-            scaled_diff_tensor = torch.clamp(scaled_diff_tensor, 0, 0.2)
+            scaled_diff_tensor = torch.clamp(scaled_diff_tensor, -0.2, 0.2)
+            torch_suction_flag = self.suction_flag[envs_finished_prim].clone().detach()
             torch_success_tensor = self.success[envs_finished_prim].clone().detach()
-            torch_success_tensor = torch_success_tensor + scaled_diff_tensor
-
+            torch_success_tensor = torch_success_tensor + torch_suction_flag + scaled_diff_tensor
             # reset if success
             self.success[envs_finished_prim] = torch.tensor(0).float().to(self.device)
             torch_done_tensor = self.done[envs_finished_prim].clone().detach()
@@ -2057,7 +2058,7 @@ class RL_UR16eManipulation(VecTask):
                             if (self.action_contrib[env_count] == 1):
                                 self.xyz_point[env_count][0] += temp_xyz_point[0]
                                 self.grasp_angle[env_count] = temp_grasp
-
+                        # check if (force threshold & touches the target obj & is in pushing stage)
                         if (self.force_pre_physics > torch.max(torch.tensor([self.force_threshold, self.force_SI[env_count]])) and self.action_contrib[env_count] == 0 and self.force_encounter[env_count] == 0):
                             self.force_encounter[env_count] = 1
                             self.retract_flag_env[env_count] = 1
@@ -2097,8 +2098,10 @@ class RL_UR16eManipulation(VecTask):
                             oscillation = self.detect_oscillation(
                                 self.force_list_save[env_count])
                             self.success[env_count] = False
+                            # Detecting suction seal and not edge failure cases (obj not visuable or penetration)
                             if (score_gripper > torch.tensor(0.1) and oscillation == False):
                                 self.success[env_count] = True
+                                self.suction_flag[env_count] = True
                             penetration = False
                             if (score_gripper == torch.tensor(0)):
                                 penetration = True
@@ -2160,6 +2163,8 @@ class RL_UR16eManipulation(VecTask):
                             #     json.dump(json_save, json_file)
                             # self.track_save[env_count] = self.track_save[env_count] + \
                             #     torch.tensor(1)
+
+                        # Check obj extraction stage
                         if (self.force_encounter[env_count] == 1 and self.retract):
                             # Transformation for grasp pose (wg --> wo*og)
                             rotation_matrix_grasp_pose = euler_angles_to_matrix(torch.tensor(
