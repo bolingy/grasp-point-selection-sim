@@ -26,7 +26,7 @@ import cv2
 from suction_cup_modelling.suction_score_calcualtor import calcualte_suction_score
 from suction_cup_modelling.force_calculator import calcualte_force
 
-from gqcnn_examples.policy_for_training import dexnet3
+from gqcnn.gqcnn_examples.policy_for_training import dexnet3
 from autolab_core import (YamlConfig, Logger, BinaryImage,
                           CameraIntrinsics, ColorImage, DepthImage, RgbdImage)
 
@@ -267,8 +267,7 @@ class UR16eManipulation(VecTask):
         lower = gymapi.Vec3(-spacing, -spacing, 0.0)
         upper = gymapi.Vec3(spacing, spacing, spacing)
 
-        asset_root = os.path.join(os.path.dirname(
-            os.path.abspath(__file__)), "../../assets")
+        asset_root = "assets"
         ur16e_asset_file = "urdf/Aurmar_description/robots/ur16e.urdf"
 
         # load ur16e asset
@@ -573,17 +572,9 @@ class UR16eManipulation(VecTask):
         table_handle = self.gym.create_actor(
             env_ptr, table_asset, table_pose, 'table', env_id, 0)
         if (not mesh_visual_only):
-            # rsp = gymapi.RigidShapeProperties()
-            # rsp.restitution = 0.2
-            # rsp.compliance = 1
-            # self.gym.set_actor_rigid_shape_properties(env_ptr, table_handle, [rsp])
             self.gym.set_rigid_body_color(
                 env_ptr, table_handle, 0, gymapi.MESH_VISUAL_AND_COLLISION, obj_color)
         else:
-            # rsp = gymapi.RigidShapeProperties()
-            # rsp.restitution = 0.2
-            # rsp.compliance = 1
-            # self.gym.set_actor_rigid_shape_properties(env_ptr, table_handle, [rsp])
             self.gym.set_rigid_body_color(
                 env_ptr, table_handle, 0, gymapi.MESH_VISUAL, obj_color)
         table_shape_props = self.gym.get_actor_rigid_shape_properties(
@@ -787,14 +778,6 @@ class UR16eManipulation(VecTask):
                 offset_object = np.array([np.random.uniform(0.67, 0.7, 1).reshape(
                     1,)[0], np.random.uniform(-0.22, -0.12, 1).reshape(1,)[0], self.object_height_spawn[self.bin_id], np.random.uniform(0.0, 6.28, 1).reshape(1,)[0],
                     np.random.uniform(0.0, 6.28, 1).reshape(1,)[0], np.random.uniform(0.0, 6.28, 1).reshape(1,)[0]])
-                # if(random.random() < 0.5):
-                #     offset_object = np.array([np.random.uniform(0.67, 0.7, 1).reshape(
-                #         1,)[0], np.random.uniform(-0.22, -0.12, 1).reshape(1,)[0], 1.3, random.choice([0, 1.57, 3.14]),
-                #         random.choice([0, 1.57, 3.14]), np.random.uniform(0.0, 3.14, 1).reshape(1,)[0]])
-                # else:
-                #     offset_object = np.array([np.random.uniform(0.67, 0.7, 1).reshape(
-                #         1,)[0], np.random.uniform(-0.22, -0.12, 1).reshape(1,)[0], 1.3, np.random.uniform(0.0, 3.14, 1).reshape(1,)[0],
-                #         np.random.uniform(0.0, 3.14, 1).reshape(1,)[0], np.random.uniform(0.0, 3.14, 1).reshape(1,)[0]])
 
                 quat = euler_angles_to_quaternion(
                     torch.tensor(offset_object[3:6]), "XYZ", degrees=False)
@@ -849,9 +832,6 @@ class UR16eManipulation(VecTask):
                 else:
                     object_pose_env = self.object_pose_store[env_count.item(
                     )][counter+1].clone().detach().to(self.device)
-                    # quat = self.object_pose_store[env_count.item(
-                    # )][counter+1][3:7]
-                    # object_pose_env = torch.cat([object_pose_env[:3], quat])
                     object_pose_env = object_pose_env.unsqueeze(0)
                 self.object_poses = torch.cat(
                     [self.object_poses, object_pose_env])
@@ -1069,8 +1049,7 @@ class UR16eManipulation(VecTask):
                 objects_spawned = len(torch.unique(segmask_object_count))
                 total_objects = len(self.selected_object_env[env_count])+1
 
-                segmask_object_coords = segmask[self.check_object_coord[0]-10:self.check_object_coord[1] +
-                                                10, self.check_object_coord[2]-10:self.check_object_coord[3]+10]
+                segmask_object_coords = segmask[self.check_object_coord[0]:self.check_object_coord[1], self.check_object_coord[2]:self.check_object_coord[3]]
 
                 object_coords_match = cv2.countNonZero(segmask.cpu().numpy(
                 )) == cv2.countNonZero(segmask_object_coords.cpu().numpy())
@@ -1086,12 +1065,16 @@ class UR16eManipulation(VecTask):
                     ))][:3] - self._root_state[env_count, self._object_model_id[int(object_id.item())-1], :][:3])
 
                     if (_all_objects_current_pose[int(object_id.item())][2] < torch.tensor(0.5)):
+                        print(
+                            f"Object falled down in environment {env_count}, where total objects are {total_objects} and only {objects_spawned} were spawned inside the bin")
                         env_complete_reset = torch.cat(
                             (env_complete_reset, torch.tensor([env_count])), axis=0)
+                        break
                 _all_object_position_error = torch.abs(
                     _all_object_position_error)
                 if (_all_object_position_error > torch.tensor(0.0055)):
-                    print(env_count, " object moved inside bin error")
+                    print(
+                        env_count, f" object moved inside bin error with {_all_object_position_error} meters")
                     env_complete_reset = torch.cat(
                         (env_complete_reset, torch.tensor([env_count])), axis=0)
                     total_objects = 1000
@@ -1215,7 +1198,7 @@ class UR16eManipulation(VecTask):
                         self.dexnet_score_temp = torch.Tensor()
                         max_num_grasps = len(self.grasps_and_predictions)
                         top_grasps = max_num_grasps if max_num_grasps <= 10 else 7
-                        max_num_grasps = 1
+                        # max_num_grasps = 1
                         for i in range(max_num_grasps):
                             grasp_point = torch.tensor(
                                 [self.grasps_and_predictions[i][0].center.x, self.grasps_and_predictions[i][0].center.y])
@@ -1270,7 +1253,6 @@ class UR16eManipulation(VecTask):
                     self.free_envs_list[env_count] = torch.tensor(0)
 
                 elif (total_objects != objects_spawned and (self.free_envs_list[env_count] == torch.tensor(1))):
-                    print(f"Object falled down in environment {env_count}")
                     env_complete_reset = torch.cat(
                         (env_complete_reset, torch.tensor([env_count])), axis=0)
 
@@ -1296,8 +1278,6 @@ class UR16eManipulation(VecTask):
                     self.force_SI[env_count] = self.force_SI_env[env_count][0]
                     self.force_SI_env[env_count] = self.force_SI_env[env_count][1:]
                 else:
-                    print(
-                        "objects not spawned properly inside the bin for env ", env_count)
                     env_complete_reset = torch.cat(
                         (env_complete_reset, torch.tensor([env_count])), axis=0)
                 try:
@@ -1526,10 +1506,10 @@ class UR16eManipulation(VecTask):
                         [self.speed[env_count], 0, 0]).to(self.device).type(torch.float)
                     translation_grasp_pose = torch.matmul(
                         rotation_matrix_grasp_pose, translation_grasp_pose)
-
-                    start_point = T_world_to_pre_grasp_pose[:3, 3]
-                    end_point = T_world_to_object[:3, 3]
-                    current_point = T_world_to_ee_pose[:3, 3]
+                    
+                    start_point = T_world_to_pre_grasp_pose[:3, 3].clone().detach()
+                    end_point = T_world_to_object[:3, 3].clone().detach()
+                    current_point = T_world_to_ee_pose[:3, 3].clone().detach()
                     v = torch.tensor([end_point[0] - start_point[0], end_point[1] -
                                      start_point[1], end_point[2] - start_point[2]])
                     # Calculate the vector connecting p1 to p
@@ -1635,7 +1615,7 @@ class UR16eManipulation(VecTask):
                     if (self.action_contrib[env_count] == 0):
                         angle_error = quaternion_to_euler_angles(self._eef_state[env_count][3:7], "XYZ", degrees=False) - torch.tensor(
                             [0, -self.grasp_angle[env_count][1], self.grasp_angle[env_count][0]]).to(self.device)
-                        if (torch.max(torch.abs(angle_error)) > torch.deg2rad(torch.tensor(7.5))):
+                        if (torch.max(torch.abs(angle_error)) > torch.deg2rad(torch.tensor(10.0))):
                             # encountered the arm insertion constraint
                             env_list_reset_arm_pose = torch.cat(
                                 (env_list_reset_arm_pose, torch.tensor([env_count])), axis=0)

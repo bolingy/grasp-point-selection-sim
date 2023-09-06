@@ -22,37 +22,10 @@ conda create -n myenv python=3.8
 conda activate myenv
 ```
 
-Download the Isaac Gym package: [link](https://developer.nvidia.com/isaac-gym/download)
 
 ```bash
-# Install Isaac Gym
-# In the python sub directory, run:
+
 pip install -e .
-
-pip install attrs
-pip install openai
-
-# Install Isaac Gym Envs
-# clone the repository,
-git clone https://github.com/NVIDIA-Omniverse/IsaacGymEnvs
-
-#Install this repo,
-pip install -e .
-
-pip install flask
-
-# Install the GQCNN dependencies
-# In the gqcnn subdirectory, run:
-pip install -e .
-
-pip install open3d
-
-# Install tensorflow 2 for python 3.8 version
-pip install tensorflow==2.12.0 tensorflow-estimator==2.12.0 tensorflow-io-gcs-filesystem==0.32.0
-
-# Install cudatoolkit and cudnn libraries
-conda install cudatoolkit==11.8.0
-conda install cudnn
 
 # Also export the LD_LIBRARY_PATH for cuda
 export LD_LIBRARY_PATH=path/to/miniconda3/envs/myenv/lib
@@ -65,10 +38,4 @@ mkdir System_Identification_Data
 To run the project, use the data_collection.py script:
 ```bash
 python data_collection.py --bin-id 3F --num-envs 50
-```
-
-## For python38
-If you would prefer to use Python 3.8 for this project, switch to the py38 branch of the repository:
-```bash
-git checkout parallelization
 ```

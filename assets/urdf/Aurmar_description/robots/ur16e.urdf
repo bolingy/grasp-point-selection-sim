@@ -55,9 +55,6 @@
       <inertia ixx="0.0061063308908" ixy="0.0" ixz="0.0" iyy="0.0061063308908" iyz="0.0" izz="0.01125"/>
     </inertial>
   </link>
-  
-
-
   <joint name="shoulder_pan_joint" type="revolute">
     <parent link="base_link_inertia"/>
     <child link="shoulder_link"/>
