@@ -253,7 +253,7 @@ if __name__ == "__main__":
     # Query policy.
     policy_start = time.time()
     action = policy(state)
-    logger.info("Planning took %.3f sec" % (time.time() - policy_start))
+    # logger.info("Planning took %.3f sec" % (time.time() - policy_start))
 
     # Vis final grasp.
     if policy_config["vis"]["final_grasp"]:

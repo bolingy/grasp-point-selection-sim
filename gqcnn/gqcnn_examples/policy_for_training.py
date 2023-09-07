@@ -102,7 +102,7 @@ class dexnet3():
         # print("std_dev: ", np.std(std_dev_np))
         # print("mean: ", np.mean(std_dev_np))
 
-        self.logger.info("Planning took %.3f sec" % (time.time() - policy_start))
+        # self.logger.info("Planning took %.3f sec" % (time.time() - policy_start))
 
         # Vis final grasp.
         # policy_config["vis"]["final_grasp"] = 0

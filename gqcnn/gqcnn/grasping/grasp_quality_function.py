@@ -1045,8 +1045,8 @@ class GQCnnQualityFunction(GraspQualityFunction):
         # Form tensors.
         tensor_start = time()
         image_tensor, pose_tensor = self.grasps_to_tensors(actions, state)
-        self._logger.info("Image transformation took %.3f sec" %
-                          (time() - tensor_start))
+        # self._logger.info("Image transformation took %.3f sec" %
+        #                   (time() - tensor_start))
         if params is not None and params["vis"]["tf_images"]:
             # Read vis params.
             k = params["vis"]["k"]
@@ -1067,7 +1067,7 @@ class GQCnnQualityFunction(GraspQualityFunction):
         predict_start = time()
         output_arr = self.gqcnn.predict(image_tensor, pose_tensor)
         q_values = output_arr[:, -1]
-        self._logger.info("Inference took %.3f sec" % (time() - predict_start))
+        # self._logger.info("Inference took %.3f sec" % (time() - predict_start))
         return q_values.tolist()
 
 
