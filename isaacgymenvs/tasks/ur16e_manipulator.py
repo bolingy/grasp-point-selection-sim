@@ -132,11 +132,11 @@ class UR16eManipulation(VecTask):
 
         # System IDentification data results
         self.data_path = data_path or os.path.expanduser(
-            "~/temp/grasp_data_05/")
-        for env_number in range(self.num_envs):
-            new_dir_path = os.path.join(
-                self.data_path, f"{self.bin_id}/{env_number}/")
-            os.makedirs(new_dir_path, exist_ok=True)
+            "/tmp/grasp_data/")
+        # for env_number in range(self.num_envs):
+        #     new_dir_path = os.path.join(
+        #         self.data_path, f"{self.bin_id}/{env_number}/")
+        #     os.makedirs(new_dir_path, exist_ok=True)
 
         self.force_list = np.array([])
         self.rgb_camera_visualization = None
@@ -200,8 +200,8 @@ class UR16eManipulation(VecTask):
         self.selected_object_env = {}
         self.retract_object_state = {}
 
-        self.track_save = torch.zeros(self.num_envs)
-        self.config_env_count = torch.zeros(self.num_envs)
+        self.track_save = torch.tensor(0)
+        # self.config_env_count = torch.zeros(self.num_envs)
         self.force_list_save = {}
         self.depth_image_save = {}
         self.segmask_save = {}
@@ -212,6 +212,7 @@ class UR16eManipulation(VecTask):
         self.suction_deformation_score_save = {}
         self.force_require_SI = {}
         self.count_step_suction_score_calculator = torch.zeros(self.num_envs)
+        self.num_grasps_per_sim = 0
 
         self.env_reset_id_env = torch.ones(self.num_envs)
 
@@ -767,39 +768,41 @@ class UR16eManipulation(VecTask):
         return len(probabilities) - 1
 
     def reset_init_arm_pose(self, env_ids):
+        # How many objects should we spawn 2 or 3
+        probabilities = self.object_bin_prob_spawn[self.bin_id]
+        random_number = self.random_number_with_probabilities(
+            probabilities)
+
+        random_number += 1
+        object_list_env = {}
+        object_set = range(1, self.object_count_unique+1)
+
+        selected_object = np.random.choice(
+            object_set, p=None, size=random_number, replace=False)
+
+        list_objects_domain_randomizer = torch.tensor([])
+        for object_count in selected_object:
+            offset_object = np.array([np.random.uniform(0.67, 0.7, 1).reshape(
+                1,)[0], np.random.uniform(-0.22, -0.12, 1).reshape(1,)[0], self.object_height_spawn[self.bin_id], np.random.uniform(0.0, 6.28, 1).reshape(1,)[0],
+                np.random.uniform(0.0, 6.28, 1).reshape(1,)[0], np.random.uniform(0.0, 6.28, 1).reshape(1,)[0]])
+
+            quat = euler_angles_to_quaternion(
+                torch.tensor(offset_object[3:6]), "XYZ", degrees=False)
+            offset_object = np.concatenate(
+                [offset_object[:3], quat.cpu().numpy()])
+            item_config = object_count
+            object_list_env[item_config] = torch.tensor(offset_object)
+            list_objects_domain_randomizer = torch.cat(
+                (list_objects_domain_randomizer, torch.tensor([item_config])))
+
         for env_count in env_ids:
             env_count = env_count.item()
-            # How many objects should we spawn 2 or 3
-            probabilities = self.object_bin_prob_spawn[self.bin_id]
-            random_number = self.random_number_with_probabilities(
-                probabilities)
 
-            random_number += 1
-            object_list_env = {}
-            object_set = range(1, self.object_count_unique+1)
-
-            selected_object = np.random.choice(
-                object_set, p=None, size=random_number, replace=False)
-
-            list_objects_domain_randomizer = torch.tensor([])
-            for object_count in selected_object:
-                offset_object = np.array([np.random.uniform(0.67, 0.7, 1).reshape(
-                    1,)[0], np.random.uniform(-0.22, -0.12, 1).reshape(1,)[0], self.object_height_spawn[self.bin_id], np.random.uniform(0.0, 6.28, 1).reshape(1,)[0],
-                    np.random.uniform(0.0, 6.28, 1).reshape(1,)[0], np.random.uniform(0.0, 6.28, 1).reshape(1,)[0]])
-
-                quat = euler_angles_to_quaternion(
-                    torch.tensor(offset_object[3:6]), "XYZ", degrees=False)
-                offset_object = np.concatenate(
-                    [offset_object[:3], quat.cpu().numpy()])
-                item_config = object_count
-                object_list_env[item_config] = torch.tensor(offset_object)
-                list_objects_domain_randomizer = torch.cat(
-                    (list_objects_domain_randomizer, torch.tensor([item_config])))
             self.selected_object_env[env_count] = list_objects_domain_randomizer
             self.object_pose_store[env_count] = object_list_env
-
-        print(env_count, "objects spawned in each environemnt",
-              self.selected_object_env)
+            if(self.grasps_done_env[0] == 0):
+                print("objects spawned in each environemnt",
+                    self.selected_object_env[0], object_list_env)
         # pos = torch.tensor(np.random.uniform(low=-6.2832, high=6.2832, size=(6,))).to(self.device).type(torch.float)
         # pos = tensor_clamp(pos.unsqueeze(0), self.ur16e_dof_lower_limits.unsqueeze(0), self.ur16e_dof_upper_limits)
         pos = tensor_clamp(self.ur16e_default_dof_pos.unsqueeze(
@@ -823,7 +826,6 @@ class UR16eManipulation(VecTask):
             self.offset_object_pose_retract[env_id] = None
             self.retract_up[env_id] = 0
             self.count_step_suction_score_calculator[env_id] = 0
-            self.grasps_done_env[env_id] = 0
 
         self.progress_buf[env_ids] = 0
         self.reset_buf[env_ids] = 0
@@ -839,15 +841,16 @@ class UR16eManipulation(VecTask):
             for counter in range(len(self.object_models)):
                 self.object_poses = torch.zeros(0, 7).to(self.device)
                 for env_count in env_ids:
+                    env_config = torch.tensor(0).to(self.device)
                     # resetting force list
                     # randomly spawning objects
-                    retKey = self.object_pose_store[env_count.item()].get(
+                    retKey = self.object_pose_store[env_config.item()].get(
                         counter+1)
                     if retKey is None:
                         object_pose_env = torch.tensor(
                             [[counter/4, 1, 0.5, 0.0, 0.0, 0.0, 1.0]]).to(self.device)
                     else:
-                        object_pose_env = self.object_pose_store[env_count.item(
+                        object_pose_env = self.object_pose_store[env_config.item(
                         )][counter+1].clone().detach().to(self.device)
                         # quat = self.object_pose_store[env_count.item(
                         # )][counter+1][3:7]
@@ -1073,6 +1076,10 @@ class UR16eManipulation(VecTask):
                     (env_list_reset_objects, torch.tensor([env_count])), axis=0)
                 self.object_pose_check_list[env_count] -= torch.tensor(1)
 
+            if (self.num_grasps_per_sim and (torch.sum(self.grasps_done_env) >= self.num_grasps_per_sim) and all(self.free_envs_list == 1)):
+                print("Done with all environments now restart the kernel")
+                sys.exit()
+
             ''' 
             Spawning objects until they acquire stable pose and also doesn't falls down
             '''
@@ -1085,8 +1092,8 @@ class UR16eManipulation(VecTask):
                 segmask_object_count = segmask[self.check_object_coord[0]:self.check_object_coord[1],
                                                self.check_object_coord[2]:self.check_object_coord[3]]
 
-                objects_spawned = len(torch.unique(segmask_object_count))
-                total_objects = len(self.selected_object_env[env_count])+1
+                objects_spawned = len(torch.unique(segmask_object_count))-1
+                total_objects = len(self.selected_object_env[env_count])
 
                 segmask_object_coords = segmask[self.check_object_coord[0]:self.check_object_coord[1],
                                                 self.check_object_coord[2]:self.check_object_coord[3]]
@@ -1105,16 +1112,18 @@ class UR16eManipulation(VecTask):
                     ))][:3] - self._root_state[env_count, self._object_model_id[int(object_id.item())-1], :][:3])
 
                     if (_all_objects_current_pose[int(object_id.item())][2] < torch.tensor(0.5)):
-                        print(
-                            f"Object falled down in environment {env_count}, where total objects are {total_objects} and only {objects_spawned} were spawned inside the bin")
+                        if (env_count == 0):
+                            print(
+                                f"Object falled down in environment {env_count}, where total objects are {total_objects} and only {objects_spawned} were spawned inside the bin")
                         env_complete_reset = torch.cat(
                             (env_complete_reset, torch.tensor([env_count])), axis=0)
                         break
                 _all_object_position_error = torch.abs(
                     _all_object_position_error)
                 if (_all_object_position_error > torch.tensor(0.0055)):
-                    print(
-                        env_count, f" object moved inside bin error with {_all_object_position_error} meters")
+                    if (env_count == 0):
+                        print(
+                            env_count, f" object moved inside bin error with {_all_object_position_error} meters")
                     env_complete_reset = torch.cat(
                         (env_complete_reset, torch.tensor([env_count])), axis=0)
                     total_objects = 1000
@@ -1131,14 +1140,15 @@ class UR16eManipulation(VecTask):
 
                 # check if the environment returned from reset and the frame for that enviornment is 30 or not
                 # 30 frames is for cooldown period at the start for the simualtor to settle down
-                if ((self.free_envs_list[env_count] == torch.tensor(1)) and total_objects == objects_spawned and object_coords_match and object_mask_area[env_count] >= 1000 and self.env_done_grasping[env_count] == 0):
+                if (env_count == 0 and (self.free_envs_list[env_count] == torch.tensor(1)) and total_objects == objects_spawned and object_coords_match and object_mask_area[env_count] >= 1000 and self.env_done_grasping[env_count] == 0):
                     '''
                     Running DexNet 3.0 after investigating the pose error after spawning
                     '''
                     random_object_select = random.sample(
                         self.selected_object_env[env_count].tolist(), 1)
-                    self.object_target_id[env_count] = torch.tensor(
-                        random_object_select).to(self.device).type(torch.int)
+                    for env_count_free in range(self.num_envs):
+                        self.object_target_id[env_count_free] = torch.tensor(
+                            random_object_select).to(self.device).type(torch.int)
                     rgb_camera_tensor = self.gym.get_camera_image_gpu_tensor(
                         self.sim, self.envs[env_count], self.camera_handles[env_count][0], gymapi.IMAGE_COLOR)
                     torch_rgb_tensor = gymtorch.wrap_tensor(rgb_camera_tensor)
@@ -1182,25 +1192,37 @@ class UR16eManipulation(VecTask):
                     self.depth_image_save[env_count] = depth_image_save_temp[self.crop_coord[0]:self.crop_coord[1],
                                                                              self.crop_coord[2]:self.crop_coord[3]]
 
-                    # saving depth image, rgb image and segmentation mask
-                    self.config_env_count[env_count] += torch.tensor(
-                        1).type(torch.int)
+                    '''
+                    Saving data for independent environments method
+                    '''
+                    # # saving depth image, rgb image and segmentation mask
+                    # for env_count_free in range(self.num_envs):
+                    #     self.config_env_count[env_count_free] += torch.tensor(
+                    #         1).type(torch.int)
+                    # env_number = env_count
+                    # new_dir_path = os.path.join(
+                    #     self.data_path, f"{self.bin_id}/{env_number}/")
+                    # env_config = self.config_env_count[env_count].type(
+                    #     torch.int).item()
+                    # save_dir_depth_npy = os.path.join(
+                    #     new_dir_path, f'depth_image_{env_number}_{env_config}.npy')
+                    # save_dir_segmask_npy = os.path.join(
+                    #     new_dir_path, f'segmask_{env_number}_{env_config}.npy')
+                    # save_dir_rgb_npy = os.path.join(
+                    #     new_dir_path, f'rgb_{env_number}_{env_config}.npy')
+                    # save_dir_rgb_png = os.path.join(
+                    #     new_dir_path, f'rgb_{env_number}_{env_config}.png')
 
-                    env_number = env_count
-                    new_dir_path = os.path.join(
-                        self.data_path, f"{self.bin_id}/{env_number}/")
-
-                    env_config = self.config_env_count[env_count].type(
-                        torch.int).item()
+                    new_dir_path = self.data_path
 
                     save_dir_depth_npy = os.path.join(
-                        new_dir_path, f'depth_image_{env_number}_{env_config}.npy')
+                        new_dir_path, f'depth_image.npy')
                     save_dir_segmask_npy = os.path.join(
-                        new_dir_path, f'segmask_{env_number}_{env_config}.npy')
+                        new_dir_path, f'segmask.npy')
                     save_dir_rgb_npy = os.path.join(
-                        new_dir_path, f'rgb_{env_number}_{env_config}.npy')
+                        new_dir_path, f'rgb.npy')
                     save_dir_rgb_png = os.path.join(
-                        new_dir_path, f'rgb_{env_number}_{env_config}.png')
+                        new_dir_path, f'rgb.png')
 
                     Image.fromarray(self.rgb_save[env_count]).save(
                         save_dir_rgb_png)
@@ -1238,7 +1260,9 @@ class UR16eManipulation(VecTask):
                         self.dexnet_score_temp = torch.Tensor()
                         max_num_grasps = len(self.grasps_and_predictions)
                         top_grasps = max_num_grasps if max_num_grasps <= 10 else 7
-                        # max_num_grasps = 1
+                        # max_num_grasps = 3
+                        self.num_grasps_per_sim = max_num_grasps
+                        print(f"{self.num_grasps_per_sim} grasp points were sampled")
                         for i in range(max_num_grasps):
                             grasp_point = torch.tensor(
                                 [self.grasps_and_predictions[i][0].center.x, self.grasps_and_predictions[i][0].center.y])
@@ -1271,19 +1295,22 @@ class UR16eManipulation(VecTask):
                                 (self.dexnet_score_temp, torch.tensor([self.grasps_and_predictions[i][1]])))
 
                         if (top_grasps > 0):
-                            # Do not need to save the json file here because the simulation has not yet started
-                            env_list_reset_arm_pose = torch.cat(
-                                (env_list_reset_arm_pose, torch.tensor([env_count])), axis=0)
-                            env_list_reset_objects = torch.cat(
-                                (env_list_reset_objects, torch.tensor([env_count])), axis=0)
+                            for env_count_free in range(self.num_envs):
+                                # Do not need to save the json file here because the simulation has not yet started
+                                env_list_reset_arm_pose = torch.cat(
+                                    (env_list_reset_arm_pose, torch.tensor([env_count_free])), axis=0)
+                                env_list_reset_objects = torch.cat(
+                                    (env_list_reset_objects, torch.tensor([env_count_free])), axis=0)
                         else:
                             print("No sample points")
-                            env_complete_reset = torch.cat(
-                                (env_complete_reset, torch.tensor([env_count])), axis=0)
+                            for env_count_free in range(self.num_envs):
+                                env_complete_reset = torch.cat(
+                                    (env_complete_reset, torch.tensor([env_count_free])), axis=0)
                     except Exception as e:
                         print("dexnet error: ", e)
-                        env_complete_reset = torch.cat(
-                            (env_complete_reset, torch.tensor([env_count])), axis=0)
+                        for env_count_free in range(self.num_envs):
+                            env_complete_reset = torch.cat(
+                                (env_complete_reset, torch.tensor([env_count_free])), axis=0)
 
                     self.suction_deformation_score_env[env_count] = self.suction_deformation_score_temp
                     self.grasp_angle_env[env_count] = self.grasp_angle_temp
@@ -1291,11 +1318,13 @@ class UR16eManipulation(VecTask):
                     self.xyz_point_env[env_count] = self.xyz_point_temp
                     self.grasp_point_env[env_count] = self.grasp_point_temp
                     self.dexnet_score_env[env_count] = self.dexnet_score_temp
-                    self.free_envs_list[env_count] = torch.tensor(0)
+                    for env_count_free in range(self.num_envs):
+                        self.free_envs_list[env_count_free] = torch.tensor(0)
 
                 elif (total_objects != objects_spawned and (self.free_envs_list[env_count] == torch.tensor(1))):
-                    env_complete_reset = torch.cat(
-                        (env_complete_reset, torch.tensor([env_count])), axis=0)
+                    for env_count_free in range(self.num_envs):
+                        env_complete_reset = torch.cat(
+                            (env_complete_reset, torch.tensor([env_count_free])), axis=0)
                 elif (all(self.env_done_grasping == 1) and all(self.free_envs_list == 1)):
                     print("Done with all environments now restart the kernel")
                     sys.exit()
@@ -1307,31 +1336,31 @@ class UR16eManipulation(VecTask):
                 self.env_reset_id_env[env_count] = torch.tensor(0)
                 self.action_env = torch.tensor(
                     [[0, 0, 0, 0, 0, 0, 1]], dtype=torch.float)
-
-                if ((env_count in self.grasp_angle_env) and (len(self.grasp_angle_env[env_count]) != 0)):
-                    self.suction_deformation_score[env_count] = self.suction_deformation_score_env[env_count][0]
-                    self.suction_deformation_score_env[env_count] = self.suction_deformation_score_env[env_count][1:]
-                    self.grasp_angle[env_count] = self.grasp_angle_env[env_count][0]
-                    self.grasp_angle_env[env_count] = self.grasp_angle_env[env_count][1:]
-                    self.xyz_point[env_count] = self.xyz_point_env[env_count][0]
-                    self.xyz_point_env[env_count] = self.xyz_point_env[env_count][1:]
-                    self.grasp_point[env_count] = self.grasp_point_env[env_count][0]
-                    self.grasp_point_env[env_count] = self.grasp_point_env[env_count][1:]
-                    self.dexnet_score[env_count] = self.dexnet_score_env[env_count][0]
-                    self.dexnet_score_env[env_count] = self.dexnet_score_env[env_count][1:]
-                    self.force_SI[env_count] = self.force_SI_env[env_count][0]
-                    self.force_SI_env[env_count] = self.force_SI_env[env_count][1:]
+                env_config = 0
+                if ((env_config in self.grasp_angle_env) and (len(self.grasp_angle_env[env_config]) != 0)):
+                    self.suction_deformation_score[env_count] = self.suction_deformation_score_env[env_config][0]
+                    self.suction_deformation_score_env[env_config] = self.suction_deformation_score_env[env_config][1:]
+                    self.grasp_angle[env_count] = self.grasp_angle_env[env_config][0]
+                    self.grasp_angle_env[env_config] = self.grasp_angle_env[env_config][1:]
+                    self.xyz_point[env_count] = self.xyz_point_env[env_config][0]
+                    self.xyz_point_env[env_config] = self.xyz_point_env[env_config][1:]
+                    self.grasp_point[env_count] = self.grasp_point_env[env_config][0]
+                    self.grasp_point_env[env_config] = self.grasp_point_env[env_config][1:]
+                    self.dexnet_score[env_count] = self.dexnet_score_env[env_config][0]
+                    self.dexnet_score_env[env_config] = self.dexnet_score_env[env_config][1:]
+                    self.force_SI[env_count] = self.force_SI_env[env_config][0]
+                    self.force_SI_env[env_config] = self.force_SI_env[env_config][1:]
                     self.grasps_done_env[env_count] += 1
+                else:
                     '''
                     Uncomment this if you want to only collect data from each environment only once
                     '''
-                    # if (self.grasps_done_env[env_count] >= 20):
-                    #     self.env_done_grasping[env_count] = 1
-                else:
+                    if (self.grasps_done_env[env_count] >= 1):
+                        self.env_done_grasping[env_count] = 1
                     env_complete_reset = torch.cat(
                         (env_complete_reset, torch.tensor([env_count])), axis=0)
                 try:
-                    if ((env_count in self.grasp_angle_env) and (torch.count_nonzero(self.xyz_point[env_count]) < 1)):
+                    if ((env_config in self.grasp_angle_env) and (torch.count_nonzero(self.xyz_point[env_count]) < 1)):
                         # error due to illegal 3d coordinate
                         print("xyz point error", self.xyz_point[env_count])
                         env_list_reset_arm_pose = torch.cat(
@@ -1357,15 +1386,11 @@ class UR16eManipulation(VecTask):
                             "retract": False
                         }
                         new_dir_name = str(
-                            env_count)+"_"+str(self.track_save[env_count].type(torch.int).item())
-                        save_dir_json = self.data_path + str(self.bin_id) + "/" +\
-                            str(env_count)+"/json_data_"+new_dir_name+"_" + \
-                            str(self.config_env_count[env_count].type(
-                                torch.int).item())+".json"
+                            self.track_save.type(torch.int).item())
+                        save_dir_json = self.data_path + "/json_data_"+new_dir_name+".json"
                         with open(save_dir_json, 'w') as json_file:
                             json.dump(json_save, json_file)
-                        self.track_save[env_count] = self.track_save[env_count] + \
-                            torch.tensor(1)
+                        self.track_save = self.track_save + torch.tensor(1)
                 except Exception as error:
                     env_complete_reset = torch.cat(
                         (env_complete_reset, torch.tensor([env_count])), axis=0)
@@ -1476,7 +1501,8 @@ class UR16eManipulation(VecTask):
                     _all_object_rotation_error += torch.sum(e1-e2)
 
                     if (_all_objects_current_pose[int(object_id.item())][2] < torch.tensor(0.5) and self.force_encounter[env_count] == 0):
-                        print(f"object falled down in environment {env_count} while reaching the grasping point")
+                        print(
+                            f"object falled down in environment {env_count} while reaching the grasping point")
                         env_list_reset_arm_pose = torch.cat(
                             (env_list_reset_arm_pose, torch.tensor([env_count])), axis=0)
                         env_list_reset_objects = torch.cat(
@@ -1498,16 +1524,13 @@ class UR16eManipulation(VecTask):
                             "unreachable": True,
                             "retract": False
                         }
+
                         new_dir_name = str(
-                            env_count)+"_"+str(self.track_save[env_count].type(torch.int).item())
-                        save_dir_json = self.data_path + str(self.bin_id) + "/" +\
-                            str(env_count)+"/json_data_"+new_dir_name+"_" + \
-                            str(self.config_env_count[env_count].type(
-                                torch.int).item())+".json"
+                            self.track_save.type(torch.int).item())
+                        save_dir_json = self.data_path + "/json_data_"+new_dir_name+".json"
                         with open(save_dir_json, 'w') as json_file:
                             json.dump(json_save, json_file)
-                        self.track_save[env_count] = self.track_save[env_count] + \
-                            torch.tensor(1)
+                        self.track_save = self.track_save + torch.tensor(1)
 
                 _all_object_position_error = torch.abs(
                     _all_object_position_error)
@@ -1535,16 +1558,11 @@ class UR16eManipulation(VecTask):
                         "unreachable": True,
                         "retract": False
                     }
-                    new_dir_name = str(
-                        env_count)+"_"+str(self.track_save[env_count].type(torch.int).item())
-                    save_dir_json = self.data_path + str(self.bin_id) + "/" +\
-                        str(env_count)+"/json_data_"+new_dir_name+"_" + \
-                        str(self.config_env_count[env_count].type(
-                            torch.int).item())+".json"
+                    new_dir_name = str(self.track_save.type(torch.int).item())
+                    save_dir_json = self.data_path + "/json_data_"+new_dir_name+".json"
                     with open(save_dir_json, 'w') as json_file:
                         json.dump(json_save, json_file)
-                    self.track_save[env_count] = self.track_save[env_count] + \
-                        torch.tensor(1)
+                    self.track_save = self.track_save + torch.tensor(1)
 
                 self.distance = torch.tensor([1, 1, 1])
                 # Gving the error between pre grasp pose and the current end effector pose
@@ -1595,15 +1613,11 @@ class UR16eManipulation(VecTask):
                             "retract": False
                         }
                         new_dir_name = str(
-                            env_count)+"_"+str(self.track_save[env_count].type(torch.int).item())
-                        save_dir_json = self.data_path + str(self.bin_id) + "/" +\
-                            str(env_count)+"/json_data_"+new_dir_name+"_" + \
-                            str(self.config_env_count[env_count].type(
-                                torch.int).item())+".json"
+                            self.track_save.type(torch.int).item())
+                        save_dir_json = self.data_path + "/json_data_"+new_dir_name+".json"
                         with open(save_dir_json, 'w') as json_file:
                             json.dump(json_save, json_file)
-                        self.track_save[env_count] = self.track_save[env_count] + \
-                            torch.tensor(1)
+                        self.track_save = self.track_save + torch.tensor(1)
                     for object_id in self.selected_object_env[env_count]:
                         self.all_objects_last_pose[env_count][int(
                             object_id.item())] = _all_objects_current_pose[int(object_id.item())]
@@ -1720,7 +1734,7 @@ class UR16eManipulation(VecTask):
                         contact_exist = self.suction_score_object_gripper.calculate_contact(
                             depth_numpy_gripper, segmask_gripper, None, None, self.object_target_id[env_count])
                     except Exception as e:
-                        print(e)
+                        print("suction contact error", e)
                         contact_exist = torch.tensor(0)
                     if (self.action_contrib[env_count] == 0):
                         angle_error = quaternion_to_euler_angles(self._eef_state[env_count][3:7], "XYZ", degrees=False) - torch.tensor(
@@ -1750,15 +1764,11 @@ class UR16eManipulation(VecTask):
                                 "retract": False
                             }
                             new_dir_name = str(
-                                env_count)+"_"+str(self.track_save[env_count].type(torch.int).item())
-                            save_dir_json = self.data_path + str(self.bin_id) + "/" +\
-                                str(env_count)+"/json_data_"+new_dir_name+"_" + \
-                                str(self.config_env_count[env_count].type(
-                                    torch.int).item())+".json"
+                                self.track_save.type(torch.int).item())
+                            save_dir_json = self.data_path + "/json_data_"+new_dir_name+".json"
                             with open(save_dir_json, 'w') as json_file:
                                 json.dump(json_save, json_file)
-                            self.track_save[env_count] = self.track_save[env_count] + \
-                                torch.tensor(1)
+                            self.track_save = self.track_save + torch.tensor(1)
 
                         self.force_contact_flag[env_count] = torch.tensor(
                             1).type(torch.bool)
@@ -1802,15 +1812,11 @@ class UR16eManipulation(VecTask):
                             "retract": False
                         }
                         new_dir_name = str(
-                            env_count)+"_"+str(self.track_save[env_count].type(torch.int).item())
-                        save_dir_json = self.data_path + str(self.bin_id) + "/" +\
-                            str(env_count)+"/json_data_"+new_dir_name+"_" + \
-                            str(self.config_env_count[env_count].type(
-                                torch.int).item())+".json"
+                            self.track_save.type(torch.int).item())
+                        save_dir_json = self.data_path + "/json_data_"+new_dir_name+".json"
                         with open(save_dir_json, 'w') as json_file:
                             json.dump(json_save, json_file)
-                        self.track_save[env_count] = self.track_save[env_count] + \
-                            torch.tensor(1)
+                        self.track_save = self.track_save + torch.tensor(1)
 
                     # If the object is moving then increase the speed else go to the default value of 0.1
                     if ((depth_point_cam < torch.tensor(0.03)) and (self.action_contrib[env_count] == torch.tensor(0)) and (object_pose_error <= torch.tensor(0.001)) and (contact_exist == torch.tensor(1)) and self.force_encounter[env_count] == 0):
@@ -1948,15 +1954,11 @@ class UR16eManipulation(VecTask):
                             "retract": False
                         }
                         new_dir_name = str(
-                            env_count)+"_"+str(self.track_save[env_count].type(torch.int).item())
-                        save_dir_json = self.data_path + str(self.bin_id) + "/" +\
-                            str(env_count)+"/json_data_"+new_dir_name+"_" + \
-                            str(self.config_env_count[env_count].type(
-                                torch.int).item())+".json"
+                            self.track_save.type(torch.int).item())
+                        save_dir_json = self.data_path + "/json_data_"+new_dir_name+".json"
                         with open(save_dir_json, 'w') as json_file:
                             json.dump(json_save, json_file)
-                        self.track_save[env_count] = self.track_save[env_count] + \
-                            torch.tensor(1)
+                        self.track_save = self.track_save + torch.tensor(1)
 
                     if (self.force_encounter[env_count] == 1):
                         # Transformation for grasp pose (wg --> wo*og)
@@ -2092,15 +2094,11 @@ class UR16eManipulation(VecTask):
                                 "retract": False
                             }
                             new_dir_name = str(
-                                env_count)+"_"+str(self.track_save[env_count].type(torch.int).item())
-                            save_dir_json = self.data_path + str(self.bin_id) + "/" +\
-                                str(env_count)+"/json_data_"+new_dir_name+"_" + \
-                                str(self.config_env_count[env_count].type(
-                                    torch.int).item())+".json"
+                                self.track_save.type(torch.int).item())
+                            save_dir_json = self.data_path + "/json_data_"+new_dir_name+".json"
                             with open(save_dir_json, 'w') as json_file:
                                 json.dump(json_save, json_file)
-                            self.track_save[env_count] = self.track_save[env_count] + \
-                                torch.tensor(1)
+                            self.track_save = self.track_save + torch.tensor(1)
 
                         if (self.retract_up[env_count] == 0 and current_point[2] >= end_point[2]):
                             self.retract_up[env_count] = 1
@@ -2139,15 +2137,11 @@ class UR16eManipulation(VecTask):
                                 "retract": True
                             }
                             new_dir_name = str(
-                                env_count)+"_"+str(self.track_save[env_count].type(torch.int).item())
-                            save_dir_json = self.data_path + str(self.bin_id) + "/" +\
-                                str(env_count)+"/json_data_"+new_dir_name+"_" + \
-                                str(self.config_env_count[env_count].type(
-                                    torch.int).item())+".json"
+                                self.track_save.type(torch.int).item())
+                            save_dir_json = self.data_path + "/json_data_"+new_dir_name+".json"
                             with open(save_dir_json, 'w') as json_file:
                                 json.dump(json_save, json_file)
-                            self.track_save[env_count] = self.track_save[env_count] + \
-                                torch.tensor(1)
+                            self.track_save = self.track_save + torch.tensor(1)
 
                             print("final_pose after retract for env ",
                                   T_world_to_ee_pose[:3, 3], env_count)
@@ -2280,15 +2274,11 @@ class UR16eManipulation(VecTask):
                             "retract": False
                         }
                         new_dir_name = str(
-                            env_count)+"_"+str(self.track_save[env_count].type(torch.int).item())
-                        save_dir_json = self.data_path + str(self.bin_id) + "/" +\
-                            str(env_count)+"/json_data_"+new_dir_name+"_" + \
-                            str(self.config_env_count[env_count].type(
-                                torch.int).item())+".json"
+                            self.track_save.type(torch.int).item())
+                        save_dir_json = self.data_path + "/json_data_"+new_dir_name+".json"
                         with open(save_dir_json, 'w') as json_file:
                             json.dump(json_save, json_file)
-                        self.track_save[env_count] = self.track_save[env_count] + \
-                            torch.tensor(1)
+                        self.track_save = self.track_save + torch.tensor(1)
                     else:
                         oscillation = self.detect_oscillation(
                             self.force_list_save[env_count])
@@ -2316,15 +2306,11 @@ class UR16eManipulation(VecTask):
                             "retract": False
                         }
                         new_dir_name = str(
-                            env_count)+"_"+str(self.track_save[env_count].type(torch.int).item())
-                        save_dir_json = self.data_path + str(self.bin_id) + "/" +\
-                            str(env_count)+"/json_data_"+new_dir_name+"_" + \
-                            str(self.config_env_count[env_count].type(
-                                torch.int).item())+".json"
+                            self.track_save.type(torch.int).item())
+                        save_dir_json = self.data_path + "/json_data_"+new_dir_name+".json"
                         with open(save_dir_json, 'w') as json_file:
                             json.dump(json_save, json_file)
-                        self.track_save[env_count] = self.track_save[env_count] + \
-                            torch.tensor(1)
+                        self.track_save = self.track_save + torch.tensor(1)
                 else:
                     oscillation = False
                     success = False
@@ -2344,16 +2330,11 @@ class UR16eManipulation(VecTask):
                         "unreachable": unreachable,
                         "retract": False
                     }
-                    new_dir_name = str(
-                        env_count)+"_"+str(self.track_save[env_count].type(torch.int).item())
-                    save_dir_json = self.data_path + str(self.bin_id) + "/" +\
-                        str(env_count)+"/json_data_"+new_dir_name+"_" + \
-                        str(self.config_env_count[env_count].type(
-                            torch.int).item())+".json"
+                    new_dir_name = str(self.track_save.type(torch.int).item())
+                    save_dir_json = self.data_path + "/json_data_"+new_dir_name+".json"
                     with open(save_dir_json, 'w') as json_file:
                         json.dump(json_save, json_file)
-                    self.track_save[env_count] = self.track_save[env_count] + \
-                        torch.tensor(1)
+                    self.track_save = self.track_save + torch.tensor(1)
 
             print(f"timeout reset for environment {env_ids}")
             pos = self.reset_pre_grasp_pose(env_ids)
