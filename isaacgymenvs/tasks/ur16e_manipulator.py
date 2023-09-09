@@ -800,9 +800,9 @@ class UR16eManipulation(VecTask):
 
             self.selected_object_env[env_count] = list_objects_domain_randomizer
             self.object_pose_store[env_count] = object_list_env
-            if(self.grasps_done_env[0] == 0):
-                print("objects spawned in each environemnt",
-                    self.selected_object_env[0], object_list_env)
+        if(self.grasps_done_env[0] == 0):
+            print("objects spawned in each environment",
+                self.selected_object_env[0], object_list_env)
         # pos = torch.tensor(np.random.uniform(low=-6.2832, high=6.2832, size=(6,))).to(self.device).type(torch.float)
         # pos = tensor_clamp(pos.unsqueeze(0), self.ur16e_dof_lower_limits.unsqueeze(0), self.ur16e_dof_upper_limits)
         pos = tensor_clamp(self.ur16e_default_dof_pos.unsqueeze(
