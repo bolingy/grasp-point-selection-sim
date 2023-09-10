@@ -13,6 +13,9 @@ import itertools
 import tempfile
 
 import numpy as np
+from datetime import datetime
+import random
+import string
 
 object_database_path = '/tmp/Google_Scanned_Objects/'
 
@@ -116,15 +119,12 @@ bin_id_resize_bounds = {
     "3H": [0.075, 0.12],
 }
 
+datetime_string = datetime.now().isoformat().replace(":", "")[:-7]
+random_string = ''.join(random.choice(string.ascii_letters)
+                        for _ in range(6))
+
 
 def _get_data_path(bin_id, output_path, runID):
-    from datetime import datetime
-    import random
-    import string
-    datetime_string = datetime.now().isoformat().replace(":", "")[:-7]
-    random_string = ''.join(random.choice(string.ascii_letters)
-                            for _ in range(6))
-
     os.makedirs(f"{output_path}", exist_ok=True)
     temp_path = f"{output_path}/{datetime_string}-{random_string}-grasp_data_v2_{bin_id}/{runID}/"
     return os.path.expanduser(temp_path)
