@@ -197,7 +197,7 @@ def main(bin_id, num_envs, objects_spawn, num_runs):
 
         # Copying data from /tmp folder to local folder 
         HOME_PATH = os.path.expanduser('~')
-        tmp_save_dir = f'{folder_path}/'
+        tmp_save_dir = f'{folder_path}'
         dest_parent_dir = f'{HOME_PATH}/dynamo_grasp_sf/single_config_data/'
         dest_dir = os.path.join(dest_parent_dir, os.path.basename(tmp_save_dir))
 
