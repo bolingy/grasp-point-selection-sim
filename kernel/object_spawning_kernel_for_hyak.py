@@ -195,12 +195,12 @@ def main(bin_id, num_envs, objects_spawn, num_runs):
                    f"{bin_id}", "--num-envs", f"{num_envs}", "--google-scanned-objects-path", target_base_dir, "--output-path", f"{new_dir_path}"]
         result = subprocess.run(command)
 
-        # Paths
+        # Copying data from /tmp folder to local folder 
+        HOME_PATH = os.path.expanduser('~')
         tmp_save_dir = f'{folder_path}/'
-        dest_dir = '${HOME}/dynamo_grasp_sf/single_config_data/'
+        dest_dir = f'{HOME_PATH}/dynamo_grasp_sf/single_config_data/'
         os.makedirs(dest_dir, exist_ok=True)
-
-        # Copy directory
+        
         shutil.copytree(tmp_save_dir, dest_dir)
 
         if result.returncode == 0:
