@@ -127,7 +127,8 @@ random_string = ''.join(random.choice(string.ascii_letters)
 def _get_data_path(bin_id, output_path, runID):
     os.makedirs(f"{output_path}", exist_ok=True)
     temp_path = f"{output_path}/{datetime_string}-{random_string}-grasp_data_v2_{bin_id}/{runID}/"
-    return os.path.expanduser(temp_path)
+    folder_path = f"{output_path}/{datetime_string}-{random_string}-grasp_data_v2_{bin_id}"
+    return os.path.expanduser(folder_path), os.path.expanduser(temp_path)
 
 
 @click.command()
@@ -187,12 +188,20 @@ def main(bin_id, num_envs, objects_spawn, num_runs):
             shutil.rmtree(extract_temp_dir)
 
         output_path = f"/tmp/"
-        new_dir_path = _get_data_path(bin_id, output_path, runID)
+        folder_path, new_dir_path = _get_data_path(bin_id, output_path, runID)
         os.makedirs(new_dir_path, exist_ok=True)
 
         command = ["python", "data_collection.py", "--bin-id",
                    f"{bin_id}", "--num-envs", f"{num_envs}", "--google-scanned-objects-path", target_base_dir, "--output-path", f"{new_dir_path}"]
         result = subprocess.run(command)
+
+        # Paths
+        tmp_save_dir = f'/tmp/{folder_path}/'
+        dest_dir = '${HOME}/dynamo_grasp_sf/single_config_data/'
+        os.makedirs(dest_dir, exist_ok=True)
+
+        # Copy directory
+        shutil.copytree(tmp_save_dir, dest_dir)
 
         if result.returncode == 0:
             print("Simulation exited successfully!")

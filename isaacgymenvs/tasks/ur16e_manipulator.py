@@ -1260,7 +1260,7 @@ class UR16eManipulation(VecTask):
                         self.dexnet_score_temp = torch.Tensor()
                         max_num_grasps = len(self.grasps_and_predictions)
                         top_grasps = max_num_grasps if max_num_grasps <= 10 else 7
-                        # max_num_grasps = 3
+                        max_num_grasps =1
                         self.num_grasps_per_sim = max_num_grasps
                         print(f"{self.num_grasps_per_sim} grasp points were sampled")
                         for i in range(max_num_grasps):
