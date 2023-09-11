@@ -1093,13 +1093,205 @@ class UR16eManipulation(VecTask):
             (env_complete_reset, torch.tensor([env_count])), axis=0)
         self.free_envs_list[env_count] = torch.tensor(0)
         return env_complete_reset
-    
-    def min_area_object(self, env_count, segmask_check, segmask_bin_crop):
+
+    def min_area_object(self, segmask_check, segmask_bin_crop):
         areas = [(segmask_check == int(object_id.item())).sum()
-                for object_id in torch.unique(segmask_bin_crop)]
+                 for object_id in torch.unique(segmask_bin_crop)]
         object_mask_area = min(areas, default=torch.tensor(1000))
         return object_mask_area
 
+    def check_reset_conditions(self, env_count, env_complete_reset):
+        segmask = self.get_segmask(env_count, camera_id=0)
+        segmask_bin_crop = segmask[self.check_object_coord[0]:self.check_object_coord[1],
+                                   self.check_object_coord[2]:self.check_object_coord[3]]
+
+        objects_spawned = len(torch.unique(segmask_bin_crop)) - 1
+        total_objects = len(self.selected_object_env[env_count])
+
+        object_coords_match = cv2.countNonZero(segmask.cpu().numpy(
+        )) == cv2.countNonZero(segmask_bin_crop.cpu().numpy())
+
+        # collecting pose of all objects
+        total_position_error, obj_drop_status = self.calculate_objects_position_error(
+            env_count)
+
+        # Calculate mask areas.
+        object_mask_area = self.min_area_object(segmask, segmask_bin_crop)
+
+        # Check conditions for resetting the environment.
+        conditions_messages = [
+            (object_mask_area < 1000,
+                f"Object in environment {env_count} not visible in the camera (due to occlusion) with area {object_mask_area}."),
+            (not object_coords_match,
+                f"Object in environment {env_count} extends beyond the bin's boundaries."),
+            (not total_objects == objects_spawned,
+                f"Object in environment {env_count} extends beyond the bin's boundaries."),
+            (torch.abs(total_position_error) > self.POSE_ERROR_THRESHOLD,
+                f"Object in environment {env_count}, not visible in the camera (due to occlusion) with area {object_mask_area}"),
+            (obj_drop_status,
+                f"Object falled down in environment {env_count}, where total objects are {total_objects} and only {objects_spawned} were spawned inside the bin")
+        ]
+
+        for condition, message in conditions_messages:
+            if condition:
+                env_complete_reset = self.reset_env_with_log(
+                    env_count, message, env_complete_reset)
+                break
+
+        return segmask, total_objects, objects_spawned, env_complete_reset
+
+    def dexnet_sample_node(self, env_count, segmask, env_list_reset_arm_pose, env_list_reset_objects, env_complete_reset):
+        '''
+        Running DexNet 3.0 after investigating the pose error after spawning
+        '''
+        random_object_select = random.sample(
+            self.selected_object_env[env_count].tolist(), 1)
+        self.object_target_id[env_count] = torch.tensor(
+            random_object_select).to(self.device).type(torch.int)
+
+        rgb_image = self.get_rgb_image(env_count, camera_id=0)
+
+        self.rgb_save[env_count] = rgb_image[self.crop_coord[0]:self.crop_coord[1],
+                                             self.crop_coord[2]:self.crop_coord[3]].cpu().numpy()
+
+        depth_image = self.get_depth_image(env_count, camera_id=0)
+
+        segmask_dexnet = segmask.clone().detach()
+        self.segmask_save[env_count] = segmask[self.crop_coord[0]:self.crop_coord[1],
+                                               self.crop_coord[2]:self.crop_coord[3]].clone(
+        ).detach().cpu().numpy().astype(np.uint8)
+
+        segmask_numpy = np.zeros_like(
+            segmask_dexnet.cpu().numpy().astype(np.uint8))
+        segmask_numpy_temp = np.zeros_like(
+            segmask_dexnet.cpu().numpy().astype(np.uint8))
+        segmask_numpy_temp[segmask_dexnet.cpu().numpy().astype(
+            np.uint8) == self.object_target_id[env_count].cpu().numpy()] = 1
+        segmask_numpy[segmask_dexnet.cpu().numpy().astype(
+            np.uint8) == self.object_target_id[env_count].cpu().numpy()] = 255
+        segmask_dexnet = BinaryImage(
+            segmask_numpy[self.crop_coord[0]:self.crop_coord[1],
+                          self.crop_coord[2]:self.crop_coord[3]], frame=self.camera_intrinsics_back_cam.frame)
+
+        depth_image_dexnet = depth_image.clone().detach()
+        noise_image = torch.normal(
+            0, 0.0005, size=depth_image_dexnet.size()).to(self.device)
+        depth_image_dexnet = depth_image_dexnet + noise_image
+
+        depth_image_save_temp = depth_image_dexnet.clone().detach().cpu().numpy()
+        self.depth_image_save[env_count] = depth_image_save_temp[self.crop_coord[0]:self.crop_coord[1],
+                                                                 self.crop_coord[2]:self.crop_coord[3]]
+
+        # saving depth image, rgb image and segmentation mask
+        self.config_env_count[env_count] += torch.tensor(
+            1).type(torch.int)
+
+        env_number = env_count
+        new_dir_path = os.path.join(
+            self.data_path, f"{self.bin_id}/{env_number}/")
+
+        env_config = self.config_env_count[env_count].type(
+            torch.int).item()
+
+        save_dir_depth_npy = os.path.join(
+            new_dir_path, f'depth_image_{env_number}_{env_config}.npy')
+        save_dir_segmask_npy = os.path.join(
+            new_dir_path, f'segmask_{env_number}_{env_config}.npy')
+        save_dir_rgb_npy = os.path.join(
+            new_dir_path, f'rgb_{env_number}_{env_config}.npy')
+        save_dir_rgb_png = os.path.join(
+            new_dir_path, f'rgb_{env_number}_{env_config}.png')
+
+        Image.fromarray(self.rgb_save[env_count]).save(
+            save_dir_rgb_png)
+
+        with open(save_dir_depth_npy, 'wb') as f:
+            np.save(f, self.depth_image_save[env_count])
+
+        with open(save_dir_segmask_npy, 'wb') as f:
+            np.save(f, self.segmask_save[env_count])
+
+        with open(save_dir_rgb_npy, 'wb') as f:
+            np.save(f, self.rgb_save[env_count])
+
+        # cropping the image and modifying depth to match the DexNet 3.0 input configuration
+        depth_image_dexnet -= 0.2
+        depth_numpy = depth_image_dexnet.cpu().numpy()
+        depth_numpy_temp = depth_numpy*segmask_numpy_temp
+        depth_numpy_temp[depth_numpy_temp == 0] = 0.75
+
+        depth_img_dexnet = DepthImage(
+            depth_numpy_temp[self.crop_coord[0]:self.crop_coord[1],
+                             self.crop_coord[2]:self.crop_coord[3]], frame=self.camera_intrinsics_back_cam.frame)
+        max_num_grasps = 0
+
+        # Storing all the sampled grasp point and its properties
+        try:
+            action, self.grasps_and_predictions, self.unsorted_grasps_and_predictions = self.dexnet_object.inference(
+                depth_img_dexnet, segmask_dexnet, None)
+
+            self.suction_deformation_score_temp = torch.Tensor()
+            self.xyz_point_temp = torch.empty((0, 3))
+            self.grasp_angle_temp = torch.empty((0, 3))
+            self.grasp_point_temp = torch.empty((0, 2))
+            self.force_SI_temp = torch.Tensor()
+            self.dexnet_score_temp = torch.Tensor()
+            max_num_grasps = len(self.grasps_and_predictions)
+            top_grasps = max_num_grasps if max_num_grasps <= 10 else 7
+            max_num_grasps = 1
+            for i in range(max_num_grasps):
+                grasp_point = torch.tensor(
+                    [self.grasps_and_predictions[i][0].center.x, self.grasps_and_predictions[i][0].center.y])
+
+                depth_image_suction = depth_image
+                offset = torch.tensor(
+                    [self.crop_coord[2], self.crop_coord[0]])
+                suction_deformation_score, xyz_point, grasp_angle = self.suction_score_object.calculator(
+                    depth_image_suction, segmask, rgb_image, self.grasps_and_predictions[i][0], self.object_target_id[env_count], offset)
+                grasp_angle = torch.tensor([0, 0, 0])
+                self.suction_deformation_score_temp = torch.cat(
+                    (self.suction_deformation_score_temp, torch.tensor([suction_deformation_score]))).type(torch.float)
+                self.xyz_point_temp = torch.cat(
+                    [self.xyz_point_temp, xyz_point.unsqueeze(0)], dim=0)
+                self.grasp_angle_temp = torch.cat(
+                    [self.grasp_angle_temp, grasp_angle.unsqueeze(0)], dim=0)
+                self.grasp_point_temp = torch.cat(
+                    [self.grasp_point_temp, grasp_point.clone().detach().unsqueeze(0)], dim=0)
+                self.object_coordiante_camera = xyz_point.clone().detach()
+                if (suction_deformation_score > 0):
+                    force_SI = self.force_object.regression(
+                        suction_deformation_score)
+                else:
+                    force_SI = torch.tensor(0).to(self.device)
+
+                self.force_SI_temp = torch.cat(
+                    (self.force_SI_temp, torch.tensor([force_SI])))
+                self.dexnet_score_temp = torch.cat(
+                    (self.dexnet_score_temp, torch.tensor([self.grasps_and_predictions[i][1]])))
+
+            if (top_grasps > 0):
+                env_list_reset_arm_pose = torch.cat(
+                    (env_list_reset_arm_pose, torch.tensor([env_count])), axis=0)
+                env_list_reset_objects = torch.cat(
+                    (env_list_reset_objects, torch.tensor([env_count])), axis=0)
+            else:
+                print("No sample points")
+                env_complete_reset = torch.cat(
+                    (env_complete_reset, torch.tensor([env_count])), axis=0)
+        except Exception as e:
+            print("dexnet error: ", e)
+            env_complete_reset = torch.cat(
+                (env_complete_reset, torch.tensor([env_count])), axis=0)
+
+        self.suction_deformation_score_env[env_count] = self.suction_deformation_score_temp
+        self.grasp_angle_env[env_count] = self.grasp_angle_temp
+        self.force_SI_env[env_count] = self.force_SI_temp
+        self.xyz_point_env[env_count] = self.xyz_point_temp
+        self.grasp_point_env[env_count] = self.grasp_point_temp
+        self.dexnet_score_env[env_count] = self.dexnet_score_temp
+        self.free_envs_list[env_count] = torch.tensor(0)
+
+        return env_list_reset_arm_pose, env_list_reset_objects, env_complete_reset
 
     def pre_physics_step(self, actions):
         '''
@@ -1137,42 +1329,8 @@ class UR16eManipulation(VecTask):
             Spawning objects until they acquire stable pose and also doesn't falls down
             '''
             if ((self.frame_count[env_count] == self.COOLDOWN_FRAMES) and (not self.object_pose_check_list[env_count])):
-                segmask = self.get_segmask(env_count, camera_id=0)
-                segmask_bin_crop = segmask[self.check_object_coord[0]:self.check_object_coord[1],
-                                               self.check_object_coord[2]:self.check_object_coord[3]]
-
-                objects_spawned = len(torch.unique(segmask_bin_crop)) - 1
-                total_objects = len(self.selected_object_env[env_count])
-
-                object_coords_match = cv2.countNonZero(segmask.cpu().numpy(
-                )) == cv2.countNonZero(segmask_bin_crop.cpu().numpy())
-
-                # collecting pose of all objects
-                total_position_error, obj_drop_status = self.calculate_objects_position_error(
-                    env_count)
-
-                # Calculate mask areas.
-                object_mask_area = self.min_area_object(env_count, segmask, segmask_bin_crop)
-
-                # Check conditions for resetting the environment.
-                conditions_messages = [
-                    (object_mask_area < 1000,
-                     f"Object in environment {env_count} not visible in the camera (due to occlusion) with area {object_mask_area}."),
-                    (not object_coords_match,
-                     f"Object in environment {env_count} extends beyond the bin's boundaries."),
-                    (not total_objects == objects_spawned,
-                     f"Object in environment {env_count} extends beyond the bin's boundaries."),
-                    (torch.abs(total_position_error) > self.POSE_ERROR_THRESHOLD,
-                     f"Object in environment {env_count}, not visible in the camera (due to occlusion) with area {object_mask_area}"),
-                    (obj_drop_status,
-                     f"Object falled down in environment {env_count}, where total objects are {total_objects} and only {objects_spawned} were spawned inside the bin")
-                ]
-
-                for condition, message in conditions_messages:
-                    if condition:
-                        env_complete_reset = self.reset_env_with_log(
-                            env_count, message, env_complete_reset)
-                        break
+                segmask, total_objects, objects_spawned, env_complete_reset = self.check_reset_conditions(
+                    env_count, env_complete_reset)
 
                 # check if the environment returned from reset and the frame for that enviornment is 30 or not
                 # 30 frames is for cooldown period at the start for the simualtor to settle down
@@ -1180,152 +1338,8 @@ class UR16eManipulation(VecTask):
                     '''
                     Running DexNet 3.0 after investigating the pose error after spawning
                     '''
-                    random_object_select = random.sample(
-                        self.selected_object_env[env_count].tolist(), 1)
-                    self.object_target_id[env_count] = torch.tensor(
-                        random_object_select).to(self.device).type(torch.int)
-
-                    rgb_image = self.get_rgb_image(env_count, camera_id=0)
-
-                    self.rgb_save[env_count] = rgb_image[self.crop_coord[0]:self.crop_coord[1],
-                                                         self.crop_coord[2]:self.crop_coord[3]].cpu().numpy()
-
-                    depth_image = self.get_depth_image(env_count, camera_id=0)
-
-                    segmask_dexnet = segmask.clone().detach()
-                    self.segmask_save[env_count] = segmask[self.crop_coord[0]:self.crop_coord[1],
-                                                           self.crop_coord[2]:self.crop_coord[3]].clone(
-                    ).detach().cpu().numpy().astype(np.uint8)
-
-                    segmask_numpy = np.zeros_like(
-                        segmask_dexnet.cpu().numpy().astype(np.uint8))
-                    segmask_numpy_temp = np.zeros_like(
-                        segmask_dexnet.cpu().numpy().astype(np.uint8))
-                    segmask_numpy_temp[segmask_dexnet.cpu().numpy().astype(
-                        np.uint8) == self.object_target_id[env_count].cpu().numpy()] = 1
-                    segmask_numpy[segmask_dexnet.cpu().numpy().astype(
-                        np.uint8) == self.object_target_id[env_count].cpu().numpy()] = 255
-                    segmask_dexnet = BinaryImage(
-                        segmask_numpy[self.crop_coord[0]:self.crop_coord[1],
-                                      self.crop_coord[2]:self.crop_coord[3]], frame=self.camera_intrinsics_back_cam.frame)
-
-                    depth_image_dexnet = depth_image.clone().detach()
-                    noise_image = torch.normal(
-                        0, 0.0005, size=depth_image_dexnet.size()).to(self.device)
-                    depth_image_dexnet = depth_image_dexnet + noise_image
-
-                    depth_image_save_temp = depth_image_dexnet.clone().detach().cpu().numpy()
-                    self.depth_image_save[env_count] = depth_image_save_temp[self.crop_coord[0]:self.crop_coord[1],
-                                                                             self.crop_coord[2]:self.crop_coord[3]]
-
-                    # saving depth image, rgb image and segmentation mask
-                    self.config_env_count[env_count] += torch.tensor(
-                        1).type(torch.int)
-
-                    env_number = env_count
-                    new_dir_path = os.path.join(
-                        self.data_path, f"{self.bin_id}/{env_number}/")
-
-                    env_config = self.config_env_count[env_count].type(
-                        torch.int).item()
-
-                    save_dir_depth_npy = os.path.join(
-                        new_dir_path, f'depth_image_{env_number}_{env_config}.npy')
-                    save_dir_segmask_npy = os.path.join(
-                        new_dir_path, f'segmask_{env_number}_{env_config}.npy')
-                    save_dir_rgb_npy = os.path.join(
-                        new_dir_path, f'rgb_{env_number}_{env_config}.npy')
-                    save_dir_rgb_png = os.path.join(
-                        new_dir_path, f'rgb_{env_number}_{env_config}.png')
-
-                    Image.fromarray(self.rgb_save[env_count]).save(
-                        save_dir_rgb_png)
-
-                    with open(save_dir_depth_npy, 'wb') as f:
-                        np.save(f, self.depth_image_save[env_count])
-
-                    with open(save_dir_segmask_npy, 'wb') as f:
-                        np.save(f, self.segmask_save[env_count])
-
-                    with open(save_dir_rgb_npy, 'wb') as f:
-                        np.save(f, self.rgb_save[env_count])
-
-                    # cropping the image and modifying depth to match the DexNet 3.0 input configuration
-                    depth_image_dexnet -= 0.2
-                    depth_numpy = depth_image_dexnet.cpu().numpy()
-                    depth_numpy_temp = depth_numpy*segmask_numpy_temp
-                    depth_numpy_temp[depth_numpy_temp == 0] = 0.75
-
-                    depth_img_dexnet = DepthImage(
-                        depth_numpy_temp[self.crop_coord[0]:self.crop_coord[1],
-                                         self.crop_coord[2]:self.crop_coord[3]], frame=self.camera_intrinsics_back_cam.frame)
-                    max_num_grasps = 0
-
-                    # Storing all the sampled grasp point and its properties
-                    try:
-                        action, self.grasps_and_predictions, self.unsorted_grasps_and_predictions = self.dexnet_object.inference(
-                            depth_img_dexnet, segmask_dexnet, None)
-
-                        self.suction_deformation_score_temp = torch.Tensor()
-                        self.xyz_point_temp = torch.empty((0, 3))
-                        self.grasp_angle_temp = torch.empty((0, 3))
-                        self.grasp_point_temp = torch.empty((0, 2))
-                        self.force_SI_temp = torch.Tensor()
-                        self.dexnet_score_temp = torch.Tensor()
-                        max_num_grasps = len(self.grasps_and_predictions)
-                        top_grasps = max_num_grasps if max_num_grasps <= 10 else 7
-                        max_num_grasps = 1
-                        for i in range(max_num_grasps):
-                            grasp_point = torch.tensor(
-                                [self.grasps_and_predictions[i][0].center.x, self.grasps_and_predictions[i][0].center.y])
-
-                            depth_image_suction = depth_image
-                            offset = torch.tensor(
-                                [self.crop_coord[2], self.crop_coord[0]])
-                            suction_deformation_score, xyz_point, grasp_angle = self.suction_score_object.calculator(
-                                depth_image_suction, segmask, rgb_image, self.grasps_and_predictions[i][0], self.object_target_id[env_count], offset)
-                            grasp_angle = torch.tensor([0, 0, 0])
-                            self.suction_deformation_score_temp = torch.cat(
-                                (self.suction_deformation_score_temp, torch.tensor([suction_deformation_score]))).type(torch.float)
-                            self.xyz_point_temp = torch.cat(
-                                [self.xyz_point_temp, xyz_point.unsqueeze(0)], dim=0)
-                            self.grasp_angle_temp = torch.cat(
-                                [self.grasp_angle_temp, grasp_angle.unsqueeze(0)], dim=0)
-                            self.grasp_point_temp = torch.cat(
-                                [self.grasp_point_temp, grasp_point.clone().detach().unsqueeze(0)], dim=0)
-                            self.object_coordiante_camera = xyz_point.clone().detach()
-                            if (suction_deformation_score > 0):
-                                force_SI = self.force_object.regression(
-                                    suction_deformation_score)
-                            else:
-                                force_SI = torch.tensor(0).to(self.device)
-
-                            self.force_SI_temp = torch.cat(
-                                (self.force_SI_temp, torch.tensor([force_SI])))
-                            self.dexnet_score_temp = torch.cat(
-                                (self.dexnet_score_temp, torch.tensor([self.grasps_and_predictions[i][1]])))
-
-                        if (top_grasps > 0):
-                            env_list_reset_arm_pose = torch.cat(
-                                (env_list_reset_arm_pose, torch.tensor([env_count])), axis=0)
-                            env_list_reset_objects = torch.cat(
-                                (env_list_reset_objects, torch.tensor([env_count])), axis=0)
-                        else:
-                            print("No sample points")
-                            env_complete_reset = torch.cat(
-                                (env_complete_reset, torch.tensor([env_count])), axis=0)
-                    except Exception as e:
-                        print("dexnet error: ", e)
-                        env_complete_reset = torch.cat(
-                            (env_complete_reset, torch.tensor([env_count])), axis=0)
-
-                    self.suction_deformation_score_env[env_count] = self.suction_deformation_score_temp
-                    self.grasp_angle_env[env_count] = self.grasp_angle_temp
-                    self.force_SI_env[env_count] = self.force_SI_temp
-                    self.xyz_point_env[env_count] = self.xyz_point_temp
-                    self.grasp_point_env[env_count] = self.grasp_point_temp
-                    self.dexnet_score_env[env_count] = self.dexnet_score_temp
-                    self.free_envs_list[env_count] = torch.tensor(0)
+                    env_list_reset_arm_pose, env_list_reset_objects, env_complete_reset = self.dexnet_sample_node(
+                        env_count, segmask, env_list_reset_arm_pose, env_list_reset_objects, env_complete_reset)
 
                 elif (total_objects != objects_spawned and (self.free_envs_list[env_count] == torch.tensor(1))):
                     env_complete_reset = torch.cat(
@@ -1659,7 +1673,8 @@ class UR16eManipulation(VecTask):
                             (env_list_reset_arm_pose, torch.tensor([env_count])), axis=0)
                         env_list_reset_objects = torch.cat(
                             (env_list_reset_objects, torch.tensor([env_count])), axis=0)
-                        print(f"Object in environment {env_count} moved without contact to target object by {_all_object_pose_error} meters")
+                        print(
+                            f"Object in environment {env_count} moved without contact to target object by {_all_object_pose_error} meters")
 
                         self.save_config_grasp_json(
                             env_count, False, torch.tensor(0), True)
