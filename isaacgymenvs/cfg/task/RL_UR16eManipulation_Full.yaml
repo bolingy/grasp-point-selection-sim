@@ -10,7 +10,7 @@ env:
   episodeLength: 1200
   enableDebugVis: False
 
-  objRandomization: False
+  objRandomization: True
   retract: True
 
   clipObservations: 255.0
