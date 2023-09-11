@@ -187,7 +187,7 @@ def main(bin_id, num_envs, objects_spawn, num_runs):
 
             shutil.rmtree(extract_temp_dir)
 
-        output_path = f"/tmp/"
+        output_path = f"/tmp"
         folder_path, new_dir_path = _get_data_path(bin_id, output_path, runID)
         os.makedirs(new_dir_path, exist_ok=True)
 
@@ -196,7 +196,7 @@ def main(bin_id, num_envs, objects_spawn, num_runs):
         result = subprocess.run(command)
 
         # Paths
-        tmp_save_dir = f'/tmp/{folder_path}/'
+        tmp_save_dir = f'{folder_path}/'
         dest_dir = '${HOME}/dynamo_grasp_sf/single_config_data/'
         os.makedirs(dest_dir, exist_ok=True)
 
