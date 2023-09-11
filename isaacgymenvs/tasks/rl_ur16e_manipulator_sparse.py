@@ -215,7 +215,6 @@ class RL_UR16eManipulation(VecTask):
         self.bootup_reset = torch.ones(self.num_envs).to(self.device)
 
         self.RL_flag = torch.ones(self.num_envs).to(self.device)
-        self.run_dexnet = torch.ones(self.num_envs).to(self.device)
 
         # Set control limits
         self.cmd_limit = to_torch([0.1, 0.1, 0.1, 0.5, 0.5, 0.5], device=self.device).unsqueeze(0) if \
@@ -856,7 +855,6 @@ class RL_UR16eManipulation(VecTask):
             self.free_envs_list[env_id] = torch.tensor(1)
             self.object_pose_check_list[env_id] = torch.tensor(3)
             self.speed[env_id] = torch.tensor(0.1)
-            self.run_dexnet[env_id] = torch.tensor(1)
             self.RL_flag[env_id] = torch.tensor(1)
             self.go_to_start[env_id] = torch.tensor(1)
             self.init_go_to_start[env_id] = torch.tensor(1)
@@ -938,16 +936,16 @@ class RL_UR16eManipulation(VecTask):
                 self.frame_count_contact_object[env_id] = 0
                 self.frame_count[env_id] = 0
                 self.env_reset_id_env[env_id] = 1
-                self.speed[env_id] = 0.1
+                self.speed[env_id] = 0.15
                 self.force_contact_flag[env_id.item()] = torch.tensor(
                     0).type(torch.bool)
                 # if self.done[env_count] == 1:
-                self.run_dexnet[env_id] = torch.tensor(1)
                 # self.RL_flag[env_count] = torch.tensor(1)
                 self.go_to_start[env_id] = torch.tensor(1)
                 self.init_go_to_start[env_id] = torch.tensor(1)
                 self.return_pre_grasp[env_id] = torch.tensor(0)
-                self.primitive_count[env_id.item()] = torch.tensor(1)
+                # set primitive count to max, so that it 
+                # self.primitive_count[env_id.item()] = self.num_primtive_actions + 1
                 
                 # self.finished_prim[env_id] = torch.tensor(0)
 
@@ -1253,7 +1251,7 @@ class RL_UR16eManipulation(VecTask):
             ''' 
             Spawning objects until they acquire stable pose and also doesnt falls down
             '''
-            if ((self.frame_count[env_count] == self.cooldown_frames) and (self.object_pose_check_list[env_count] == torch.tensor(0))) and (self.run_dexnet[env_count] == torch.tensor(1)):
+            if ((self.frame_count[env_count] == self.cooldown_frames) and (self.object_pose_check_list[env_count] == torch.tensor(0))):
                 torch_mask_tensor = self.mask_camera_tensors[env_count]
                 segmask = torch_mask_tensor.to(self.device)
                 # segmask_check = segmask[180:660, 410:1050]
@@ -1279,7 +1277,7 @@ class RL_UR16eManipulation(VecTask):
                             print("Object out of bin 2")
                 _all_object_position_error = torch.abs(
                     _all_object_position_error)
-                # if (_all_object_position_error > torch.tensor(0.0055) and self.run_dexnet[env_count] == torch.tensor(0)):
+                # if (_all_object_position_error > torch.tensor(0.0055)):
                 #     print(env_count, " object moved inside bin error")
                 #     env_complete_reset = torch.cat(
                 #         (env_complete_reset, torch.tensor([env_count])), axis=0)
@@ -1287,7 +1285,7 @@ class RL_UR16eManipulation(VecTask):
 
                 # check if the environment returned from reset and the frame for that enviornment is 30 or not
                 # 30 frames is for cooldown period at the start for the simualtor to settle down
-                if ((self.free_envs_list[env_count] == torch.tensor(1)) and total_objects == objects_spawned and (self.run_dexnet[env_count] == torch.tensor(1))  and (self.cooldown_frames == self.frame_count[env_count])):
+                if ((self.free_envs_list[env_count] == torch.tensor(1)) and total_objects == objects_spawned)  and (self.cooldown_frames == self.frame_count[env_count]):
                     '''
                     Running DexNet 3.0 after investigating the pose error after spawning
                     '''
@@ -1680,7 +1678,6 @@ class RL_UR16eManipulation(VecTask):
                                 ######## False if min dist
                                 # if False:
                                     self.RL_flag[env_count] = 0
-                                    self.run_dexnet[env_count] = 1
                                     self.free_envs_list[env_count] = torch.tensor(1)
                                     bin_objects_current_pose = {}
                                     for object_id in self.selected_object_env[env_count]:
@@ -1689,7 +1686,6 @@ class RL_UR16eManipulation(VecTask):
                                     self.object_pose_store[env_count] = bin_objects_current_pose
                                     # print("#############FINISH PRIMITIVE AND RESET COUNT")
                                 else:
-                                    self.run_dexnet[env_count] = 0
                                     # print("#############WAIT NEXT PRIM IN SEQUENCE")
                                     self.init_go_to_start[env_count] = True
                                     self.go_to_start[env_count] = True
@@ -2304,7 +2300,7 @@ class RL_UR16eManipulation(VecTask):
                                 self.retract_up[env_count] = 1
                                 self.retract_start_pose[env_count] = T_world_to_ee_pose[:3, 3]
                             ### HOW MUCH TO RETRACT
-                            if (self.retract_up[env_count] == 1 and current_point[0] <= 0.05):
+                            if (self.retract_up[env_count] == 1 and current_point[0] <= 0.1):
                                 self.frame_count_contact_object[env_count] = 1
 
                                 success = False
