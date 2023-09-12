@@ -10,11 +10,6 @@ os.environ['XLA_PYTHON_CLIENT_PREALLOCATE'] = 'false'
 os.environ['XLA_PYTHON_CLIENT_ALLOCATOR'] = 'platform'
 os.environ['TF_FORCE_GPU_ALLOW_GROWTH'] = 'true'
 
-
-
-
-
-
 @click.command()
 @click.option('--bin-id', type=click.Choice(['3H', '3E', '3F']), default='3F')
 @click.option('--num-envs', default=50)
@@ -34,8 +29,8 @@ def generate(bin_id, num_envs, google_scanned_objects_path, output_path):
         data_path=output_path,
         google_scanned_objects_path=google_scanned_objects_path,
     )
-    print("Observation space is", envs.observation_space)
-    print("Action space is", envs.action_space)
+    # print("Observation space is", envs.observation_space)
+    # print("Action space is", envs.action_space)
     obs = envs.reset()
 
     try:
