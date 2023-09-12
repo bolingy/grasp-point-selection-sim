@@ -616,7 +616,7 @@ class UR16eManipulation(VecTask):
                 self.envs[0], self._object_model_id[counter], self.object_models[counter])
             object_shape_props = self.gym.get_actor_rigid_shape_properties(
                 env_ptr, self._object_model_id[counter])
-            object_shape_props[0].friction = 0.2
+            object_shape_props[0].friction = 0.5
             self.gym.set_actor_rigid_shape_properties(
                 env_ptr, self._object_model_id[counter], object_shape_props)
 
@@ -799,16 +799,15 @@ class UR16eManipulation(VecTask):
 
         for env_count in env_ids:
             env_count = env_count.item()
-            if(env_count == 0 and (not self.dexnet_sampling_flag)):
+            if (env_count == 0 and (not self.dexnet_sampling_flag)):
                 self.selected_object_env[env_count] = list_objects_domain_randomizer
                 self.object_list_first_env = object_list_env
-                self.object_pose_store[env_count] = self.object_list_first_env 
+                self.object_pose_store[env_count] = self.object_list_first_env
+                print("objects spawned in each environment",
+                      self.selected_object_env[0], env_ids)
             else:
                 self.selected_object_env[env_count] = self.selected_object_env[0]
                 self.object_pose_store[env_count] = self.object_list_first_env
-        if (self.grasps_done_env[0] == 0):
-            print("objects spawned in each environment",
-                  self.selected_object_env[0], self.object_list_first_env)
         # pos = torch.tensor(np.random.uniform(low=-6.2832, high=6.2832, size=(6,))).to(self.device).type(torch.float)
         # pos = tensor_clamp(pos.unsqueeze(0), self.ur16e_dof_lower_limits.unsqueeze(0), self.ur16e_dof_upper_limits)
         pos = tensor_clamp(self.ur16e_default_dof_pos.unsqueeze(
@@ -1105,6 +1104,13 @@ class UR16eManipulation(VecTask):
                 object_coords_match = cv2.countNonZero(segmask.cpu().numpy(
                 )) == cv2.countNonZero(segmask_object_coords.cpu().numpy())
 
+                
+                if((total_objects != objects_spawned) and (not object_coords_match)):
+                    if (env_count == 0):
+                        print(f"Object in environment {env_count} is out of bounds")
+                    env_complete_reset = torch.cat(
+                        (env_complete_reset, torch.tensor([env_count])), axis=0)
+
                 _all_objects_current_pose = {}
                 _all_object_position_error = torch.tensor(0.0).to(self.device)
 
@@ -1117,11 +1123,12 @@ class UR16eManipulation(VecTask):
 
                     if (_all_objects_current_pose[int(object_id.item())][2] < torch.tensor(0.5)):
                         if (not self.dexnet_sampling_flag and env_count == 0):
-                            print(_all_objects_current_pose[int(object_id.item())], torch.unique(segmask_object_coords), self.selected_object_env[env_count])
                             print(
                                 f"Object falled down in environment {env_count}, where total objects are {total_objects} and only {objects_spawned} were spawned inside the bin")
                         env_complete_reset = torch.cat(
                             (env_complete_reset, torch.tensor([env_count])), axis=0)
+                        # To fake the dexnet condition not to get satisfied because of these illegal configuration
+                        object_coords_match = False
                         break
                 _all_object_position_error = torch.abs(
                     _all_object_position_error)
@@ -1131,7 +1138,8 @@ class UR16eManipulation(VecTask):
                             f"Object in environment {env_count} moved inside bin error with {_all_object_position_error} meters before attempting the pick")
                     env_complete_reset = torch.cat(
                         (env_complete_reset, torch.tensor([env_count])), axis=0)
-                    total_objects = 1000
+                    # To fake the dexnet condition not to get satisfied because of these illegal configuration
+                    object_coords_match = False
 
                 object_mask_area[env_count] = 1000
                 for object_id in torch.unique(segmask_object_coords):
@@ -1142,26 +1150,30 @@ class UR16eManipulation(VecTask):
                     area = np.count_nonzero(segmask_area)
                     if (object_mask_area[env_count] > area):
                         object_mask_area[env_count] = area
-                if(object_mask_area[env_count] < 1000):
+                if (object_mask_area[env_count] < 1000):
                     if (not self.dexnet_sampling_flag and env_count == 0):
                         print(
                             f"Object in environment {env_count} is occluded by other objects")
                     env_complete_reset = torch.cat(
                         (env_complete_reset, torch.tensor([env_count])), axis=0)
-                    
-                if((env_count == 0) and (env_count in env_complete_reset) and (not self.dexnet_sampling_flag)):
-                    print("Resetting all environments due to bad object pose")
+                    # To fake the dexnet condition not to get satisfied because of these illegal configuration
+                    object_coords_match = False
+
+                if ((env_count in env_complete_reset) and (not self.dexnet_sampling_flag)):
+                    if (env_count == 0):
+                        print("Resetting all environments due to bad object pose")
                     for env_count_free in range(self.num_envs):
                         env_complete_reset = torch.cat(
                             (env_complete_reset, torch.tensor([env_count_free])), axis=0)
-                elif((env_count in env_complete_reset) and self.dexnet_sampling_flag and (torch.sum(self.grasps_done_env) < self.num_grasps_per_sim)):
-                    self.grasps_done_env[env_count] += 1
-                    print("grasp done in each environment status ", self.grasps_done_env)
 
+                elif ((env_count in env_complete_reset) and self.dexnet_sampling_flag and (torch.sum(self.grasps_done_env) < self.num_grasps_per_sim)):
+                    self.grasps_done_env[env_count] += 1
+                    print("grasp done in each environment status ",
+                          self.grasps_done_env)
 
                 # check if the environment returned from reset and the frame for that enviornment is 30 or not
                 # 30 frames is for cooldown period at the start for the simualtor to settle down
-                if ((not self.dexnet_sampling_flag) and env_count == 0 and total_objects == objects_spawned and object_coords_match and self.env_done_grasping[env_count] == 0):
+                if ((not self.dexnet_sampling_flag) and env_count == 0 and object_coords_match and (torch.sum(self.grasps_done_env[env_count]) == 0)):
                     '''
                     Running DexNet 3.0 after investigating the pose error after spawning
                     '''
@@ -1272,7 +1284,7 @@ class UR16eManipulation(VecTask):
                     try:
                         action, self.grasps_and_predictions, self.unsorted_grasps_and_predictions = self.dexnet_object.inference(
                             depth_img_dexnet, segmask_dexnet, None)
-                        
+
                         self.dexnet_sampling_flag = 1
                         self.suction_deformation_score_temp = torch.Tensor()
                         self.xyz_point_temp = torch.empty((0, 3))
@@ -2183,6 +2195,8 @@ class UR16eManipulation(VecTask):
         # Parallelizing multiple environments for resetting the arm for pre grasp pose or to reset the particular environment
         if (len(env_complete_reset) != 0 and len(env_list_reset_arm_pose) != 0):
             env_complete_reset = torch.unique(env_complete_reset)
+            env_list_reset_objects = torch.unique(env_list_reset_objects)
+            env_list_reset_arm_pose = torch.unique(env_list_reset_arm_pose)
 
             env_list_reset_objects = torch.cat(
                 (env_list_reset_objects, env_complete_reset), axis=0)
@@ -2212,6 +2226,7 @@ class UR16eManipulation(VecTask):
 
         elif (len(env_complete_reset) != 0):
             env_complete_reset = torch.unique(env_complete_reset)
+            env_list_reset_objects = torch.unique(env_list_reset_objects)
             env_list_reset_objects = torch.cat(
                 (env_list_reset_objects, env_complete_reset), axis=0)
             pos = self.reset_init_arm_pose(
@@ -2220,6 +2235,8 @@ class UR16eManipulation(VecTask):
             self.deploy_actions(env_ids, pos)
 
         if (len(env_list_reset_objects) != 0 or len(self.env_reset_retract) != 0):
+            env_list_reset_objects = torch.unique(env_list_reset_objects)
+            self.env_reset_retract = torch.unique(self.env_reset_retract)
             if (len(self.env_reset_retract) != 0 and len(env_list_reset_objects) != 0):
                 self.env_reset_retract = self.env_reset_retract.to(
                     self.device).type(torch.long)
@@ -2263,7 +2280,8 @@ class UR16eManipulation(VecTask):
                 env_count = env_id.item()
                 if (self.force_list_save[env_count] != None and len(self.force_list_save[env_count]) > 10):
                     if (self.force_encounter[env_count] == 1):
-                        print(f"post physics reset because retraction failed for environment {env_count}")
+                        print(
+                            f"post physics reset because retraction failed for environment {env_count}")
                         # encountered the arm insertion constraint
                         success = False
                         if (self.suction_score_store_env[env_count] > torch.tensor(0.1) and self.oscillation_store_env[env_count] == False):
