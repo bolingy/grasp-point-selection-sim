@@ -1,6 +1,5 @@
-centrum_box
 small_health_bottle
 pizza_cutter
 kyolic_bottle
 realsense_box
-honey_box
+green_cylinder
