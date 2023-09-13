@@ -871,7 +871,6 @@ class RL_UR16eManipulation(VecTask):
             self.count_step_suction_score_calculator[env_id] = 0
 
 
-
         self.progress_buf[env_ids] = 0
         self.reset_buf[env_ids] = 0
 
@@ -1057,6 +1056,8 @@ class RL_UR16eManipulation(VecTask):
             torch_success_tensor = torch_success_tensor + torch_suction_flag + scaled_diff_tensor
             # reset if success
             self.success[envs_finished_prim] = torch.tensor(0).float().to(self.device)
+            self.suction_flag[envs_finished_prim] = torch.tensor(0).float().to(self.device)
+
             torch_done_tensor = self.done[envs_finished_prim].clone().detach()
             # reset if done
             self.done[envs_finished_prim] = torch.tensor(0).float().to(self.device)
@@ -1201,7 +1202,6 @@ class RL_UR16eManipulation(VecTask):
         actions[:, 1] = torch.clamp(actions[:, 1], -0.02, 0.1)
         actions[:, 2] = torch.clamp(actions[:, 2], 0.0, 0.28)
         actions[:, 3] = torch.clamp(actions[:, 3], -0.22, 0.22)
-
         '''
         Camera access in the pre physics step to compute the force using suction cup deformation score
         '''
