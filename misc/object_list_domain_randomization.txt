@@ -2,3 +2,4 @@ small_health_bottle
 pizza_cutter
 kyolic_bottle
 realsense_box
+green_cylinder

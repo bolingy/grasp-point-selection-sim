@@ -871,6 +871,7 @@ class RL_UR16eManipulation(VecTask):
             self.count_step_suction_score_calculator[env_id] = 0
 
 
+
         self.progress_buf[env_ids] = 0
         self.reset_buf[env_ids] = 0
 
@@ -1202,6 +1203,7 @@ class RL_UR16eManipulation(VecTask):
         actions[:, 1] = torch.clamp(actions[:, 1], -0.02, 0.1)
         actions[:, 2] = torch.clamp(actions[:, 2], 0.0, 0.28)
         actions[:, 3] = torch.clamp(actions[:, 3], -0.22, 0.22)
+
         '''
         Camera access in the pre physics step to compute the force using suction cup deformation score
         '''
@@ -1270,11 +1272,13 @@ class RL_UR16eManipulation(VecTask):
                     ))][:3] - self._root_state[env_count, self._object_model_id[int(object_id.item())-1], :][:3])
     
                     if (_all_objects_current_pose[int(object_id.item())][2] < torch.tensor(1.3) or _all_objects_current_pose[int(object_id.item())][2] > torch.tensor(1.7)
-                        or _all_objects_current_pose[int(object_id.item())][0] < torch.tensor(0.4) or _all_objects_current_pose[int(object_id.item())][0] > torch.tensor(1.0)
+                        or _all_objects_current_pose[int(object_id.item())][0] < torch.tensor(0.1) or _all_objects_current_pose[int(object_id.item())][0] > torch.tensor(1.0)
                         or _all_objects_current_pose[int(object_id.item())][1] < torch.tensor(-0.18) or _all_objects_current_pose[int(object_id.item())][1] > torch.tensor(0.10)):
                             env_complete_reset = torch.cat(
                                 (env_complete_reset, torch.tensor([env_count])), axis=0)
-                            print("Object out of bin 2")
+                            if self.RL_flag[env_count] == 1:
+                                self.free_envs_list[env_count] = torch.tensor(0)
+                            print("Object out of bin 2 in env ", env_count)
                 _all_object_position_error = torch.abs(
                     _all_object_position_error)
                 # if (_all_object_position_error > torch.tensor(0.0055)):
@@ -1458,7 +1462,7 @@ class RL_UR16eManipulation(VecTask):
                     self.grasp_point_env[env_count] = self.grasp_point_temp
                     self.free_envs_list[env_count] = torch.tensor(0)
                     if self.RL_flag[env_count] == torch.tensor(1):
-                        # print("pass obs 1")
+                        print("pass obs in env ", env_count)
                         self.finished_prim[env_count] = 1
                         self.done[env_count] = 1
                     
@@ -1798,7 +1802,7 @@ class RL_UR16eManipulation(VecTask):
                         _all_object_rotation_error += torch.sum(e1-e2)
 
                         if (_all_objects_current_pose[int(object_id.item())][2] < torch.tensor(1.3) or _all_objects_current_pose[int(object_id.item())][2] > torch.tensor(1.7)
-                        or _all_objects_current_pose[int(object_id.item())][0] < torch.tensor(0.2) or _all_objects_current_pose[int(object_id.item())][0] > torch.tensor(1.0)
+                        or _all_objects_current_pose[int(object_id.item())][0] < torch.tensor(0.1) or _all_objects_current_pose[int(object_id.item())][0] > torch.tensor(1.0)
                         or _all_objects_current_pose[int(object_id.item())][1] < torch.tensor(-0.18) or _all_objects_current_pose[int(object_id.item())][1] > torch.tensor(0.10)):
                             env_complete_reset = torch.cat(
                                 (env_complete_reset, torch.tensor([env_count])), axis=0)
