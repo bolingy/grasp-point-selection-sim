@@ -230,15 +230,7 @@ class RL_UR16eManipulation(VecTask):
         self.action = np.reshape(self.action, (self.num_envs, 6))
         self.true_target_dist = 0.3
         
-        self.target_dist = (torch.stack((torch.tensor([self.true_target_dist, 0., 0.], device=self.device),
-                            torch.tensor([0., -self.true_target_dist, 0.], device=self.device),
-                            torch.tensor([0., 0., self.true_target_dist], device=self.device),
-                            torch.tensor([-self.true_target_dist, 0., 0.], device=self.device),
-                            torch.tensor([0., self.true_target_dist, 0.], device=self.device),
-                            torch.tensor([0., 0., -self.true_target_dist], device=self.device))).to(self.device))
-
-        # make a target_dist for each env
-        self.target_dist = self.target_dist.repeat(self.num_envs, 1, 1).to(self.device)
+        self.target_dist = torch.zeros(self.num_envs).to(self.device)
         self.prim = torch.zeros(self.num_envs).to(self.device)
         self.num_primtive_actions = self.cfg["env"]["numPrimitiveActions"]
         self.current_directory = os.getcwd()
@@ -1547,10 +1539,10 @@ class RL_UR16eManipulation(VecTask):
                     # print("u_arm_temp: ", u_arm_temp)
                     # print("u arm temp shape: ", u_arm_temp.shape)
                     # Get target dist and prim
-                    self.prim_y = action_temp[env_count, 7]
-                    self.prim_z = action_temp[env_count, 8]
-                    self.prim_target_dist_x = action_temp[env_count, 9]
-                    self.prim_target_dist_y = action_temp[env_count, 10]
+                    prim_y = action_temp[env_count, 7]
+                    prim_z = action_temp[env_count, 8]
+                    prim_target_dist_x = action_temp[env_count, 9]
+                    prim_target_dist_y = action_temp[env_count, 10]
                     if(self.go_to_start[env_count]):
                         if self.init_go_to_start[env_count] and self.primitive_count[env_count] > 1:
                             if self.return_pre_grasp[env_count] == 0:
@@ -1563,6 +1555,7 @@ class RL_UR16eManipulation(VecTask):
                                     (env_list_reset_arm_pose, torch.tensor([env_count])), axis=0)
                                 self.return_pre_grasp[env_count] = 0
                                 self.init_go_to_start[env_count] = False
+                                se
                         '''
                         Transformation for static links
                         '''
@@ -1592,7 +1585,7 @@ class RL_UR16eManipulation(VecTask):
                         rotation_matrix_camera_to_object = euler_angles_to_matrix(torch.tensor(
                             [0, 0, 0]).to(self.device), "XYZ", degrees=False)
                         T_camera_to_object = transformation_matrix(
-                            rotation_matrix_camera_to_object, torch.tensor([0.900, self.prim_y, self.prim_z]).to(self.device)) 
+                            rotation_matrix_camera_to_object, torch.tensor([0.900, prim_y, prim_z]).to(self.device)) 
                         # Transformation from base link to object
                         T_world_to_object = torch.matmul(
                             self.T_world_to_camera_link, T_camera_to_object)
@@ -1634,34 +1627,17 @@ class RL_UR16eManipulation(VecTask):
                         act = [0, 1, 3]
                         curr_prim = int(self.prim[env_count].item())
                         if curr_prim == 1:
-                            self.true_target_dist = self.prim_target_dist_y
-                            
+                            true_target_dist = abs(prim_target_dist_y)
                         else:
-                            self.true_target_dist = self.prim_target_dist_x
-                        if self.true_target_dist < 0:
-                            act[curr_prim] = act[curr_prim] + 3
-                            self.true_target_dist = abs(self.true_target_dist)
-                        
-                        new_target_dist = (torch.stack((torch.tensor([self.true_target_dist, 0., 0.], device=self.device),
-                            torch.tensor([0., -self.true_target_dist, 0.], device=self.device),
-                            torch.tensor([0., 0., self.true_target_dist], device=self.device),
-                            torch.tensor([-self.true_target_dist, 0., 0.], device=self.device),
-                            torch.tensor([0., self.true_target_dist, 0.], device=self.device),
-                            torch.tensor([0., 0., -self.true_target_dist], device=self.device))))
-                        
-                        self.target_dist[env_count] = new_target_dist
+                            true_target_dist = prim_target_dist_x
+                        self.target_dist[env_count] = true_target_dist
 
                         action_str = self.action[env_count][act[curr_prim]]
                         curr_eef_pos = self.states["eef_pos"][env_count].unsqueeze(0)
                         curr_eef_quat = self.states["eef_quat"][env_count].unsqueeze(0)
-                        move_dist = self.target_dist[env_count][act[curr_prim]]
-                        u_arm_temp[0:6], action_str = self.primitives[env_count].move_w_ori(action_str, curr_eef_pos, curr_eef_quat, move_dist)
+                        u_arm_temp[0:6], action_str, done = self.primitives[env_count].move_w_ori(action_str, curr_eef_pos, curr_eef_quat, self.target_dist[env_count])
 
-                        if self.true_target_dist <= 0.05:
-                            self.temp_action = action_str
-
-                        if action_str == "done":
-                            action_str = self.temp_action
+                        if done:
                             self.prim[env_count] += 1
                             # print("#############NEXT")
                             if curr_prim == 2:
@@ -1674,6 +1650,9 @@ class RL_UR16eManipulation(VecTask):
     
                                 # print("#############RESET ARM")
                                 self.primitive_count[env_count] += 1
+
+
+                                # is it the last primitive combo
                                 if self.primitive_count[env_count] >= (self.num_primtive_actions + 1):
                                 ######## False if min dist
                                 # if False:
@@ -1689,7 +1668,6 @@ class RL_UR16eManipulation(VecTask):
                                     # print("#############WAIT NEXT PRIM IN SEQUENCE")
                                     self.init_go_to_start[env_count] = True
                                     self.go_to_start[env_count] = True
-                        self.temp_action = action_str
 
                         self.action_env = u_arm_temp.cpu()
                         self.action_env = torch.cat((self.action_env,  torch.tensor([0, 0, 0, 0, 0]).unsqueeze(0) ), dim=1)# .repeat(self.action_env.shape[0], 1)), dim=1)       

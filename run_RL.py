@@ -4,7 +4,7 @@ import torch
 from rl.rl_utils import *
 import matplotlib.pyplot as plt
 
-ne = 2
+ne = 1
 res_net = True
 envs = isaacgymenvs.make(
 	seed=0,

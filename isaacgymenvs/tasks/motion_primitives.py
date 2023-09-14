@@ -69,10 +69,26 @@ class Primitives():
     
 
     def move_w_ori(self, action, current_pose, current_quat, target_dist):
+
+        # print("action", action)
+        print("move[action]", self.moves[action].squeeze(0))
+
+        # index of non zero in move[action]
+        dim = (self.moves[action].squeeze(0) != 0).nonzero().squeeze(0)
+        neg = (self.moves[action].squeeze(0) < 0).nonzero().squeeze(0)
+        print("neg", neg)
+        print("target_dist", target_dist)
+
+        if neg.shape[0] > 0:
+            target_dist = -target_dist
+
+        # print("index", index)
+        target_dist_tensor = torch.zeros_like(current_pose)
+
+        target_dist_tensor[:, dim] = target_dist
         # print("action", action)
         # print("current_quat", current_quat)
         # print("current_pose", current_pose)
-        # print("target_dist", target_dist)
         def quaternion_to_euler_angle_vectorized(w, x, y, z):
             ysqr = y * y
 
@@ -95,7 +111,7 @@ class Primitives():
         self.current_pose = current_pose
         self.current_quat = current_quat
         if self.executing == False:
-            self.target_pose = self.current_pose + target_dist
+            self.target_pose = self.current_pose + target_dist_tensor
             self.target_quat = torch.tensor([[0., 1.57, -1.57]], device=self.device)
             self.executing = True
             self.stuck_counter = 0
@@ -125,14 +141,14 @@ class Primitives():
         if self.stuck_counter > 10:
             # print("stuck")
             self.executing = False
-            return torch.tensor([[0., 0., 0., 0., 0., 0.]]), "done"
+            return torch.tensor([[0., 0., 0., 0., 0., 0.]]), action, True
 
 
         # Check if done
         if torch.all(torch.abs(self.pose_diff) < self.min_distance_to_goal):
             self.executing = False
             # print("done")
-            return torch.tensor([[0., 0., 0., 0., 0., 0.]]), "done"
+            return torch.tensor([[0., 0., 0., 0., 0., 0.]]), action, True
 
         # Zero out if less than level
         #pose_diff[pose_diff < self.min_distance_to_goal] = 0
@@ -162,7 +178,7 @@ class Primitives():
         # append orientation diff to osc_params
         osc_params = torch.cat((osc_params, ori_diff*5), 1)
         # print("osc_params", osc_params)
-        return osc_params, action
+        return osc_params, action, False
     
 
         # if action != "done" and self.action == False:
