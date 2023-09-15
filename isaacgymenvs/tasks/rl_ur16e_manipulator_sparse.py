@@ -1191,7 +1191,7 @@ class RL_UR16eManipulation(VecTask):
                 f"{cur_path}/../../misc/joint_poses.pt")
             temp_pos = joint_poses_list[torch.randint(
                 0, len(joint_poses_list), (1,))[0]].to(self.device)
-            temp_pos = torch.tensor([-0.2578, -1.8044, 1.5144, 0.3867, 1.4177, -0.4511]).to(self.device)
+            temp_pos = torch.tensor([-0.2578, -1.9463, 1.7880, 0.1189, 1.4177, -0.4511]).to(self.device)
             temp_pos = torch.reshape(temp_pos, (1, len(temp_pos)))
             temp_pos = torch.cat(
                 (temp_pos, torch.tensor([[0]]).to(self.device)), dim=1)
@@ -1604,7 +1604,7 @@ class RL_UR16eManipulation(VecTask):
                         rotation_matrix_pre_grasp_pose = euler_angles_to_matrix(
                             torch.tensor([0, 0, 0]).to(self.device), "XYZ", degrees=True)
                         translation_pre_grasp_pose = torch.tensor(
-                            [-0.25, 0, 0]).to(self.device)
+                            [-0.35, 0, 0]).to(self.device)
                         T_pre_grasp_pose = transformation_matrix(
                             rotation_matrix_pre_grasp_pose, translation_pre_grasp_pose)
                         # Transformation of object with base link to pre grasp pose
@@ -1765,7 +1765,7 @@ class RL_UR16eManipulation(VecTask):
                     rotation_matrix_pre_grasp_pose = euler_angles_to_matrix(
                         torch.tensor([0, 0, 0]).to(self.device), "XYZ", degrees=True)
                     translation_pre_grasp_pose = torch.tensor(
-                        [-0.25, 0, 0]).to(self.device)
+                        [-0.35, 0, 0]).to(self.device)
                     T_pre_grasp_pose = transformation_matrix(
                         rotation_matrix_pre_grasp_pose, translation_pre_grasp_pose)
                     # Transformation of object with base link to pre grasp pose
@@ -2463,9 +2463,10 @@ class RL_UR16eManipulation(VecTask):
                     self.track_save[env_count] = self.track_save[env_count] + \
                         torch.tensor(1).to(self.device)
             print(f"timeout reset for environment {env_ids}")
-            pos = self.reset_pre_grasp_pose(env_ids)
+            pos = self.reset_init_arm_pose(env_ids)
+            # pos = self.reset_pre_grasp_pose(env_ids)
             self.deploy_actions(env_ids, pos)
-            self.reset_object_pose(env_ids)
+            # self.reset_object_pose(env_ids)
 
         self.compute_observations()
         self.compute_reward()
