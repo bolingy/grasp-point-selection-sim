@@ -212,19 +212,19 @@ class UR16eManipulation(VecTask):
         self.env_reset_id_env = torch.ones(self.num_envs)
 
         self.check_object_coord_bins = {
-            "3F": [330, 549, 524, 752],
-            "3E": [394, 510, 524, 752],
-            "3H": [378, 527, 524, 752],
+            "3F": [113, 638, 366, 906],
+            "3E": [273, 547, 366, 906],
+            "3H": [226, 589, 366, 906],
         }
 
         self.crop_coord_bins = {
-            "3F": [210, 690, 315, 955],
-            "3E": [210, 690, 315, 955],
-            "3H": [210, 690, 315, 955],
+            "3F": [0, 768, 0, 1280],
+            "3E": [0, 768, 0, 1280],
+            "3H": [0, 768, 0, 1280],
         }
 
         self.object_bin_prob_spawn = {
-            "3F": [0.01, 0.4, 1],
+            "3F": [0.02, 0.4, 1],
             "3E": [0.05, 0.45, 1],
             "3H": [0.05, 0.45, 1],
         }
@@ -498,14 +498,14 @@ class UR16eManipulation(VecTask):
             self.body_states = []
             self.camera_properties_back_cam = gymapi.CameraProperties()
             self.camera_properties_back_cam.enable_tensors = True
-            self.camera_properties_back_cam.horizontal_fov = 80.0
+            self.camera_properties_back_cam.horizontal_fov = 70
             self.camera_properties_back_cam.width = 1280
-            self.camera_properties_back_cam.height = 786
+            self.camera_properties_back_cam.height = 720
             camera_handle = self.gym.create_camera_sensor(
                 env_ptr, self.camera_properties_back_cam)
             # for camera at center of the bin, coordinates are [-0.48, 0.05, 0.6]
             self.camera_base_link_translation = torch.tensor(
-                [-0.18, 0.175, 0.6]).to(self.device)
+                [0.2, 0.175, 0.64]).to(self.device)
             local_transform = gymapi.Transform()
             local_transform.p = gymapi.Vec3(
                 self.camera_base_link_translation[0], self.camera_base_link_translation[1], self.camera_base_link_translation[2])
@@ -1024,6 +1024,7 @@ class UR16eManipulation(VecTask):
         if (not save_force_disp_config):
             end_effector_forces = []
             object_disp_json_save = {}
+            self.force_list_save[env_count] = np.array([])
         else:
             end_effector_forces = self.force_list_save[env_count].tolist()
             oscillation = self.detect_oscillation(
@@ -1108,8 +1109,8 @@ class UR16eManipulation(VecTask):
         objects_spawned = len(torch.unique(segmask_bin_crop)) - 1
         total_objects = len(self.selected_object_env[env_count])
 
-        object_coords_match = cv2.countNonZero(segmask.cpu().numpy(
-        )) == cv2.countNonZero(segmask_bin_crop.cpu().numpy())
+        object_coords_match = torch.count_nonzero(
+            segmask) == torch.count_nonzero(segmask_bin_crop)
 
         # collecting pose of all objects
         total_position_error, obj_drop_status = self.calculate_objects_position_error(
@@ -1121,11 +1122,9 @@ class UR16eManipulation(VecTask):
         # Check conditions for resetting the environment.
         conditions_messages = [
             (object_mask_area < 1000,
-                f"Object in environment {env_count} not visible in the camera (due to occlusion) with area {object_mask_area}."),
-            (not object_coords_match,
-                f"Object in environment {env_count} extends beyond the bin's boundaries."),
-            (not total_objects == objects_spawned,
-                f"Object in environment {env_count} extends beyond the bin's boundaries."),
+                f"Object in environment {env_count} not visible in the camera (due to occlusion) with area {object_mask_area}"),
+            ((not object_coords_match) or (total_objects != objects_spawned),
+                f"Object in environment {env_count} extends beyond the bin's boundaries"),
             (torch.abs(total_position_error) > self.POSE_ERROR_THRESHOLD,
                 f"Object in environment {env_count}, not visible in the camera (due to occlusion) with area {object_mask_area}"),
             (obj_drop_status,
@@ -1138,7 +1137,7 @@ class UR16eManipulation(VecTask):
                     env_count, message, env_complete_reset)
                 break
 
-        return segmask, total_objects, objects_spawned, env_complete_reset
+        return segmask, env_complete_reset
 
     def dexnet_sample_node(self, env_count, segmask, env_list_reset_arm_pose, env_list_reset_objects, env_complete_reset):
         '''
@@ -1215,11 +1214,14 @@ class UR16eManipulation(VecTask):
             np.save(f, self.rgb_save[env_count])
 
         # cropping the image and modifying depth to match the DexNet 3.0 input configuration
-        depth_image_dexnet -= 0.2
+        dexnet_thresh_offset = 0.2
+        depth_image_dexnet += dexnet_thresh_offset
+        pod_back_panel_distance = torch.max(depth_image).item()
+        # To make the depth of the image ranging from 0.5m to 0.7m for valid configuration for DexNet 3.0
         depth_numpy = depth_image_dexnet.cpu().numpy()
         depth_numpy_temp = depth_numpy*segmask_numpy_temp
-        depth_numpy_temp[depth_numpy_temp == 0] = 0.75
-
+        depth_numpy_temp[depth_numpy_temp ==
+                         0] = pod_back_panel_distance + dexnet_thresh_offset
         depth_img_dexnet = DepthImage(
             depth_numpy_temp[self.crop_coord[0]:self.crop_coord[1],
                              self.crop_coord[2]:self.crop_coord[3]], frame=self.camera_intrinsics_back_cam.frame)
@@ -1229,16 +1231,17 @@ class UR16eManipulation(VecTask):
         try:
             action, self.grasps_and_predictions, self.unsorted_grasps_and_predictions = self.dexnet_object.inference(
                 depth_img_dexnet, segmask_dexnet, None)
-
+            max_num_grasps = len(self.grasps_and_predictions)
+            print(
+                f"For environment {env_count} the number of grasp samples were {max_num_grasps}")
             self.suction_deformation_score_temp = torch.Tensor()
             self.xyz_point_temp = torch.empty((0, 3))
             self.grasp_angle_temp = torch.empty((0, 3))
             self.grasp_point_temp = torch.empty((0, 2))
             self.force_SI_temp = torch.Tensor()
             self.dexnet_score_temp = torch.Tensor()
-            max_num_grasps = len(self.grasps_and_predictions)
             top_grasps = max_num_grasps if max_num_grasps <= 10 else 7
-            max_num_grasps = 1
+            # max_num_grasps = 1
             for i in range(max_num_grasps):
                 grasp_point = torch.tensor(
                     [self.grasps_and_predictions[i][0].center.x, self.grasps_and_predictions[i][0].center.y])
@@ -1328,22 +1331,18 @@ class UR16eManipulation(VecTask):
             ''' 
             Spawning objects until they acquire stable pose and also doesn't falls down
             '''
-            if ((self.frame_count[env_count] == self.COOLDOWN_FRAMES) and (not self.object_pose_check_list[env_count])):
-                segmask, total_objects, objects_spawned, env_complete_reset = self.check_reset_conditions(
+            if ((self.frame_count[env_count] == self.COOLDOWN_FRAMES) and (not self.object_pose_check_list[env_count]) and (self.free_envs_list[env_count] == torch.tensor(1))):
+                segmask, env_complete_reset = self.check_reset_conditions(
                     env_count, env_complete_reset)
 
                 # check if the environment returned from reset and the frame for that enviornment is 30 or not
                 # 30 frames is for cooldown period at the start for the simualtor to settle down
-                if ((self.free_envs_list[env_count] == torch.tensor(1))):
+                if (env_count not in env_complete_reset):
                     '''
                     Running DexNet 3.0 after investigating the pose error after spawning
                     '''
                     env_list_reset_arm_pose, env_list_reset_objects, env_complete_reset = self.dexnet_sample_node(
                         env_count, segmask, env_list_reset_arm_pose, env_list_reset_objects, env_complete_reset)
-
-                elif (total_objects != objects_spawned and (self.free_envs_list[env_count] == torch.tensor(1))):
-                    env_complete_reset = torch.cat(
-                        (env_complete_reset, torch.tensor([env_count])), axis=0)
 
             # After every reset popping out each prperty to be used for the pick
             self.action_env = torch.tensor(
@@ -1847,7 +1846,7 @@ class UR16eManipulation(VecTask):
         self.progress_buf += 1
         env_ids = self.reset_buf.nonzero(as_tuple=False).squeeze(-1)
 
-        # check if there is atimeout
+        # check if there is a timeout
         if len(env_ids) > 0:
             for env_id in env_ids:
                 env_count = env_id.item()
