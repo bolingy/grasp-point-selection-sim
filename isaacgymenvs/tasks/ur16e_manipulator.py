@@ -218,9 +218,9 @@ class UR16eManipulation(VecTask):
         }
 
         self.crop_coord_bins = {
-            "3F": [0, 768, 0, 1280],
-            "3E": [0, 768, 0, 1280],
-            "3H": [0, 768, 0, 1280],
+            "3F": [0, 720, 0, 1280],
+            "3E": [0, 720, 0, 1280],
+            "3H": [0, 720, 0, 1280],
         }
 
         self.object_bin_prob_spawn = {
