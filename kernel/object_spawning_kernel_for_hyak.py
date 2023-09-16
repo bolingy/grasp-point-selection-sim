@@ -206,7 +206,7 @@ def main(bin_id, num_envs, objects_spawn, num_runs):
         # Copying data from /tmp folder to local folder 
         HOME_PATH = os.path.expanduser('~')
         tmp_save_dir = f'{folder_path}'
-        dest_parent_dir = f'{HOME_PATH}/dynamo_grasp_sf/single_config_data/'
+        dest_parent_dir = f'/mmfs1/gscratch/sciencehub/manipulation_policy/single_config_data_dynamo_v2'
         dest_dir = os.path.join(dest_parent_dir, os.path.basename(tmp_save_dir))
 
         shutil.copytree(tmp_save_dir, dest_dir, dirs_exist_ok = True)
@@ -218,6 +218,7 @@ def main(bin_id, num_envs, objects_spawn, num_runs):
                 f"Simulation exit failed with return code {result.returncode}.")
 
         shutil.rmtree(target_base_dir)
+        shutil.rmtree(new_dir_path)
 
 
 if __name__ == "__main__":
