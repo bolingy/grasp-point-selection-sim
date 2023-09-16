@@ -10,8 +10,8 @@ policy:
   # general params
   deterministic: 1
   gripper_width: 0.05
-  crop_height: 96
-  crop_width: 96
+  crop_height: 192
+  crop_width: 192
 
   # sampling params
   sampling:
@@ -36,8 +36,8 @@ policy:
     type: gqcnn
     gqcnn_model: models/GQCNN-3.0
 
-    crop_height: 96
-    crop_width: 96
+    crop_height: 192
+    crop_width: 192
 
   # visualization
   vis:
@@ -91,7 +91,7 @@ detection:
 
   point_cloud_mask_only: 1
 
-  image_width: 640
-  image_height: 480
+  image_width: 1280
+  image_height: 720
 
   filter_dim: 1
