@@ -222,15 +222,15 @@ class UR16eManipulation(VecTask):
         self.env_done_grasping = torch.zeros(self.num_envs)
 
         self.check_object_coord_bins = {
-            "3F": [330, 549, 524, 752],
-            "3E": [394, 510, 524, 752],
-            "3H": [378, 527, 524, 752],
+            "3F": [113, 638, 366, 906],
+            "3E": [273, 547, 366, 906],
+            "3H": [226, 589, 366, 906],
         }
 
         self.crop_coord_bins = {
-            "3F": [210, 690, 315, 955],
-            "3E": [210, 690, 315, 955],
-            "3H": [210, 690, 315, 955],
+            "3F": [0, 720, 0, 1280],
+            "3E": [0, 720, 0, 1280],
+            "3H": [0, 720, 0, 1280],
         }
 
         self.object_bin_prob_spawn = {
@@ -503,14 +503,14 @@ class UR16eManipulation(VecTask):
             self.body_states = []
             self.camera_properties_back_cam = gymapi.CameraProperties()
             self.camera_properties_back_cam.enable_tensors = True
-            self.camera_properties_back_cam.horizontal_fov = 80.0
+            self.camera_properties_back_cam.horizontal_fov = 70
             self.camera_properties_back_cam.width = 1280
-            self.camera_properties_back_cam.height = 786
+            self.camera_properties_back_cam.height = 720
             camera_handle = self.gym.create_camera_sensor(
                 env_ptr, self.camera_properties_back_cam)
             # for camera at center of the bin, coordinates are [-0.48, 0.05, 0.6]
             self.camera_base_link_translation = torch.tensor(
-                [-0.18, 0.175, 0.6]).to(self.device)
+                [0.2, 0.175, 0.64]).to(self.device)
             local_transform = gymapi.Transform()
             local_transform.p = gymapi.Vec3(
                 self.camera_base_link_translation[0], self.camera_base_link_translation[1], self.camera_base_link_translation[2])
@@ -1101,13 +1101,13 @@ class UR16eManipulation(VecTask):
                 objects_spawned = len(torch.unique(segmask_object_coords))-1
                 total_objects = len(self.selected_object_env[env_count])
 
-                object_coords_match = cv2.countNonZero(segmask.cpu().numpy(
-                )) == cv2.countNonZero(segmask_object_coords.cpu().numpy())
+                object_coords_match = torch.count_nonzero(
+                    segmask) == torch.count_nonzero(segmask_object_coords)
 
-                
-                if((total_objects != objects_spawned) and (not object_coords_match)):
+                if ((total_objects != objects_spawned) and (not object_coords_match)):
                     if (env_count == 0):
-                        print(f"Object in environment {env_count} is out of bounds")
+                        print(
+                            f"Object in environment {env_count} is out of bounds")
                     env_complete_reset = torch.cat(
                         (env_complete_reset, torch.tensor([env_count])), axis=0)
 
@@ -1270,10 +1270,14 @@ class UR16eManipulation(VecTask):
                         np.save(f, self.rgb_save[env_count])
 
                     # cropping the image and modifying depth to match the DexNet 3.0 input configuration
-                    depth_image_dexnet -= 0.2
+                    dexnet_thresh_offset = 0.2
+                    depth_image_dexnet += dexnet_thresh_offset
+                    pod_back_panel_distance = torch.max(depth_image).item()
+                    # To make the depth of the image ranging from 0.5m to 0.7m for valid configuration for DexNet 3.0
                     depth_numpy = depth_image_dexnet.cpu().numpy()
                     depth_numpy_temp = depth_numpy*segmask_numpy_temp
-                    depth_numpy_temp[depth_numpy_temp == 0] = 0.75
+                    depth_numpy_temp[depth_numpy_temp ==
+                                     0] = pod_back_panel_distance + dexnet_thresh_offset
 
                     depth_img_dexnet = DepthImage(
                         depth_numpy_temp[self.crop_coord[0]:self.crop_coord[1],
@@ -1297,7 +1301,7 @@ class UR16eManipulation(VecTask):
                         # max_num_grasps = 1
                         self.num_grasps_per_sim = max_num_grasps
                         print(
-                            f"{self.num_grasps_per_sim} grasp points were sampled")
+                            f"For environment {env_count} the number of grasp samples were {max_num_grasps}")
                         for i in range(max_num_grasps):
                             grasp_point = torch.tensor(
                                 [self.grasps_and_predictions[i][0].center.x, self.grasps_and_predictions[i][0].center.y])

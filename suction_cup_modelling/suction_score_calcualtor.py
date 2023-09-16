@@ -13,12 +13,6 @@ class calcualte_suction_score():
     def __init__(self, camera_intrinsics):
         self.camera_intrinsics = camera_intrinsics
         self.device = 'cuda:0'
-        # pc_o3d = o3d.geometry.PointCloud(o3d.utility.Vector3dVector(point_cloud_im.data.reshape(-1,3)))
-        # # print('here')
-        # pc_o3d.estimate_normals(o3d.geometry.KDTreeSearchParamKNN(100), fast_normal_computation=False)
-        # pc_o3d.orient_normals_to_align_with_direction(np.array([0., 0., -1.]))
-        # pc_o3d.normalize_normals()
-        # self.normals = np.array(pc_o3d.normals).astype(np.float32)
 
     def convert_rgb_depth_to_point_cloud(self):
         camera_u = torch.arange(
@@ -87,6 +81,7 @@ class calcualte_suction_score():
         self.rgb_img = rgb_img
         self.grasps_and_predictions = grasps_and_predictions
         self.object_id = object_id
+        self.pre_grasp_pose_x = torch.min(depth_image)
 
         '''
         Calculate the normals of the object
@@ -185,7 +180,7 @@ class calcualte_suction_score():
                 if (grasps_and_predictions == None):
                     return torch.tensor(0), torch.tensor([0, 0, 0]), torch.tensor([centroid_angle[0], centroid_angle[1], centroid_angle[2]])
                 else:
-                    return torch.tensor(0), torch.tensor([0.72, -xyz_point[0], -xyz_point[1]]), torch.tensor([centroid_angle[0], centroid_angle[1], centroid_angle[2]])
+                    return torch.tensor(0), torch.tensor([self.pre_grasp_pose_x, -xyz_point[0], -xyz_point[1]]), torch.tensor([centroid_angle[0], centroid_angle[1], centroid_angle[2]])
 
         '''
         Calculate the differnce in suction 3d coordinates and nearest points obtained from the suction projection
@@ -198,12 +193,12 @@ class calcualte_suction_score():
             if (grasps_and_predictions == None):
                 return torch.tensor(0), torch.tensor([0, 0, 0]), torch.tensor([centroid_angle[0], centroid_angle[1], centroid_angle[2]])
             else:
-                return torch.tensor(0), torch.tensor([0.72, -xyz_point[0], -xyz_point[1]]), torch.tensor([centroid_angle[0], centroid_angle[1], centroid_angle[2]])
+                return torch.tensor(0), torch.tensor([self.pre_grasp_pose_x, -xyz_point[0], -xyz_point[1]]), torch.tensor([centroid_angle[0], centroid_angle[1], centroid_angle[2]])
 
         '''
         Calcualte the conical spring score
         '''
-        # point_cloud_suction_facing_normal gives the suction score assuming the robotic arm was facing perfectly to the normal
+        # point_cloud_suction_facing_normal gives the suction score, transforming the robotic arm such that eef should face to the normal
         point_cloud_suction_facing_normal = torch.mm(point_cloud_suction.clone().detach().type(torch.float64), euler_angles_to_matrix(
             -torch.tensor([-centroid_angle[1], centroid_angle[0], 0.]).to(self.device), "XYZ", degrees=False).type(torch.float64), out=None)
         minimum_suction_point = torch.min(
@@ -220,7 +215,7 @@ class calcualte_suction_score():
 
         if (grasps_and_predictions == None):
             return suction_score, torch.tensor([xyz_point[2]-0.07, -xyz_point[0], -xyz_point[1]]), torch.tensor([centroid_angle[0], centroid_angle[1], centroid_angle[2]])
-        return suction_score, torch.tensor([0.72, -xyz_point[0], -xyz_point[1]]), torch.tensor([0, 0, 0])
+        return suction_score, torch.tensor([self.pre_grasp_pose_x, -xyz_point[0], -xyz_point[1]]), torch.tensor([0, 0, 0])
 
     def calculate_contact(self, depth_image, segmask, rgb_img, grasps_and_predictions, object_id):
         self.depth_image = depth_image
