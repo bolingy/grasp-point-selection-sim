@@ -991,14 +991,11 @@ class DepthImageSuctionPointGridSampler(ImageGraspSampler):
 
         segmask = np.asarray(segmask.data)
         segmentation = np.where(segmask != 0)
-        bbox = 0, 0, 0, 0
         if len(segmentation) != 0 and len(segmentation[1]) != 0 and len(segmentation[0]) != 0:
             x_min = int(np.min(segmentation[1]))
             x_max = int(np.max(segmentation[1]))
             y_min = int(np.min(segmentation[0]))
             y_max = int(np.max(segmentation[0]))
-
-            bbox = x_min, x_max, y_min, y_max
 
         depth_im_ = depth_im.data
         # Adding 0.2 to compensate with the depth used for dexnet which was used to ensure that it lies between 0.5 to 0.7 m depth
@@ -1016,28 +1013,18 @@ class DepthImageSuctionPointGridSampler(ImageGraspSampler):
         
         division_x = ((x_world_right-x_world_left)/0.008)
         division_y = ((y_world_right-y_world_left)/0.008)
-        division_x = max(division_x, 400)
-        division_y = max(division_y, 400)
-        if(division_x == 0 or division_y == 0):
-            division_y = 10
-            division_x = 10
+        division_x = max(1, min(division_x, 22))
+        division_y = max(1, min(division_y, 22))
         range_x = x_max - x_min
         range_y = y_max - y_min
-        prev_x_coordinate = x_min
-        prev_y_coordinate = y_min
         
         indices_u = np.array([])
         indices_v = np.array([])
-        for i in range(x_min, x_max, round(range_x/division_x)):
-            for j in range(y_min, y_max, round(range_y/division_y)):
-                x = random.randint(prev_x_coordinate, prev_x_coordinate+round(range_x/division_x))
-                y = random.randint(prev_y_coordinate, prev_y_coordinate+round(range_y/division_y))
-                # print(x, y, segmask[y,x], depth_im_[y,x])
+        for x in range(x_min, x_max, int(range_x/division_x)):
+            for y in range(y_min, y_max, int(range_y/division_y)):
                 if(segmask[y,x]):
-                    indices_u = np.append(indices_u, prev_x_coordinate)
-                    indices_v = np.append(indices_v, prev_y_coordinate)
-                prev_x_coordinate = i
-                prev_y_coordinate = j
+                    indices_u = np.append(indices_u, x)
+                    indices_v = np.append(indices_v, y)
 
         sample_size = indices_u.size
         while k < sample_size:
@@ -1053,13 +1040,13 @@ class DepthImageSuctionPointGridSampler(ImageGraspSampler):
             k += 1
 
             # Check center px dist from boundary.
-            if (center_px[0] < self._min_dist_from_boundary
-                    or center_px[1] < self._min_dist_from_boundary
-                    or center_px[1] >
-                    depth_im.height - self._min_dist_from_boundary
-                    or center_px[0] >
-                    depth_im.width - self._min_dist_from_boundary):
-                continue
+            # if (center_px[0] < self._min_dist_from_boundary
+            #         or center_px[1] < self._min_dist_from_boundary
+            #         or center_px[1] >
+            #         depth_im.height - self._min_dist_from_boundary
+            #         or center_px[0] >
+            #         depth_im.width - self._min_dist_from_boundary):
+            #     continue
 
             dot = max(min(axis.dot(np.array([0, 0, 1])), 1.0), -1.0)
             psi = np.arccos(dot)
