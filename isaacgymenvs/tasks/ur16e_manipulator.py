@@ -1480,10 +1480,8 @@ class UR16eManipulation(VecTask):
 
                     if (_all_objects_current_pose[int(object_id.item())][2] < torch.tensor(0.5) and self.force_encounter[env_count] == 0):
                         print(f"object falled down in environment {env_count} while reaching the grasping point")
-                        env_list_reset_arm_pose = torch.cat(
-                            (env_list_reset_arm_pose, torch.tensor([env_count])), axis=0)
-                        env_list_reset_objects = torch.cat(
-                            (env_list_reset_objects, torch.tensor([env_count])), axis=0)
+                        env_complete_reset = torch.cat(
+                            (env_complete_reset, torch.tensor([env_count])), axis=0)
                         # oscillation = False
                         # success = False
                         # json_save = {
