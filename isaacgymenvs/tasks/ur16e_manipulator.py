@@ -1117,7 +1117,7 @@ class UR16eManipulation(VecTask):
                     total_objects = 1000
 
                 object_mask_area[env_count] = 1000
-                for object_id in torch.unique(segmask_object_count):
+                for object_id in torch.unique(segmask_object_coords):
                     segmask_area = np.zeros_like(
                         segmask_check.cpu().numpy().astype(np.uint8))
                     segmask_area[segmask_check.cpu().numpy().astype(
