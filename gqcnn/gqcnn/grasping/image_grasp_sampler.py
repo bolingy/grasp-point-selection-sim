@@ -1010,18 +1010,21 @@ class DepthImageSuctionPointGridSampler(ImageGraspSampler):
         x_world_right = (x_max-(width/2))/fx * depth_plane
         y_world_left = (y_min-(height/2))/fy * depth_plane
         y_world_right = (y_max-(height/2))/fy * depth_plane
-        
-        division_x = ((x_world_right-x_world_left)/0.01)
-        division_y = ((y_world_right-y_world_left)/0.01)
-        division_x = max(1, min(division_x, 22))
-        division_y = max(1, min(division_y, 22))
         range_x = x_max - x_min
         range_y = y_max - y_min
+        resolution = 0.01
         
+        division_x = (x_world_right-x_world_left)/resolution
+        division_y = (y_world_right-y_world_left)/resolution
+        division_x = int(max(1, min(division_x, 22)))
+        division_y = int(max(1, min(division_y, 22)))
+
         indices_u = np.array([])
         indices_v = np.array([])
-        for x in range(x_min, x_max, int(range_x/division_x)):
-            for y in range(y_min, y_max, int(range_y/division_y)):
+        thresh_x = int(range_x/division_x)
+        thresh_y = int(range_y/division_y)
+        for x in range(x_min, x_max, thresh_x):
+            for y in range(y_min, y_max, thresh_y):
                 if(segmask[y,x]):
                     indices_u = np.append(indices_u, x)
                     indices_v = np.append(indices_v, y)
