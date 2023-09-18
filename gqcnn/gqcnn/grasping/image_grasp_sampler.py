@@ -1011,8 +1011,8 @@ class DepthImageSuctionPointGridSampler(ImageGraspSampler):
         y_world_left = (y_min-(height/2))/fy * depth_plane
         y_world_right = (y_max-(height/2))/fy * depth_plane
         
-        division_x = ((x_world_right-x_world_left)/0.008)
-        division_y = ((y_world_right-y_world_left)/0.008)
+        division_x = ((x_world_right-x_world_left)/0.01)
+        division_y = ((y_world_right-y_world_left)/0.01)
         division_x = max(1, min(division_x, 22))
         division_y = max(1, min(division_y, 22))
         range_x = x_max - x_min
