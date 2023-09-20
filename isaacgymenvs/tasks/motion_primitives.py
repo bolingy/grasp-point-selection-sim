@@ -117,7 +117,7 @@ class Primitives():
         # print("current_pose", self.current_pose)
         # print("prev_pose", self.prev_pose)
         # print("pose_diff", torch.max(torch.abs(self.current_pose - self.prev_pose)))
-        if torch.max(torch.abs(self.current_pose - self.prev_pose)) < 0.001:
+        if torch.max(torch.abs(self.current_pose - self.prev_pose)) < 0.01:
             self.stuck_counter += 1
         else:
             self.stuck_counter = 0
