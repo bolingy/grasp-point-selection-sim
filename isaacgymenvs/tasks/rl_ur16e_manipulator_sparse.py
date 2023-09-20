@@ -2114,7 +2114,7 @@ class RL_UR16eManipulation(VecTask):
                                 self.force_list_save[env_count])
                             self.success[env_count] = False
                             if (score_gripper > torch.tensor(0.1) and oscillation == False):
-                                self.success[env_count] = True
+                                self.success[env_count] = 2
                             penetration = False
                             if (score_gripper == torch.tensor(0)):
                                 penetration = True
@@ -2281,7 +2281,7 @@ class RL_UR16eManipulation(VecTask):
 
                                 success = False
                                 if (self.suction_score_store_env[env_count] > torch.tensor(0.1)):
-                                    success = 2
+                                    success = True
                                 penetration = False
                                 if (self.suction_score_store_env[env_count] == torch.tensor(0)):
                                     penetration = True
