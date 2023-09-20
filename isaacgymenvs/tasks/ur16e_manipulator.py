@@ -1104,7 +1104,7 @@ class UR16eManipulation(VecTask):
                 object_coords_match = torch.count_nonzero(
                     segmask) == torch.count_nonzero(segmask_object_coords)
 
-                if ((total_objects != objects_spawned) and (not object_coords_match)):
+                if ((total_objects != objects_spawned) or (not object_coords_match)):
                     if (env_count == 0):
                         print(
                             f"Object in environment {env_count} is out of bounds")
