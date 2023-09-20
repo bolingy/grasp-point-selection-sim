@@ -231,7 +231,7 @@ def convert_actions(action, real_y, real_dx, sim_device='cuda:0'):
 	z = torch.ones((action.shape[0], 1)).to(sim_device) * -0.05
 	# select the real y in each batch using the indicies specified in action[:, 0]
 	result_y = real_y.gather(1, action[:, 0].long().unsqueeze(1))
-	result_dx = (- real_dx.gather(1, (action[:, 0].long().unsqueeze(1)) // 2)) - 1.07
+	result_dx = (- real_dx.gather(1, (action[:, 0].long().unsqueeze(1)) // 2)) - 1.02
 	sign = torch.ones(action.shape[0]).to(sim_device)
 	sign[action[:, 0] % 2 == 1] = -1
 	action[:, 1] = action[:, 1] * 0.11 * sign

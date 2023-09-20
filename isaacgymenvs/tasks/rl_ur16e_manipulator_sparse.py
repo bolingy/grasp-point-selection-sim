@@ -787,7 +787,7 @@ class RL_UR16eManipulation(VecTask):
             # store the sampled weight for each obj
             list_objects_domain_randomizer = torch.tensor([])
             # Fixed obj pose for fixed scene
-            offset_object1 = np.array([np.random.uniform(0.6, 0.6, 1).reshape(
+            offset_object1 = np.array([np.random.uniform(0.55, 0.55, 1).reshape(
                     1,)[0], np.random.uniform(-0.1, -0.1, 1).reshape(1,)[0], 1.45, 0.0,
                     0.0, 0.0])
             offset_object2 = np.array([np.random.uniform(0.6, 0.6, 1).reshape(
@@ -1269,7 +1269,7 @@ class RL_UR16eManipulation(VecTask):
                         torch.float).detach().clone()
                     _all_object_position_error += torch.sum(self.object_pose_store[env_count][int(object_id.item(
                     ))][:3] - self._root_state[env_count, self._object_model_id[int(object_id.item())-1], :][:3])
-                    if (_all_objects_current_pose[int(object_id.item())][2] < torch.tensor(1.3) or _all_objects_current_pose[int(object_id.item())][2] > torch.tensor(1.7)
+                    if (_all_objects_current_pose[int(object_id.item())][2] < torch.tensor(1.3) or _all_objects_current_pose[int(object_id.item())][2] > torch.tensor(1.6)
                         or _all_objects_current_pose[int(object_id.item())][0] < torch.tensor(0.2) or _all_objects_current_pose[int(object_id.item())][0] > torch.tensor(1.0)
                         or _all_objects_current_pose[int(object_id.item())][1] < torch.tensor(-0.18) or _all_objects_current_pose[int(object_id.item())][1] > torch.tensor(0.10)):
                             env_complete_reset = torch.cat(
@@ -1619,7 +1619,7 @@ class RL_UR16eManipulation(VecTask):
                         rotation_matrix_pre_grasp_pose = euler_angles_to_matrix(
                             torch.tensor([0, 0, 0]).to(self.device), "XYZ", degrees=True)
                         translation_pre_grasp_pose = torch.tensor(
-                            [-0.35, 0, 0]).to(self.device)
+                            [-0.3, 0, 0]).to(self.device)
                         T_pre_grasp_pose = transformation_matrix(
                             rotation_matrix_pre_grasp_pose, translation_pre_grasp_pose)
                         # Transformation of object with base link to pre grasp pose
@@ -1782,7 +1782,7 @@ class RL_UR16eManipulation(VecTask):
                     rotation_matrix_pre_grasp_pose = euler_angles_to_matrix(
                         torch.tensor([0, 0, 0]).to(self.device), "XYZ", degrees=True)
                     translation_pre_grasp_pose = torch.tensor(
-                        [-0.35, 0, 0]).to(self.device)
+                        [-0.3, 0, 0]).to(self.device)
                     T_pre_grasp_pose = transformation_matrix(
                         rotation_matrix_pre_grasp_pose, translation_pre_grasp_pose)
                     # Transformation of object with base link to pre grasp pose
@@ -1819,12 +1819,12 @@ class RL_UR16eManipulation(VecTask):
                         _all_object_rotation_error += torch.sum(e1-e2)
 
                         if (_all_objects_current_pose[int(object_id.item())][2] < torch.tensor(1.3) or _all_objects_current_pose[int(object_id.item())][2] > torch.tensor(1.7)
-                        or _all_objects_current_pose[int(object_id.item())][0] < torch.tensor(0.2) or _all_objects_current_pose[int(object_id.item())][0] > torch.tensor(1.0)
+                        or _all_objects_current_pose[int(object_id.item())][0] < torch.tensor(0.0) or _all_objects_current_pose[int(object_id.item())][0] > torch.tensor(1.0)
                         or _all_objects_current_pose[int(object_id.item())][1] < torch.tensor(-0.18) or _all_objects_current_pose[int(object_id.item())][1] > torch.tensor(0.10)):
                             env_complete_reset = torch.cat(
                                 (env_complete_reset, torch.tensor([env_count])), axis=0)
                             print("Object out of bin 1")
-                            self.success[env_count] = False
+                            self.success[env_count] = 1
 
                     _all_object_position_error = torch.abs(
                         _all_object_position_error)
@@ -2281,7 +2281,7 @@ class RL_UR16eManipulation(VecTask):
 
                                 success = False
                                 if (self.suction_score_store_env[env_count] > torch.tensor(0.1)):
-                                    success = True
+                                    success = 2
                                 penetration = False
                                 if (self.suction_score_store_env[env_count] == torch.tensor(0)):
                                     penetration = True
