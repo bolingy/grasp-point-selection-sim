@@ -1050,7 +1050,7 @@ class RL_UR16eManipulation(VecTask):
                 diff_target_area_tensor[indicies] = torch_target_area_tensor[indicies] - prev_target_area_tensor[envs_finished_prim][indicies]
                 # print("!!!!!diff_target_area_tensor", diff_target_area_tensor)
             self.torch_target_area_tensor[envs_finished_prim] = torch_target_area_tensor.float()
-            scaled_diff = torch.tensor(1e-5).to(self.device)
+            scaled_diff = torch.tensor(1e-4).to(self.device)
             scaled_diff_tensor = diff_target_area_tensor.to(self.device) * scaled_diff
             scaled_diff_tensor = torch.clamp(scaled_diff_tensor, -0.2, 0.2)
             torch_success_tensor = self.success[envs_finished_prim].clone().detach()
@@ -1190,7 +1190,7 @@ class RL_UR16eManipulation(VecTask):
                 f"{cur_path}/../../misc/joint_poses.pt")
             temp_pos = joint_poses_list[torch.randint(
                 0, len(joint_poses_list), (1,))[0]].to(self.device)
-            temp_pos = torch.tensor([-0.2578, -1.8044, 1.5144, 0.3867, 1.4177, -0.4511]).to(self.device)
+            temp_pos = torch.tensor([-0.2578, -1.9463, 1.7880, 0.1189, 1.4177, -0.4511]).to(self.device)
             temp_pos = torch.reshape(temp_pos, (1, len(temp_pos)))
             temp_pos = torch.cat(
                 (temp_pos, torch.tensor([[0]]).to(self.device)), dim=1)
@@ -1619,7 +1619,7 @@ class RL_UR16eManipulation(VecTask):
                         rotation_matrix_pre_grasp_pose = euler_angles_to_matrix(
                             torch.tensor([0, 0, 0]).to(self.device), "XYZ", degrees=True)
                         translation_pre_grasp_pose = torch.tensor(
-                            [-0.25, 0, 0]).to(self.device)
+                            [-0.35, 0, 0]).to(self.device)
                         T_pre_grasp_pose = transformation_matrix(
                             rotation_matrix_pre_grasp_pose, translation_pre_grasp_pose)
                         # Transformation of object with base link to pre grasp pose
@@ -1782,7 +1782,7 @@ class RL_UR16eManipulation(VecTask):
                     rotation_matrix_pre_grasp_pose = euler_angles_to_matrix(
                         torch.tensor([0, 0, 0]).to(self.device), "XYZ", degrees=True)
                     translation_pre_grasp_pose = torch.tensor(
-                        [-0.25, 0, 0]).to(self.device)
+                        [-0.35, 0, 0]).to(self.device)
                     T_pre_grasp_pose = transformation_matrix(
                         rotation_matrix_pre_grasp_pose, translation_pre_grasp_pose)
                     # Transformation of object with base link to pre grasp pose
@@ -2315,7 +2315,7 @@ class RL_UR16eManipulation(VecTask):
                                 self.retract_up[env_count] = 1
                                 self.retract_start_pose[env_count] = T_world_to_ee_pose[:3, 3]
                             ### HOW MUCH TO RETRACT
-                            if (self.retract_up[env_count] == 1 and current_point[0] <= 0.05):
+                            if (self.retract_up[env_count] == 1 and current_point[0] <= 0.1):
                                 self.frame_count_contact_object[env_count] = 1
 
                                 success = False
@@ -2363,6 +2363,10 @@ class RL_UR16eManipulation(VecTask):
             # Get action from policy
             self.actions = torch.cat([self.actions, self.action_env])
             self.frame_count[env_count] += torch.tensor(1)
+        # get indicies where self.reset_env is true
+        reset_buf_indicies = torch.where(self.reset_buf == 1)[0].to("cpu")
+        env_complete_reset = torch.cat((reset_buf_indicies, env_complete_reset), axis=0)
+        # print("env_complete_reset: ", env_complete_reset)
 
         # Parallelizing multiple environments for resetting the arm for pre grasp pose or to reset the particular environment
         if (len(env_complete_reset) != 0 and len(env_list_reset_arm_pose) != 0):
