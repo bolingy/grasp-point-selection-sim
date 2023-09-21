@@ -194,7 +194,10 @@ def main(bin_id, num_envs, objects_spawn, num_runs):
                             os.path.join(target_object_dir, file_name))
 
             shutil.rmtree(extract_temp_dir)
-        output_path = f"/tmp/multi_config_data_{runID}/"
+
+        HOME_PATH = os.path.expanduser('~')
+        output_path = os.path.join(HOME_PATH, 'dynamo_grasp_sf/System_Identification_Data/multi_config_data_{runID}/')
+        # output_path = f"/tmp/multi_config_data_{runID}/"
         folder_path, new_dir_path = _get_data_path(bin_id, output_path)
         os.makedirs(new_dir_path, exist_ok=True)
 
@@ -203,13 +206,13 @@ def main(bin_id, num_envs, objects_spawn, num_runs):
         result = subprocess.run(command)
 
         # Copying data from /tmp folder to local folder 
-        HOME_PATH = os.path.expanduser('~')
-        tmp_save_dir = f'{folder_path}'
-        dest_parent_dir = os.path.join(HOME_PATH, 'dynamo_grasp_sf/System_Identification_Data')
+        # HOME_PATH = os.path.expanduser('~')
+        # tmp_save_dir = f'{folder_path}'
+        # dest_parent_dir = os.path.join(HOME_PATH, 'dynamo_grasp_sf/System_Identification_Data')
         
-        dest_dir = os.path.join(dest_parent_dir, os.path.basename(tmp_save_dir))
+        # dest_dir = os.path.join(dest_parent_dir, os.path.basename(tmp_save_dir))
 
-        shutil.copytree(tmp_save_dir, dest_dir, dirs_exist_ok = True)
+        # shutil.copytree(tmp_save_dir, dest_dir, dirs_exist_ok = True)
 
         if result.returncode == 0:
             print("Simulation exited successfully!")
