@@ -221,7 +221,7 @@ def main(bin_id, num_envs, objects_spawn, num_runs):
                 f"Simulation exit failed with return code {result.returncode}.")
 
         shutil.rmtree(target_base_dir)
-        shutil.rmtree(new_dir_path)
+        # shutil.rmtree(new_dir_path)
 
 
 if __name__ == "__main__":
