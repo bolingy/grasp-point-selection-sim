@@ -1168,8 +1168,8 @@ class UR16eManipulation(VecTask):
 
                 elif ((env_count in env_complete_reset) and self.dexnet_sampling_flag and (torch.sum(self.grasps_done_env) < self.num_grasps_per_sim)):
                     self.grasps_done_env[env_count] += 1
-                    print("grasp done in each environment status ",
-                          self.grasps_done_env)
+                    # print("grasp done in each environment status ",
+                    #       self.grasps_done_env)
 
                 # check if the environment returned from reset and the frame for that enviornment is 30 or not
                 # 30 frames is for cooldown period at the start for the simualtor to settle down
