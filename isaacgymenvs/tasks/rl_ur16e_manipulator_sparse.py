@@ -2065,6 +2065,7 @@ class RL_UR16eManipulation(VecTask):
                                 self.force_SI[env_count] = torch.tensor(
                                     1000).to(self.device)
                             if (self.action_contrib[env_count] == 1):
+                                temp_grasp = torch.tensor([0, 0, 0])
                                 self.xyz_point[env_count][0] += temp_xyz_point[0]
                                 self.grasp_angle[env_count] = temp_grasp
 
