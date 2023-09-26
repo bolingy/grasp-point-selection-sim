@@ -1,3 +1,4 @@
+import os
 import argparse
 
 
@@ -44,7 +45,7 @@ import einops
 import gym
 # import roboschool
 #import pybullet_envs
-from rl.ppo import *
+from rl.ppo_simplified import *
 from rl.rl_utils import *
 import wandb
 import time
@@ -80,7 +81,7 @@ save_model_freq = 2      # save model frequency (in num timesteps)
 ################ PPO hyperparameters ################
 
 pick_len = 3
-update_size = pick_len * 40  #20
+update_size = pick_len * 90  #20
 K_epochs = 40               # update policy for K epochs
 eps_clip = 0.13              # clip parameter for PPO
 gamma = 0.99                # discount factor
@@ -93,15 +94,15 @@ random_seed = 1       # set random seed if required (0 = no random seed)
 
 '''Training/Evaluation Parameter'''
 env_name = "RL_UR16eManipulation_Full"
-policy_name = "PPO_pick_backobj_fixedbinconfig"
+policy_name = "PPO_pick_backobj_fixedbinconfig_ActorNET"
 head_less = True
 EVAL = False #if you want to evaluate the model
-action_std = 0.18 if not EVAL else 1e-9        # starting std for action distribution (Multivariate Normal)
-load_policy = False
-# policy_name = "seq_multiobj_batch_90_lra_1e-5_lrc_3e-5_clip015"
-policy_name = "{}_batch_{}_lra_{}_lrc_{}_clip{}".format(policy_name, update_size, lr_actor, lr_critic, eps_clip)
-load_policy_version = None                   # specify policy version (i.e. int, 50) when loading a trained policy
-ne = 30               # number of environments
+action_std = 0.1 if not EVAL else 1e-9        # starting std for action distribution (Multivariate Normal)
+load_policy = True
+policy_name = "PPO_pick_backobj_fixedbinconfig_ActorNET_batch_90_lra_1e-05_lrc_3e-05_clip0.13"
+# policy_name = "{}_batch_{}_lra_{}_lrc_{}_clip{}".format(policy_name, update_size, lr_actor, lr_critic, eps_clip)
+load_policy_version = 4                   # specify policy version (i.e. int, 50) when loading a trained policy
+ne = 90               # number of environments
 res_net = True
 
 print("training environment name : " + env_name)
@@ -138,7 +139,7 @@ state_dim = env.observation_space.shape[0]
 
 # action space dimension
 if has_continuous_action_space:
-    action_dim = env.action_space.shape[0] #- 1 # -1 for poking behavior
+    action_dim = env.action_space.shape[0] # -1 for poking behavior
 else:
     action_dim = env.action_space.n
 
@@ -281,7 +282,8 @@ state, reward, done, true_indicies = returns_to_device(state, reward, done, true
 # print(state.shape, reward.shape, done.shape, indicies)
 # state, reward, done = state[None,:], reward[None, :], done[None, :] # remove when parallelized
 if res_net:
-    state = rearrange_state(state)
+    real_ys, real_dxs = get_real_ys_dxs(state)
+    state = rearrange_state_timestep(state)
 
 curr_rewards = 0
 # training loop
@@ -295,7 +297,8 @@ while time_step <= max_training_timesteps: ## prim_step
         buf_envs[true_i].state_values.append(state_val[i].clone().detach())
         if true_i == 0:
             print("action of env 0 updated", action[i])
-    action = scale_actions(action).to(sim_device)
+    action = convert_actions(action, real_ys, real_dxs, sim_device=sim_device)
+    # action = scale_actions(action).to(sim_device)
     # append 0 to all rows of action
     # print("action", action.shape)
 
@@ -308,7 +311,9 @@ while time_step <= max_training_timesteps: ## prim_step
     # actions[one_hot] = action
     create_env_action_via_true_indicies(true_indicies, action, actions, ne, sim_device)
     # print("actions", actions)
+
     state, reward, done, true_indicies = step_primitives(actions, env)
+    real_ys, real_dxs = get_real_ys_dxs(state)
 
     if EVAL and true_indicies[0] == 0 and res_net:
         imgs = state
@@ -330,6 +335,7 @@ while time_step <= max_training_timesteps: ## prim_step
         # print whether target is left, middle, or right compared to the two objects
         state_env_0 = state[0]
         print("state env 0", state_env_0)
+        print("reward", reward[0])
         target_y = state_env_0[1]
         obj1_y = state_env_0[4]
         obj2_y = state_env_0[7]
@@ -352,7 +358,7 @@ while time_step <= max_training_timesteps: ## prim_step
 
     state, reward, done, true_indicies = returns_to_device(state, reward, done, true_indicies, train_device)
     if res_net:
-        state = rearrange_state(state)
+        state = rearrange_state_timestep(state)
     # true_idx = torch.nonzero(indicies).squeeze(1)
     # print("true indicies", true_indicies)
     # print("reward ", reward)
