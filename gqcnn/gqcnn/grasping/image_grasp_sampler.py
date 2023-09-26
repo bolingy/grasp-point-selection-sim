@@ -530,7 +530,7 @@ class AntipodalDepthImageGraspSampler(ImageGraspSampler):
                 grasp_theta = np.arctan2(grasp_axis[0], grasp_axis[1])
             grasp_center_pt = Point(np.array(
                 [grasp_center[1], grasp_center[0]]),
-                                    frame=camera_intr.frame)
+                frame=camera_intr.frame)
 
             # Compute grasp points in 3D.
             x1 = point_cloud_im[p1[0], p1[1]]
@@ -767,7 +767,7 @@ class DepthImageSuctionPointSampler(ImageGraspSampler):
         indices = np.random.choice(num_nonzero_px,
                                    size=sample_size,
                                    replace=False)
-        
+
         while k < sample_size and len(suction_points) < num_samples:
             # Sample a point uniformly at random.
             ind = indices[k]
@@ -815,6 +815,7 @@ class DepthImageSuctionPointSampler(ImageGraspSampler):
                     suction_points.append(candidate)
         self._logger.debug("Loop took %.3f sec" % (time() - sample_start))
         return suction_points
+
 
 class DepthImageSuctionPointGridSampler(ImageGraspSampler):
     """Grasp sampler for suction points from depth images.
@@ -974,7 +975,7 @@ class DepthImageSuctionPointGridSampler(ImageGraspSampler):
         cloud_start = time()
         point_cloud_im = camera_intr.deproject_to_image(depth_im_mask)
         normal_cloud_im = point_cloud_im.normal_cloud_im()
-        
+
         nonzero_px = depth_im_mask.nonzero_pixels()
         num_nonzero_px = nonzero_px.shape[0]
 
@@ -1012,8 +1013,8 @@ class DepthImageSuctionPointGridSampler(ImageGraspSampler):
         y_world_right = (y_max-(height/2))/fy * depth_plane
         range_x = x_max - x_min
         range_y = y_max - y_min
-        resolution = 0.008
-        
+        resolution = 0.01
+
         division_x = (x_world_right-x_world_left)/resolution
         division_y = (y_world_right-y_world_left)/resolution
         division_x = int(max(1, min(division_x, 22)))
@@ -1025,7 +1026,7 @@ class DepthImageSuctionPointGridSampler(ImageGraspSampler):
         thresh_y = int(range_y/division_y)
         for x in range(x_min, x_max, thresh_x):
             for y in range(y_min, y_max, thresh_y):
-                if(segmask[y,x]):
+                if (segmask[y, x]):
                     indices_u = np.append(indices_u, x)
                     indices_v = np.append(indices_v, y)
 
@@ -1057,9 +1058,9 @@ class DepthImageSuctionPointGridSampler(ImageGraspSampler):
 
             # Create candidate grasp.
             candidate = SuctionPoint2D(center,
-                                        axis,
-                                        depth,
-                                        camera_intr=camera_intr)
+                                       axis,
+                                       depth,
+                                       camera_intr=camera_intr)
 
             # Check constraint satisfaction.
             if constraint_fn is None or constraint_fn(candidate):
@@ -1072,6 +1073,7 @@ class DepthImageSuctionPointGridSampler(ImageGraspSampler):
                 suction_points.append(candidate)
         self._logger.debug("Loop took %.3f sec" % (time() - sample_start))
         return suction_points
+
 
 class DepthImageMultiSuctionPointSampler(ImageGraspSampler):
     """Grasp sampler for suction points from depth images.
