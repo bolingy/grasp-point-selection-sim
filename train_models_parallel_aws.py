@@ -5,16 +5,18 @@ import argparse
 parser = argparse.ArgumentParser()
 
 # Adding optional argument
+parser.add_argument("-m", "--MESA_VK_DEVICE_SELECT_ID", help="Check device ID with MESA_VK_DEVICE_SELECT=list vulkaninfo", type=str, default="10de:2204")
 parser.add_argument("-d", "--DEVICE", help = "Select GPU DEVICES (CUDA)", type=str, default="0")
 
 # Read arguments from command line
 args = parser.parse_args()
 
-if args.DEVICE:
+if args.DEVICE and args.MESA_VK_DEVICE_SELECT_ID:
+    print("MESA VK DEVICE ID %s" % args.MESA_VK_DEVICE_SELECT_ID)
     print("GPU DEVICES (CUDA) SELECTED: % s" % args.DEVICE)
 
 import os
-os.environ['MESA_VK_DEVICE_SELECT'] = '10de:2216'
+# os.environ['MESA_VK_DEVICE_SELECT'] = args.MESA_VK_DEVICE_SELECT_ID
 os.environ["CUDA_VISIBLE_DEVICES"] = args.DEVICE
 
 
@@ -54,7 +56,7 @@ import warnings
 warnings.filterwarnings("ignore")
 
 # check cuda
-train_device = torch.device('cuda:0')
+train_device = torch.device('cuda:1')
 sim_device = torch.device('cuda:0')
 
 # if(torch.cuda.is_available()): 
