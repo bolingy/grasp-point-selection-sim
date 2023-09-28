@@ -6,7 +6,7 @@ import argparse
 parser = argparse.ArgumentParser()
 
 # Adding optional argument
-parser.add_argument("-m", "--MESA_VK_DEVICE_SELECT_ID", help="Check device ID with MESA_VK_DEVICE_SELECT=list vulkaninfo", type=str, default="10de:2204")
+parser.add_argument("-m", "--MESA_VK_DEVICE_SELECT_ID", help="Check device ID with MESA_VK_DEVICE_SELECT=list vulkaninfo", type=str, default="10de:37d7baf3-04b9-5c98-f525-1b1064a0702d")
 parser.add_argument("-d", "--DEVICE", help = "Select GPU DEVICES (CUDA)", type=str, default="0")
 
 # Read arguments from command line
@@ -17,7 +17,7 @@ if args.DEVICE and args.MESA_VK_DEVICE_SELECT_ID:
     print("GPU DEVICES (CUDA) SELECTED: % s" % args.DEVICE)
 
 import os
-# os.environ['MESA_VK_DEVICE_SELECT'] = args.MESA_VK_DEVICE_SELECT_ID
+os.environ['MESA_VK_DEVICE_SELECT'] = args.MESA_VK_DEVICE_SELECT_ID
 os.environ["CUDA_VISIBLE_DEVICES"] = args.DEVICE
 
 
@@ -102,7 +102,7 @@ load_policy = True
 policy_name = "PPO_pick_backobj_fixedbinconfig_ActorNET_batch_90_lra_1e-05_lrc_3e-05_clip0.13"
 # policy_name = "{}_batch_{}_lra_{}_lrc_{}_clip{}".format(policy_name, update_size, lr_actor, lr_critic, eps_clip)
 load_policy_version = 4                   # specify policy version (i.e. int, 50) when loading a trained policy
-ne = 90               # number of environments
+ne = 40               # number of environments
 res_net = True
 
 print("training environment name : " + env_name)
@@ -131,7 +131,7 @@ env = isaacgymenvs.make(
 	rl_device='cuda:0', # cpu cuda:0
 	multi_gpu=False,
 	graphics_device_id=0,
-    headless=head_less
+        headless=head_less
 )
 
 # state space dimension
@@ -282,7 +282,7 @@ state, reward, done, true_indicies = returns_to_device(state, reward, done, true
 # print(state.shape, reward.shape, done.shape, indicies)
 # state, reward, done = state[None,:], reward[None, :], done[None, :] # remove when parallelized
 if res_net:
-    real_ys, real_dxs = get_real_ys_dxs(state)
+    real_ys, real_dxs = get_real_ys_dxs(state, sim_device)
     state = rearrange_state_timestep(state)
 
 curr_rewards = 0
