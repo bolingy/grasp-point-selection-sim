@@ -1319,9 +1319,9 @@ class RL_UR16eManipulation(VecTask):
 
                     self.rgb_save[env_count] = rgb_image_copy[180:660,
                                                                 410:1050].clone().detach().cpu().numpy()
-                    plt.imshow(self.rgb_save[env_count])
+                    # plt.imshow(self.rgb_save[env_count])
                     # plt.show()
-                    plt.savefig("gym_test.png")                    
+                    # plt.savefig("gym_test.png")                    
                     torch_depth_tensor = self.depth_camera_tensors[env_count]
                     depth_image = torch_depth_tensor.to(self.device)
                     depth_image = -depth_image
@@ -1390,7 +1390,7 @@ class RL_UR16eManipulation(VecTask):
                     max_num_grasps = 0
 
                     # Storing all the sampled grasp point and its properties
-                    if True:
+                    try:
                         if self.RL_flag[env_count] == torch.tensor(0):
                             y, x = np.where(segmask_numpy[180:660, 410:1050] == 255)
                             center_x, center_y = int(np.mean(x)), int(np.mean(y))
@@ -1447,11 +1447,11 @@ class RL_UR16eManipulation(VecTask):
                                     (env_list_reset_arm_pose, torch.tensor([env_count])), axis=0)
                             env_list_reset_objects = torch.cat(
                                 (env_list_reset_objects, torch.tensor([env_count])), axis=0)
-                    '''except Exception as e:
+                    except Exception as e:
                         print("dexnet error: ", e)
                         env_complete_reset = torch.cat(
                             (env_complete_reset, torch.tensor([env_count])), axis=0)
-                    '''
+                    
                     self.suction_deformation_score_env[env_count] = self.suction_deformation_score_temp
                     self.suction_score_store_env[env_count] = self.suction_deformation_score_temp
                     self.grasp_angle_env[env_count] = self.grasp_angle_temp
