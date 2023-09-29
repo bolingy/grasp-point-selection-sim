@@ -1246,7 +1246,7 @@ class UR16eManipulation(VecTask):
                             grasp_point = torch.tensor(
                                 [self.grasps_and_predictions[i][0].center.x, self.grasps_and_predictions[i][0].center.y])
 
-                            depth_image_suction = depth_image
+                            depth_image_suction = depth_image.clone().detach()
                             offset = torch.tensor(
                                 [self.crop_coord[2], self.crop_coord[0]])
                             suction_deformation_score, xyz_point, grasp_angle = self.suction_score_object.calculator(
