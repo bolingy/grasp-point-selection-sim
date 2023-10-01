@@ -7,11 +7,15 @@ physics_engine: ${..physics_engine}
 env:
   numEnvs: ${resolve_default:8192,${...num_envs}}
   envSpacing: 1.5
-  episodeLength: 700
+  episodeLength: 1200
   enableDebugVis: False
+
+  objRandomization: False
+  retract: True
 
   clipObservations: 255.0
   clipActions: 1.0
+  numActions: 2 # action dim
   numPrimitiveActions: 3
 
   startPositionNoise: 0.0
@@ -41,12 +45,12 @@ sim:
   dt: 0.01667 # 1/60
   substeps: 2
   up_axis: "z"
-  use_gpu_pipeline: ${eq:${...pipeline},"gpu"}
+  use_gpu_pipeline: True
   gravity: [0.0, 0.0, -9.81]
   physx:
     num_threads: ${....num_threads}
     solver_type: ${....solver_type}
-    use_gpu: ${contains:"cuda",${....sim_device}} # set to False to run on CPU
+    use_gpu: True
     num_position_iterations: 8
     num_velocity_iterations: 1
     contact_offset: 0.005

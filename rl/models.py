@@ -200,3 +200,28 @@ class ActorTimestepNet(nn.Module):
         result = torch.cat((action_1, action_2), dim = 1)
         # print("result", result)
         return result
+
+class ActorTimestepNetState(nn.Module):
+    def __init__(self, state_dim, hidden_dim=64, disc_output_dim=6, cont_output_dim=1):
+        super(ActorTimestepNetState, self).__init__()
+
+        # Define the layers
+        self.fc1 = nn.Linear(state_dim, hidden_dim)
+        self.tanh1 = nn.Tanh()
+        self.fc2 = nn.Linear(hidden_dim, hidden_dim)
+        self.tanh2 = nn.Tanh()
+        self.fc3 = nn.Linear(hidden_dim, disc_output_dim + cont_output_dim)
+        self.softmax = nn.Softmax(dim=-1)
+        self.sigmoid = nn.Sigmoid()
+
+    def forward(self, x):
+        # Define the forward pass
+        x = self.fc1(x)
+        x = self.tanh1(x)
+        x = self.fc2(x)
+        x = self.tanh2(x)
+        x = self.fc3(x)
+        action_1 = self.softmax(x[:, :6])
+        action_2 = self.sigmoid(x[:, 6:])
+        result = torch.cat((action_1, action_2), dim = 1)
+        return result
