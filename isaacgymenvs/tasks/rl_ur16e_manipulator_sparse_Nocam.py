@@ -1031,7 +1031,10 @@ class RL_UR16eManipulation(VecTask):
             torch_segmask_tensor = torch.where(torch_segmask_tensor.float() == label.float(), torch.tensor(255.0).float().to(self.device), torch_segmask_tensor.float())
 
             # create torch target area tensor (ne) from torch_segmask_tensor where it counts number of pixels that is 255
-            torch_target_area_tensor = torch.sum(torch_segmask_tensor == label, dim=1)
+            # print("torch.unique segmask", torch.unique(torch_segmask_tensor))
+            # print("torch.unique label", torch.unique(label))
+            torch_target_area_tensor = torch.sum(torch_segmask_tensor == 255, dim=1)
+            # print("torch_target_area_tensor", torch_target_area_tensor)
             # print("torch_target_area_tensor", torch_target_area_tensor)
             diff_target_area_tensor = torch.zeros(envs_finished_prim.shape[0]).to(self.device)
             # print(self.primitive_count[envs_finished_prim])
@@ -1044,7 +1047,12 @@ class RL_UR16eManipulation(VecTask):
             # print("diff_target_area_tensor", diff_target_area_tensor)
 
             # target object pose
-            model_ids = torch.index_select(torch.tensor(self._object_model_id).to(self.device), 0, self.object_target_id - 1)
+            
+            # model_ids = torch.index_select(torch.tensor(self._object_model_id).to(self.device), 0, self.object_target_id - 1)
+            # print("model_ids", model_ids)
+            # print("self.object_target_id", self.object_target_id)
+            model_ids = torch.tensor(42).repeat(self.num_envs, 1).squeeze(1).to(self.device)
+            # print("model_ids", model_ids)
             # model_ids = model_ids - 1
             first_dim = torch.arange(self._root_state.shape[0])
             target_object_pose = self._root_state[first_dim, model_ids, :3]
@@ -1053,12 +1061,15 @@ class RL_UR16eManipulation(VecTask):
             all_objects_current_pose = torch.zeros(self.num_envs, 3, 3).to(self.device)
             selected_object_env = torch.stack(list(self.selected_object_env.values())).to(self.device).clone().detach() - 1
             selected_object_ids = torch.index_select(torch.tensor(self._object_model_id).to(self.device), 0, selected_object_env.long().flatten()).view(self.num_envs, -1)
+            # print("selected_object_ids", selected_object_ids.shape)
+            # print("model_ids", model_ids.shape)
             selected_object_ids = selected_object_ids[:, selected_object_ids[0] != model_ids[0]]
             if selected_object_ids.shape[1] == 3:
                 selected_object_ids = selected_object_ids[:, 1:]
             first_dim = torch.arange(self._root_state.shape[0]).view(-1, 1).repeat(1, 2).to(self.device)
             all_objects_current_pose = self._root_state[first_dim, selected_object_ids, :3].squeeze(1)
             torch_objstate_tensor = torch.cat([target_object_pose.unsqueeze(1), all_objects_current_pose], dim=1)
+            
 
             # flatten it into num_envs * 9
             torch_objstate_tensor = torch_objstate_tensor.view(self.num_envs, -1)
@@ -1068,7 +1079,8 @@ class RL_UR16eManipulation(VecTask):
             # add diff to success tensor
             scaled_diff = torch.tensor(1e-5).to(self.device)
             scaled_diff_tensor = diff_target_area_tensor.to(self.device) * scaled_diff
-            scaled_diff_tensor = torch.clamp(scaled_diff_tensor, 0, 0.2)
+            # print("diff target area tensor", diff_target_area_tensor)
+            scaled_diff_tensor = torch.clamp(scaled_diff_tensor, -0.2, 0.2)
             torch_success_tensor = torch_success_tensor + scaled_diff_tensor
             # reset if success
             self.success[envs_finished_prim] = torch.tensor(0).float().to(self.device)
@@ -1100,7 +1112,7 @@ class RL_UR16eManipulation(VecTask):
                 self.obs_buf = torch.cat((self.obs_buf,  torch_indicies_tensor.to(self.device)), dim=0)
             # append envs finished prim to reset object pose
             if torch_indicies_tensor.shape[0] == 1:
-                self.obs_buf = self.obs_buf.unsqueeze(0)    
+                self.obs_buf = self.obs_buf.unsqueeze(0) 
             return self.obs_buf    
         else:
             return None
@@ -2385,6 +2397,8 @@ class RL_UR16eManipulation(VecTask):
             self.frame_count[env_count] += torch.tensor(1)
         # get indicies where self.reset_env is true
         reset_buf_indicies = torch.where(self.reset_buf == 1)[0].to("cpu")
+        if reset_buf_indicies.shape[0] > 0:
+            print("Timeout reset env: ", reset_buf_indicies)
         env_complete_reset = torch.cat((reset_buf_indicies, env_complete_reset), axis=0)
         # print("env_complete_reset: ", env_complete_reset)
 

@@ -59,7 +59,7 @@ save_model_freq = 2      # save model frequency (in num timesteps)
 ################ PPO hyperparameters ################
 
 pick_len = 3
-update_size = pick_len * 30  #20
+update_size = pick_len * 60  #20
 K_epochs = 40               # update policy for K epochs
 eps_clip = 0.13              # clip parameter for PPO
 gamma = 0.99                # discount factor
@@ -72,7 +72,7 @@ random_seed = 1       # set random seed if required (0 = no random seed)
 
 '''Training/Evaluation Parameter'''
 env_name = "RL_UR16eManipulation_Full_Nocam"
-policy_name = "Nocam_state_fixedscene"
+policy_name = "Nocam_state_randscene_contreward"
 head_less = True
 EVAL = False #if you want to evaluate the model
 action_std = 0.1 if not EVAL else 1e-9        # starting std for action distribution (Multivariate Normal)
@@ -303,7 +303,7 @@ while time_step <= max_training_timesteps: ## prim_step
 
     state, reward, done, true_indicies = step_primitives(actions, env)
 
-    if EVAL and true_indicies[0] == 0 and res_net:
+    if EVAL and true_indicies[0] == 0:
         imgs = state
         img_x = 260
         img_y = 180
