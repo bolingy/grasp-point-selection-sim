@@ -3,12 +3,17 @@ import torch.nn.functional as F
 import numpy as np
 
 device = "cuda:0"
-def transformation_matrix(rotation_matrix: torch.Tensor, translation_vector: torch.Tensor) -> torch.Tensor:
-    T = torch.empty((4,4))
+
+
+def transformation_matrix(
+    rotation_matrix: torch.Tensor, translation_vector: torch.Tensor
+) -> torch.Tensor:
+    T = torch.empty((4, 4))
     T[:3, :3] = rotation_matrix
     T[:3, 3] = translation_vector
     T[3, :] = torch.tensor([0, 0, 0, 1]).to(device)
     return T.to(device)
+
 
 def axisangle2quat(vec: torch.Tensor, eps=1e-6) -> torch.Tensor:
     """
@@ -34,14 +39,23 @@ def axisangle2quat(vec: torch.Tensor, eps=1e-6) -> torch.Tensor:
 
     # Grab indexes where angle is not zero an convert the input to its quaternion form
     idx = angle.reshape(-1) > eps
-    quat[idx, :] = torch.cat([
-        vec[idx, :] * torch.sin(angle[idx, :] / 2.0) / angle[idx, :],
-        torch.cos(angle[idx, :] / 2.0)
-    ], dim=-1)
+    quat[idx, :] = torch.cat(
+        [
+            vec[idx, :] * torch.sin(angle[idx, :] / 2.0) / angle[idx, :],
+            torch.cos(angle[idx, :] / 2.0),
+        ],
+        dim=-1,
+    )
 
     # Reshape and return output
-    quat = quat.reshape(list(input_shape) + [4, ])
+    quat = quat.reshape(
+        list(input_shape)
+        + [
+            4,
+        ]
+    )
     return quat.to(device)
+
 
 def _sqrt_positive_part(x: torch.Tensor) -> torch.Tensor:
     """
@@ -53,17 +67,28 @@ def _sqrt_positive_part(x: torch.Tensor) -> torch.Tensor:
     ret[positive_mask] = torch.sqrt(x[positive_mask])
     return ret
 
-def euler_angles_to_quaternion(euler_angles: torch.Tensor, convention: str, degrees: bool) -> torch.Tensor:
-    rot_matrix = euler_angles_to_matrix(euler_angles, convention=convention, degrees=degrees)
+
+def euler_angles_to_quaternion(
+    euler_angles: torch.Tensor, convention: str, degrees: bool
+) -> torch.Tensor:
+    rot_matrix = euler_angles_to_matrix(
+        euler_angles, convention=convention, degrees=degrees
+    )
     quaternion = matrix_to_quaternion(rot_matrix)
 
-    return torch.tensor([quaternion[1], quaternion[2], quaternion[3], quaternion[0]]).to(device)
+    return torch.tensor(
+        [quaternion[1], quaternion[2], quaternion[3], quaternion[0]]
+    ).to(device)
 
-def quaternion_to_euler_angles(quaternion: torch.Tensor, convention: str, degrees: bool) -> torch.Tensor:
+
+def quaternion_to_euler_angles(
+    quaternion: torch.Tensor, convention: str, degrees: bool
+) -> torch.Tensor:
     rot_matrix = quaternion_to_matrix(quaternion)
     euler_angles = matrix_to_euler_angles(rot_matrix, convention=convention)
 
     return euler_angles.clone().detach().to(device)
+
 
 def matrix_to_quaternion(matrix: torch.Tensor) -> torch.Tensor:
     """
@@ -124,6 +149,7 @@ def matrix_to_quaternion(matrix: torch.Tensor) -> torch.Tensor:
         F.one_hot(q_abs.argmax(dim=-1), num_classes=4) > 0.5, :
     ].reshape(batch_dim + (4,))
 
+
 def _axis_angle_rotation(axis: str, angle: torch.Tensor) -> torch.Tensor:
     """
     Return the rotation matrices for one of the rotations about an axis
@@ -151,7 +177,10 @@ def _axis_angle_rotation(axis: str, angle: torch.Tensor) -> torch.Tensor:
 
     return torch.stack(R_flat, -1).reshape(angle.shape + (3, 3))
 
-def euler_angles_to_matrix(euler_angles: torch.Tensor, convention: str, degrees: bool) -> torch.Tensor:
+
+def euler_angles_to_matrix(
+    euler_angles: torch.Tensor, convention: str, degrees: bool
+) -> torch.Tensor:
     """
     Convert rotations given as Euler angles in radians to rotation matrices.
     Args:
@@ -170,14 +199,15 @@ def euler_angles_to_matrix(euler_angles: torch.Tensor, convention: str, degrees:
     for letter in convention:
         if letter not in ("X", "Y", "Z"):
             raise ValueError(f"Invalid letter {letter} in convention string.")
-    if(degrees):
-        euler_angles = euler_angles/180*np.pi
+    if degrees:
+        euler_angles = euler_angles / 180 * np.pi
     matrices = [
         _axis_angle_rotation(c, e)
         for c, e in zip(convention, torch.unbind(euler_angles, -1))
     ]
     # return functools.reduce(torch.matmul, matrices)
     return torch.matmul(torch.matmul(matrices[0], matrices[1]), matrices[2])
+
 
 def quaternion_to_matrix(quaternions: torch.Tensor) -> torch.Tensor:
     """
@@ -208,7 +238,10 @@ def quaternion_to_matrix(quaternions: torch.Tensor) -> torch.Tensor:
     )
     return o.reshape(quaternions.shape[:-1] + (3, 3))
 
-def _angle_from_tan(axis: str, other_axis: str, data, horizontal: bool, tait_bryan: bool) -> torch.Tensor:
+
+def _angle_from_tan(
+    axis: str, other_axis: str, data, horizontal: bool, tait_bryan: bool
+) -> torch.Tensor:
     """
     Extract the first or third Euler angle from the two members of
     the matrix which are positive constant times its sine and cosine.
@@ -236,6 +269,7 @@ def _angle_from_tan(axis: str, other_axis: str, data, horizontal: bool, tait_bry
         return torch.atan2(-data[..., i2], data[..., i1])
     return torch.atan2(data[..., i2], -data[..., i1])
 
+
 def _index_from_letter(letter: str) -> int:
     if letter == "X":
         return 0
@@ -244,6 +278,7 @@ def _index_from_letter(letter: str) -> int:
     if letter == "Z":
         return 2
     raise ValueError("letter must be either X, Y or Z.")
+
 
 def matrix_to_euler_angles(matrix: torch.Tensor, convention: str) -> torch.Tensor:
     """

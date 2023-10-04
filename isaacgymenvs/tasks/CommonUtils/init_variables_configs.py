@@ -6,8 +6,20 @@ import assets.urdf_models.models_data as md
 from isaacgym.torch_utils import *
 from isaacgym import gymapi
 
+
 class InitVariablesConfigs(VecTask):
-    def __init__(self, cfg, rl_device, sim_device, graphics_device_id, headless, virtual_screen_capture, force_render, bin_id, data_path=None):
+    def __init__(
+        self,
+        cfg,
+        rl_device,
+        sim_device,
+        graphics_device_id,
+        headless,
+        virtual_screen_capture,
+        force_render,
+        bin_id,
+        data_path=None,
+    ):
         self.cfg = cfg
         self.data_path = data_path
 
@@ -21,8 +33,10 @@ class InitVariablesConfigs(VecTask):
 
         # Controller type
         self.control_type = self.cfg["env"]["controlType"]
-        assert self.control_type in {"osc", "joint_tor"},\
-            "Invalid control type specified. Must be one of: {osc, joint_tor}"
+        assert self.control_type in {
+            "osc",
+            "joint_tor",
+        }, "Invalid control type specified. Must be one of: {osc, joint_tor}"
 
         # dimensions
         # obs include: cubeA_pose (7) + cubeB_pos (3) + eef_pose (7) + q_gripper (2)
@@ -35,8 +49,8 @@ class InitVariablesConfigs(VecTask):
         self.states = {}
         # will be dict mapping names to relevant sim handles
         self.handles = {}
-        self.num_dofs = None                    # Total number of DOFs per env
-        self.actions = None                     # Current actions to be deployed
+        self.num_dofs = None  # Total number of DOFs per env
+        self.actions = None  # Current actions to be deployed
 
         self.models_lib = md.model_lib()
 
@@ -49,15 +63,15 @@ class InitVariablesConfigs(VecTask):
         self._qd = None
         # State of all rigid bodies             (n_envs, n_bodies, 13)
         self._rigid_body_state = None
-        self._contact_forces = None     # Contact forces in sim
+        self._contact_forces = None  # Contact forces in sim
         self._eef_state = None  # end effector state (at grasping point)
         self._j_eef = None  # Jacobian for end effector
         self._mm = None  # Mass matrix
         self._arm_control = None  # Tensor buffer for controlling arm
         self._gripper_control = None  # Tensor buffer for controlling gripper
-        self._pos_control = None            # Position actions
-        self._effort_control = None         # Torque actions
-        self._ur16e_effort_limits = None        # Actuator effort limits for ur16e
+        self._pos_control = None  # Position actions
+        self._effort_control = None  # Torque actions
+        self._ur16e_effort_limits = None  # Actuator effort limits for ur16e
         # Unique indices corresponding to all envs in flattened array
         self._global_indices = None
 
@@ -81,11 +95,24 @@ class InitVariablesConfigs(VecTask):
         # Parallelization
         self.init_camera_capture = 1
 
-        with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../../configs")+'/collision_primitives_'+str(self.bin_id)+'.yml') as file:
+        with open(
+            os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../../configs")
+            + "/collision_primitives_"
+            + str(self.bin_id)
+            + ".yml"
+        ) as file:
             self.world_params = yaml.load(file, Loader=yaml.FullLoader)
 
-        VecTask.__init__(self, config=self.cfg, rl_device=rl_device, sim_device=sim_device, graphics_device_id=graphics_device_id,
-                         headless=headless, virtual_screen_capture=virtual_screen_capture, force_render=force_render)
+        VecTask.__init__(
+            self,
+            config=self.cfg,
+            rl_device=rl_device,
+            sim_device=sim_device,
+            graphics_device_id=graphics_device_id,
+            headless=headless,
+            virtual_screen_capture=virtual_screen_capture,
+            force_render=force_render,
+        )
 
     def setup_env(self):
         # Reset all environments
@@ -107,11 +134,9 @@ class InitVariablesConfigs(VecTask):
         self.GRASP_LIMIT = 10
 
         # System IDentification data results
-        self.data_path = self.data_path or os.path.expanduser(
-            "~/temp/grasp_data_05/")
+        self.data_path = self.data_path or os.path.expanduser("~/temp/grasp_data_05/")
         for env_number in range(self.num_envs):
-            new_dir_path = os.path.join(
-                self.data_path, f"{self.bin_id}/{env_number}/")
+            new_dir_path = os.path.join(self.data_path, f"{self.bin_id}/{env_number}/")
             os.makedirs(new_dir_path, exist_ok=True)
 
         self.force_list = np.array([])
@@ -123,20 +148,21 @@ class InitVariablesConfigs(VecTask):
 
         # OSC Gains
         self.kp = to_torch(
-            [150., 150., 150., 100., 100., 100.], device=self.device)
+            [150.0, 150.0, 150.0, 100.0, 100.0, 100.0], device=self.device
+        )
         self.kd = 2 * torch.sqrt(self.kp)
-        self.kp_null = to_torch([10.]*6, device=self.device)
+        self.kp_null = to_torch([10.0] * 6, device=self.device)
         self.kd_null = 2 * torch.sqrt(self.kp_null)
 
         # Parameters of simulator
-        self.action_contrib = torch.ones(self.num_envs)*2
+        self.action_contrib = torch.ones(self.num_envs) * 2
         self.frame_count_contact_object = torch.zeros(self.num_envs)
         self.force_encounter = torch.zeros(self.num_envs)
         self.frame_count = torch.zeros(self.num_envs)
         self.free_envs_list = torch.ones(self.num_envs)
         self.object_pose_check_list = torch.ones(self.num_envs)
         self.object_target_id = torch.zeros(self.num_envs).type(torch.int)
-        self.ee_vel = torch.ones(self.num_envs)*self.DEFAULT_EE_VEL
+        self.ee_vel = torch.ones(self.num_envs) * self.DEFAULT_EE_VEL
         print("No. of environments: ", self.num_envs)
 
         # Parameter storage and Trackers for each environments
@@ -185,7 +211,7 @@ class InitVariablesConfigs(VecTask):
         self.env_reset_id_env = torch.ones(self.num_envs)
 
         self.object_bin_prob_spawn = {
-            "3F": [1, 0.4, 1],
+            "3F": [0.025, 0.4, 1],
             "3E": [0.05, 0.45, 1],
             "3H": [0.05, 0.45, 1],
         }
@@ -208,9 +234,9 @@ class InitVariablesConfigs(VecTask):
             "3F": [0, 720, 0, 1280],
             "3E": [0, 720, 0, 1280],
             "3H": [0, 720, 0, 1280],
-        }   
+        }
 
-        if (self.bin_id == "3E" or self.bin_id == "3H"):
+        if self.bin_id == "3E" or self.bin_id == "3H":
             self.smaller_bin = True
         else:
             self.smaller_bin = False
@@ -219,8 +245,11 @@ class InitVariablesConfigs(VecTask):
         self.crop_coord = self.crop_coord_bins[self.bin_id]
 
         # Set control limits
-        self.cmd_limit = to_torch([0.1, 0.1, 0.1, 0.5, 0.5, 0.5], device=self.device).unsqueeze(0) if \
-            self.control_type == "osc" else self._ur16e_effort_limits[:6].unsqueeze(0)
+        self.cmd_limit = (
+            to_torch([0.1, 0.1, 0.1, 0.5, 0.5, 0.5], device=self.device).unsqueeze(0)
+            if self.control_type == "osc"
+            else self._ur16e_effort_limits[:6].unsqueeze(0)
+        )
 
     def create_sim(self):
         self.sim_params.up_axis = gymapi.UP_AXIS_Z
@@ -228,10 +257,15 @@ class InitVariablesConfigs(VecTask):
         self.sim_params.gravity.y = 0
         self.sim_params.gravity.z = -9.81
         self.sim = super().create_sim(
-            self.device_id, self.graphics_device_id, self.physics_engine, self.sim_params)
+            self.device_id,
+            self.graphics_device_id,
+            self.physics_engine,
+            self.sim_params,
+        )
         self.create_ground_plane()
         self.create_envs(
-            self.num_envs, self.cfg["env"]['envSpacing'], int(np.sqrt(self.num_envs)))
+            self.num_envs, self.cfg["env"]["envSpacing"], int(np.sqrt(self.num_envs))
+        )
 
     # TODO: Explain what it does
     def refresh_env_tensors(self):
@@ -244,14 +278,16 @@ class InitVariablesConfigs(VecTask):
         self.update_states()
 
     def update_states(self):
-        self.states.update({
-            # ur16e
-            "base_link": self._base_link[:, :7],
-            "wrist_3_link": self._wrist_3_link[:, :7],
-            "wrist_3_link_vel": self._wrist_3_link[:, 7:],
-            "q": self._q[:, :],
-            "q_gripper": self._q[:, -2:],
-            "eef_pos": self._eef_state[:, :3],
-            "eef_quat": self._eef_state[:, 3:7],
-            "eef_vel": self._eef_state[:, 7:],
-        })
+        self.states.update(
+            {
+                # ur16e
+                "base_link": self._base_link[:, :7],
+                "wrist_3_link": self._wrist_3_link[:, :7],
+                "wrist_3_link_vel": self._wrist_3_link[:, 7:],
+                "q": self._q[:, :],
+                "q_gripper": self._q[:, -2:],
+                "eef_pos": self._eef_state[:, :3],
+                "eef_quat": self._eef_state[:, 3:7],
+                "eef_vel": self._eef_state[:, 7:],
+            }
+        )

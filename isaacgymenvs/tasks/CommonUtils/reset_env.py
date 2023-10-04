@@ -6,15 +6,16 @@ from isaacgym import gymtorch
 from isaacgym.torch_utils import *
 from pathlib import Path
 
-class EnvReset():
+
+class EnvReset:
     def __init__(self, gym, sim, physics_engine):
         self.gym = gym
         self.sim = sim
         self.physics_engine = physics_engine
 
-    '''
+    """
     Reset the arm pose for heading towards pre grasp pose
-    '''
+    """
     def random_number_with_probabilities(self, probabilities):
         random_number = random.random()
         for i, probability in enumerate(probabilities):
@@ -26,44 +27,67 @@ class EnvReset():
         for env_count in env_ids:
             env_count = env_count.item()
             probabilities = self.object_bin_prob_spawn[self.bin_id]
-            random_number = self.random_number_with_probabilities(
-                probabilities)
+            random_number = self.random_number_with_probabilities(probabilities)
             random_number += 1
             object_list_env = {}
-            object_set = range(1, self.object_count_unique+1)
+            object_set = range(1, self.object_count_unique + 1)
 
-            if (self.smaller_bin):
+            if self.smaller_bin:
                 selected_object = np.random.choice(
-                    object_set, p=self.object_prob/np.sum(self.object_prob), size=random_number, replace=False)
+                    object_set,
+                    p=self.object_prob / np.sum(self.object_prob),
+                    size=random_number,
+                    replace=False,
+                )
             else:
                 selected_object = np.random.choice(
-                    object_set, p=None, size=random_number, replace=False)
+                    object_set, p=None, size=random_number, replace=False
+                )
 
             list_objects_domain_randomizer = torch.tensor([])
             for object_count in selected_object:
-                domain_randomizer = random_number = random.choice(
-                    [1, 2, 3, 4, 5])
-                offset_object = np.array([np.random.uniform(0.67, 0.7, 1).reshape(
-                    1,)[0], np.random.uniform(-0.22, -0.12, 1).reshape(1,)[0], self.object_height_spawn[self.bin_id], np.random.uniform(0.0, 6.28, 1).reshape(1,)[0],
-                    np.random.uniform(0.0, 6.28, 1).reshape(1,)[0], np.random.uniform(0.0, 6.28, 1).reshape(1,)[0]])
+                domain_randomizer = random_number = random.choice([1, 2, 3, 4, 5])
+                offset_object = np.array(
+                    [
+                        np.random.uniform(0.67, 0.7, 1).reshape(
+                            1,
+                        )[0],
+                        np.random.uniform(-0.22, -0.12, 1).reshape(
+                            1,
+                        )[0],
+                        self.object_height_spawn[self.bin_id],
+                        np.random.uniform(0.0, 6.28, 1).reshape(
+                            1,
+                        )[0],
+                        np.random.uniform(0.0, 6.28, 1).reshape(
+                            1,
+                        )[0],
+                        np.random.uniform(0.0, 6.28, 1).reshape(
+                            1,
+                        )[0],
+                    ]
+                )
 
                 quat = euler_angles_to_quaternion(
-                    torch.tensor(offset_object[3:6]), "XYZ", degrees=False)
-                offset_object = np.concatenate(
-                    [offset_object[:3], quat.cpu().numpy()])
-                item_config = (object_count-1)*5 + domain_randomizer
+                    torch.tensor(offset_object[3:6]), "XYZ", degrees=False
+                )
+                offset_object = np.concatenate([offset_object[:3], quat.cpu().numpy()])
+                item_config = (object_count - 1) * 5 + domain_randomizer
                 object_list_env[item_config] = torch.tensor(offset_object)
                 list_objects_domain_randomizer = torch.cat(
-                    (list_objects_domain_randomizer, torch.tensor([item_config])))
+                    (list_objects_domain_randomizer, torch.tensor([item_config]))
+                )
             self.selected_object_env[env_count] = list_objects_domain_randomizer
             self.object_pose_store[env_count] = object_list_env
 
-        print("Object configuration in each bin: ",
-              self.selected_object_env)
+        print("Object configuration in each bin: ", self.selected_object_env)
         # pos = torch.tensor(np.random.uniform(low=-6.2832, high=6.2832, size=(6,))).to(self.device).type(torch.float)
         # pos = tensor_clamp(pos.unsqueeze(0), self.ur16e_dof_lower_limits.unsqueeze(0), self.ur16e_dof_upper_limits)
-        pos = tensor_clamp(self.ur16e_default_dof_pos.unsqueeze(
-            0), self.ur16e_dof_lower_limits.unsqueeze(0), self.ur16e_dof_upper_limits)
+        pos = tensor_clamp(
+            self.ur16e_default_dof_pos.unsqueeze(0),
+            self.ur16e_dof_lower_limits.unsqueeze(0),
+            self.ur16e_dof_upper_limits,
+        )
         pos = pos.repeat(len(env_ids), 1)
 
         # reinitializing the variables
@@ -113,29 +137,35 @@ class EnvReset():
         # Lastly, set these sampled values as the new init state
         this_object_state_all[env_ids, :] = sampled_object_state
 
-    '''
+    """
     Resetting object poses and quering object pose from the saved object pose
-    '''
+    """
     def reset_object_pose(self, env_ids):
         for counter in range(len(self.object_models)):
             self.object_poses = torch.zeros(0, 7).to(self.device)
             for env_count in env_ids:
                 # resetting force list
                 # randomly spawning objects
-                retKey = self.object_pose_store[env_count.item()].get(
-                    counter+1)
+                retKey = self.object_pose_store[env_count.item()].get(counter + 1)
                 if retKey is None:
                     object_pose_env = torch.tensor(
-                        [[counter/4, 1, 0.5, 0.0, 0.0, 0.0, 1.0]]).to(self.device)
+                        [[counter / 4, 1, 0.5, 0.0, 0.0, 0.0, 1.0]]
+                    ).to(self.device)
                 else:
-                    object_pose_env = self.object_pose_store[env_count.item(
-                    )][counter+1].clone().detach().to(self.device)
+                    object_pose_env = (
+                        self.object_pose_store[env_count.item()][counter + 1]
+                        .clone()
+                        .detach()
+                        .to(self.device)
+                    )
                     object_pose_env = object_pose_env.unsqueeze(0)
-                self.object_poses = torch.cat(
-                    [self.object_poses, object_pose_env])
+                self.object_poses = torch.cat([self.object_poses, object_pose_env])
 
             self.reset_init_object_state(
-                env_ids=env_ids, object=self.object_models[counter], offset=self.object_poses)
+                env_ids=env_ids,
+                object=self.object_models[counter],
+                offset=self.object_poses,
+            )
 
         for env_count in env_ids:
             self.force_list_save[env_count.item()] = None
@@ -145,13 +175,19 @@ class EnvReset():
 
         # setting the objects with randomly generated poses
         for counter in range(len(self.object_models)):
-            self._object_model_state[counter][env_ids] = self._init_object_model_state[counter][env_ids]
+            self._object_model_state[counter][env_ids] = self._init_object_model_state[
+                counter
+            ][env_ids]
 
-        multi_env_ids_cubes_int32 = self._global_indices[env_ids, -len(
-            self.object_models):].flatten()
+        multi_env_ids_cubes_int32 = self._global_indices[
+            env_ids, -len(self.object_models) :
+        ].flatten()
         self.gym.set_actor_root_state_tensor_indexed(
-            self.sim, gymtorch.unwrap_tensor(self._root_state),
-            gymtorch.unwrap_tensor(multi_env_ids_cubes_int32), len(multi_env_ids_cubes_int32))
+            self.sim,
+            gymtorch.unwrap_tensor(self._root_state),
+            gymtorch.unwrap_tensor(multi_env_ids_cubes_int32),
+            len(multi_env_ids_cubes_int32),
+        )
 
         self.progress_buf[env_ids] = 0
         self.reset_buf[env_ids] = 0
@@ -164,23 +200,23 @@ class EnvReset():
             self.frame_count[env_id] = 0
             self.env_reset_id_env[env_id] = 1
             self.ee_vel[env_id] = 0.15
-            self.force_contact_flag[env_id.item()] = torch.tensor(
-                0).type(torch.bool)
+            self.force_contact_flag[env_id.item()] = torch.tensor(0).type(torch.bool)
 
         self.object_movement_enabled = 0
         self.cmd_limit = to_torch(
-            [0.1, 0.1, 0.1, 0.5, 0.5, 0.5], device=self.device).unsqueeze(0)
-        
+            [0.1, 0.1, 0.1, 0.5, 0.5, 0.5], device=self.device
+        ).unsqueeze(0)
+
     def reset_pre_grasp_pose(self, env_ids):
         pos = torch.zeros(0, self.num_ur16e_dofs).to(self.device)
         for _ in env_ids:
             path = str(Path(__file__).parent.absolute())
             joint_poses_list = torch.load(f"{path}/../../../misc/joint_poses.pt")
-            temp_pos = joint_poses_list[torch.randint(
-                0, len(joint_poses_list), (1,))[0]].to(self.device)
+            temp_pos = joint_poses_list[
+                torch.randint(0, len(joint_poses_list), (1,))[0]
+            ].to(self.device)
             temp_pos = torch.reshape(temp_pos, (1, len(temp_pos)))
-            temp_pos = torch.cat(
-                (temp_pos, torch.tensor([[0]]).to(self.device)), dim=1)
+            temp_pos = torch.cat((temp_pos, torch.tensor([[0]]).to(self.device)), dim=1)
             # temp_pos = tensor_clamp(temp_pos.unsqueeze(0), self.ur16e_dof_lower_limits.unsqueeze(0), self.ur16e_dof_upper_limits)
             pos = torch.cat([pos, temp_pos])
         return pos
@@ -194,116 +230,112 @@ class EnvReset():
     def reset_env_with_log(self, env_count, message, env_complete_reset):
         print(message)
         env_complete_reset = torch.cat(
-            (env_complete_reset, torch.tensor([env_count])), axis=0)
+            (env_complete_reset, torch.tensor([env_count])), axis=0
+        )
         self.free_envs_list[env_count] = torch.tensor(0)
         return env_complete_reset
 
-    def reset_env_conditions(self, env_list_reset_arm_pose, env_list_reset_objects, env_complete_reset):
+    def reset_env_conditions(
+        self, env_list_reset_arm_pose, env_list_reset_objects, env_complete_reset
+    ):
         # Parallelizing multiple environments for resetting the arm for pre grasp pose or to reset the particular environment
-        if (len(env_complete_reset) != 0 and len(env_list_reset_arm_pose) != 0):
+        if len(env_complete_reset) != 0 and len(env_list_reset_arm_pose) != 0:
             env_complete_reset = torch.unique(env_complete_reset)
 
             env_list_reset_objects = torch.cat(
-                (env_list_reset_objects, env_complete_reset), axis=0)
+                (env_list_reset_objects, env_complete_reset), axis=0
+            )
 
             env_list_reset_arm_pose = torch.unique(env_list_reset_arm_pose)
             env_list_reset_arm_pose = torch.tensor(
-                [x for x in env_list_reset_arm_pose if x not in env_complete_reset])
+                [x for x in env_list_reset_arm_pose if x not in env_complete_reset]
+            )
 
-            env_ids = torch.cat(
-                (env_list_reset_arm_pose, env_complete_reset), axis=0)
+            env_ids = torch.cat((env_list_reset_arm_pose, env_complete_reset), axis=0)
             env_ids = env_ids.to(self.device).type(torch.long)
             pos1 = self.reset_pre_grasp_pose(
-                env_list_reset_arm_pose.to(self.device).type(torch.long))
+                env_list_reset_arm_pose.to(self.device).type(torch.long)
+            )
             pos2 = self.reset_init_arm_pose(
-                env_complete_reset.to(self.device).type(torch.long))
+                env_complete_reset.to(self.device).type(torch.long)
+            )
 
             pos = torch.cat([pos1, pos2])
             self.deploy_actions(env_ids, pos)
 
-        elif (len(env_list_reset_arm_pose) != 0):
+        elif len(env_list_reset_arm_pose) != 0:
             env_list_reset_arm_pose = torch.unique(env_list_reset_arm_pose)
             pos = self.reset_pre_grasp_pose(
-                env_list_reset_arm_pose.to(self.device).type(torch.long))
+                env_list_reset_arm_pose.to(self.device).type(torch.long)
+            )
 
             env_ids = env_list_reset_arm_pose.to(self.device).type(torch.long)
             self.deploy_actions(env_ids, pos)
 
-        elif (len(env_complete_reset) != 0):
+        elif len(env_complete_reset) != 0:
             env_complete_reset = torch.unique(env_complete_reset)
             env_list_reset_objects = torch.cat(
-                (env_list_reset_objects, env_complete_reset), axis=0)
+                (env_list_reset_objects, env_complete_reset), axis=0
+            )
             pos = self.reset_init_arm_pose(
-                env_complete_reset.to(self.device).type(torch.long))
+                env_complete_reset.to(self.device).type(torch.long)
+            )
             env_ids = env_complete_reset.to(self.device).type(torch.long)
             self.deploy_actions(env_ids, pos)
 
-        if (len(env_list_reset_objects) != 0):
+        if len(env_list_reset_objects) != 0:
             env_list_reset_objects = torch.unique(env_list_reset_objects)
-            self.reset_object_pose(env_list_reset_objects.to(
-                self.device).type(torch.long))
-            
+            self.reset_object_pose(
+                env_list_reset_objects.to(self.device).type(torch.long)
+            )
+
     def check_reset_conditions(self, env_count, env_complete_reset):
         segmask = self.get_segmask(env_count, camera_id=0)
-        segmask_bin_crop = segmask[self.check_object_coord[0]:self.check_object_coord[1],
-                                   self.check_object_coord[2]:self.check_object_coord[3]]
+        segmask_bin_crop = segmask[
+            self.check_object_coord[0] : self.check_object_coord[1],
+            self.check_object_coord[2] : self.check_object_coord[3],
+        ]
 
         objects_spawned = len(torch.unique(segmask_bin_crop)) - 1
         total_objects = len(self.selected_object_env[env_count])
 
-        object_coords_match = torch.count_nonzero(
-            segmask) == torch.count_nonzero(segmask_bin_crop)
+        object_coords_match = torch.count_nonzero(segmask) == torch.count_nonzero(
+            segmask_bin_crop
+        )
 
         # collecting pose of all objects
         total_position_error, obj_drop_status = self.calculate_objects_position_error(
-            env_count)
+            env_count
+        )
 
         # Calculate mask areas.
         object_mask_area = self.min_area_object(segmask, segmask_bin_crop)
 
         # Check conditions for resetting the environment.
         conditions_messages = [
-            (object_mask_area < 1000,
-                f"Object in environment {env_count} not visible in the camera (due to occlusion) with area {object_mask_area}"),
-            ((not object_coords_match) or (total_objects != objects_spawned),
-                f"Object in environment {env_count} extends beyond the bin's boundaries"),
-            (torch.abs(total_position_error) > self.POSE_ERROR_THRESHOLD,
-                f"Object in environment {env_count}, not visible in the camera (due to occlusion) with area {object_mask_area}"),
-            (obj_drop_status,
-                f"Object falled down in environment {env_count}, where total objects are {total_objects} and only {objects_spawned} were spawned inside the bin")
+            (
+                object_mask_area < 1000,
+                f"Object in environment {env_count} not visible in the camera (due to occlusion) with area {object_mask_area}",
+            ),
+            (
+                (not object_coords_match) or (total_objects != objects_spawned),
+                f"Object in environment {env_count} extends beyond the bin's boundaries",
+            ),
+            (
+                torch.abs(total_position_error) > self.POSE_ERROR_THRESHOLD,
+                f"Object in environment {env_count}, not visible in the camera (due to occlusion) with area {object_mask_area}",
+            ),
+            (
+                obj_drop_status,
+                f"Object falled down in environment {env_count}, where total objects are {total_objects} and only {objects_spawned} were spawned inside the bin",
+            ),
         ]
 
         for condition, message in conditions_messages:
             if condition:
                 env_complete_reset = self.reset_env_with_log(
-                    env_count, message, env_complete_reset)
+                    env_count, message, env_complete_reset
+                )
                 break
 
         return segmask, env_complete_reset
-            
-    def reset_until_valid(self, env_count, env_list_reset_arm_pose, env_list_reset_objects, env_complete_reset):
-        if ((self.frame_count[env_count] == self.COOLDOWN_FRAMES) and self.object_pose_check_list[env_count]):
-            # setting the pose of the object after cool down period
-            self.object_pose_store[env_count] = self.store_objects_current_pose(
-                env_count)
-            env_list_reset_objects = torch.cat(
-                (env_list_reset_objects, torch.tensor([env_count])), axis=0)
-            self.object_pose_check_list[env_count] -= torch.tensor(1)
-
-        ''' 
-        Spawning objects until they acquire stable pose and also doesn't falls down
-        '''
-        if ((self.frame_count[env_count] == self.COOLDOWN_FRAMES) and (not self.object_pose_check_list[env_count]) and (self.free_envs_list[env_count] == torch.tensor(1))):
-            segmask, env_complete_reset = self.check_reset_conditions(
-                env_count, env_complete_reset)
-
-            # check if the environment returned from reset and the frame for that enviornment is 30 or not
-            # 30 frames is for cooldown period at the start for the simualtor to settle down
-            if (env_count not in env_complete_reset):
-                '''
-                Running DexNet 3.0 after investigating the pose error after spawning
-                '''
-                env_list_reset_arm_pose, env_list_reset_objects, env_complete_reset = self.dexnet_sample_node(
-                    env_count, segmask, env_list_reset_arm_pose, env_list_reset_objects, env_complete_reset)
-
-        return env_list_reset_arm_pose, env_list_reset_objects, env_complete_reset
