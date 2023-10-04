@@ -46,6 +46,28 @@ class UR16eManipulation(
     StaticDynamicTransformations,
     EvlauateSuccess,
 ):
+    """
+    The UR16eManipulation class combined functionalities provided by various utility classes
+        to accomplish data collection using the UR16e robotic arm within a Isaac Gym simualtor.
+
+    This class is responsible for initializing configurations, setting up and resetting the environment,
+        sampling grasps, controlling the robot, calculating errors, retrieving sensor values,
+        saving data, transforming static-dynamic elements, and evaluating task success.
+
+    Methods:
+        __init__: Initializes configurations, environments, and various utility classes.
+        compute_observations: Computes observations, collecting specific states and concatenating them into an observation buffer.
+        pre_physics_step: Performs pre-physics step operations, including checking and managing reset conditions,
+            sampling grasp points, calculating transformations, and setting control inputs, among other functionalities.
+        post_physics_step: Performs operations after the physics step, managing timeouts, saving configurations on reset,
+            deploying actions, and resetting object poses, among other actions.
+
+    Usage:
+        - Use this class for collecting data by running the pipeline sequentially.
+        - Utilize various inherited utility classes to manage environmental setup, control, error calculation, data retrieval,
+            and other robot manipulation aspects.
+    """
+
     def __init__(
         self,
         cfg,
@@ -72,8 +94,9 @@ class UR16eManipulation(
         )
         EnvReset.__init__(self, self.gym, self.sim, self.physics_engine)
         EnvSetup.__init__(self, self.gym, self.sim, self.physics_engine)
+        # Initialize all variables and constants, followed by a one-time environment reset
         self.initialize_var()
-        self.setup_env()
+        self.init_reset_env_once()
         SampleGrasp.__init__(self)
         RobotControl.__init__(self)
         ErrorCalculator.__init__(self)
@@ -82,18 +105,16 @@ class UR16eManipulation(
         EvlauateSuccess.__init__(self)
 
     def compute_observations(self):
+        """
+        Compile observations by concatenating end-effector states.
+        """
         self.refresh_env_tensors()
-        obs = ["eef_pos", "eef_quat"]
-        obs += ["q_gripper"] if self.control_type == "osc" else ["q"]
+        obs = ["eef_pos", "eef_quat", "q_gripper"]
         self.obs_buf = torch.cat([self.states[ob] for ob in obs], dim=-1)
         return self.obs_buf
 
     def pre_physics_step(self, actions):
         self.refresh_real_time_sensors()
-
-        """
-        Commands to the arm for eef control
-        """
         self.actions = torch.zeros(0, 7)
         # Variables to track environments where reset conditions have been met
         env_list_reset_objects = torch.tensor([])

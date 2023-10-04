@@ -100,9 +100,7 @@ class RobotControl:
     def calculate_grasp_action(self, env_count):
         # Transformation for grasp pose (wg --> wo*og)
         rotation_matrix_grasp_pose = euler_angles_to_matrix(
-            torch.tensor(
-                [0, -self.grasp_angle[env_count][1], self.grasp_angle[env_count][0]]
-            ).to(self.device),
+            self.grasp_angle[env_count].to(self.device),
             "XYZ",
             degrees=False,
         ).type(torch.float)

@@ -37,9 +37,7 @@ class StaticDynamicTransformations:
         """
         # Transformation for object from camera (wo --> wc*co)
         rotation_matrix_camera_to_object = euler_angles_to_matrix(
-            torch.tensor(
-                [0, -self.grasp_angle[env_count][1], self.grasp_angle[env_count][0]]
-            ).to(self.device),
+            self.grasp_angle[env_count].to(self.device),
             "XYZ",
             degrees=False,
         )

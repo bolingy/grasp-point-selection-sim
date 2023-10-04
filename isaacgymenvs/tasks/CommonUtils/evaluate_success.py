@@ -28,7 +28,7 @@ class EvlauateSuccess:
                 (
                     self.suction_deformation_score[env_count],
                     temp_xyz_point,
-                    temp_grasp,
+                    temp_grasp_angle,
                 ) = self.suction_score_object_gripper.calculator(
                     depth_numpy_gripper,
                     segmask_gripper,
@@ -46,7 +46,7 @@ class EvlauateSuccess:
                     self.force_SI[env_count] = torch.tensor(1000).to(self.device)
                 if self.action_contrib[env_count] == 1:
                     self.xyz_point[env_count][0] += temp_xyz_point[0]
-                    self.grasp_angle[env_count] = temp_grasp
+                    self.grasp_angle[env_count] = temp_grasp_angle
 
             if (
                 self.force_pre_physics

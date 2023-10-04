@@ -250,9 +250,7 @@ class ErrorCalculator:
         if self.action_contrib[env_count] == 0:
             angle_error = quaternion_to_euler_angles(
                 self._eef_state[env_count][3:7], "XYZ", degrees=False
-            ) - torch.tensor(
-                [0, -self.grasp_angle[env_count][1], self.grasp_angle[env_count][0]]
-            ).to(
+            ) - self.grasp_angle[env_count].to(
                 self.device
             )
             if torch.max(torch.abs(angle_error)) > torch.deg2rad(torch.tensor(10.0)):

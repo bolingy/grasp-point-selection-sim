@@ -114,7 +114,7 @@ class InitVariablesConfigs(VecTask):
             force_render=force_render,
         )
 
-    def setup_env(self):
+    def init_reset_env_once(self):
         # Reset all environments
         self.reset_idx_init(torch.arange(self.num_envs, device=self.device))
         # Refresh tensors
