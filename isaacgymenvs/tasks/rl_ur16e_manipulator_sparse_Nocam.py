@@ -104,6 +104,9 @@ class RL_UR16eManipulation(VecTask):
 
         self.debug_viz = self.cfg["env"]["enableDebugVis"]
 
+        self.save_data = self.cfg["env"]["saveData"]
+        self.new_dir_name = self.cfg["env"]["newDirName"]
+
         self.up_axis = "z"
         self.up_axis_idx = 2
 
@@ -1008,13 +1011,35 @@ class RL_UR16eManipulation(VecTask):
         self._refresh()
         # image observations
         self.obs_buf = torch.zeros(93600).to(self.device)
-
-    
+        
+        
 
         # print("self.finished_prim.sum() > 0", self.finished_prim.sum() > 0)
         if self.finished_prim.sum() > 0:
             torch_prim_tensor = self.finished_prim.clone().detach()
             envs_finished_prim = torch.nonzero(torch_prim_tensor).long().squeeze(1)
+            for env_count in envs_finished_prim:
+                torch_rgb_tensor = self.rgb_camera_tensors[env_count]
+                rgb_image = torch_rgb_tensor.to(self.device)
+                rgb_image_copy = torch.reshape(
+                    rgb_image, (rgb_image.shape[0], -1, 4))[..., :3]
+
+                self.rgb_save[env_count] = rgb_image_copy[180:660,
+                                                            410:1050].clone().detach().cpu().numpy()
+                try:
+                    # new_dir_name = str(
+                    #         env_count)+"_"+str(self.track_save[env_count].type(torch.int).item())
+                    # print("new_dir_name", new_dir_name)
+                    os.mkdir(
+                        cur_path+"/../../System_Identification_Data/AutoEncoder/"+self.new_dir_name)
+                except:
+                    pass
+                save_dir_rgb_npy = cur_path+"/../../System_Identification_Data/AutoEncoder/" + \
+                    self.new_dir_name+"/rgb_" + str(int(env_count)) + "_"+str(self.track_save[env_count].type(torch.int).item()) + "_" + str(int(self.primitive_count[env_count].item())) +".npy"
+                if self.save_data:
+                    np.save(save_dir_rgb_npy, self.rgb_save[env_count])
+                    # print("saved rgb image")
+                
 
             torch_depth_cameras = torch.stack(self.depth_camera_tensors).to(self.device)
             torch_depth_tensor = torch_depth_cameras[envs_finished_prim]
@@ -1378,31 +1403,20 @@ class RL_UR16eManipulation(VecTask):
                     self.depth_image_save[env_count] = depth_image_save_temp[180:660, 410:1050]
 
                     # saving depth image, rgb image and segmentation mask
-                    self.config_env_count[env_count] += torch.tensor(
-                        1).type(torch.int)
-                    new_dir_name = str(
-                        env_count)
-                    try:
-                        os.mkdir(
-                            cur_path+"/../../System_Identification_Data/Parallelization-Data/"+new_dir_name)
-                    except:
-                        pass
-                    save_dir_depth_npy = cur_path+"/../../System_Identification_Data/Parallelization-Data/" + \
-                        new_dir_name+"/depth_image_"+new_dir_name+"_" + \
-                        str(self.config_env_count[env_count].type(
-                            torch.int).item())+".npy"
-                    save_dir_segmask_npy = cur_path+"/../../System_Identification_Data/Parallelization-Data/" + \
-                        new_dir_name+"/segmask_"+new_dir_name+"_" + \
-                        str(self.config_env_count[env_count].type(
-                            torch.int).item())+".npy"
-                    save_dir_rgb_npy = cur_path+"/../../System_Identification_Data/Parallelization-Data/" + \
-                        new_dir_name+"/rgb_"+new_dir_name+"_" + \
-                        str(self.config_env_count[env_count].type(
-                            torch.int).item())+".npy"
+                    # self.config_env_count[env_count] += torch.tensor(
+                    #     1).type(torch.int)
+                    # new_dir_name = str(
+                    #     env_count)
+                    # try:
+                    #     os.mkdir(
+                    #         cur_path+"/../../System_Identification_Data/AutoEncoder/"+new_dir_name)
+                    # except:
+                    #     pass
+                    # save_dir_rgb_npy = cur_path+"/../../System_Identification_Data/AutoEncoder/" + \
+                    #     new_dir_name+"/rgb_"+new_dir_name+"_" + \
+                    #     str(self.config_env_count[env_count].type(
+                    #         torch.int).item())+".npy"
 
-                    # np.save(save_dir_depth_npy,
-                    #         self.depth_image_save[env_count])
-                    # np.save(save_dir_segmask_npy, self.segmask_save[env_count])
                     # np.save(save_dir_rgb_npy, self.rgb_save[env_count])
 
                     # cropping the image and modifying depth to match the DexNet 3.0 input configuration

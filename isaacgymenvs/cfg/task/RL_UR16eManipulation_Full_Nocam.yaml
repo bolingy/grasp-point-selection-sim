@@ -13,6 +13,9 @@ env:
   objRandomization: False
   retract: True
 
+  saveData: True
+  newDirName: "RL_UR16eManipulation_Full_Nocam"
+
   clipObservations: 255.0
   clipActions: 1.0
   numActions: 2 # action dim
