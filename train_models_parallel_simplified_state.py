@@ -35,7 +35,7 @@ import warnings
 warnings.filterwarnings("ignore")
 
 # check cuda
-train_device = torch.device('cuda:0')
+train_device = torch.device('cuda:1')
 sim_device = torch.device('cuda:0')
 
 # if(torch.cuda.is_available()): 
@@ -64,22 +64,23 @@ K_epochs = 40               # update policy for K epochs
 eps_clip = 0.13              # clip parameter for PPO
 gamma = 0.99                # discount factor
 
-lr_actor = 0.00001       # learning rate for actor network
-lr_critic = 0.00003      # learning rate for critic network
+lr_actor = 1e-6       # learning rate for actor network
+lr_critic = 1e-6      # learning rate for critic network
 
 random_seed = 1       # set random seed if required (0 = no random seed)
 
 
 '''Training/Evaluation Parameter'''
 env_name = "RL_UR16eManipulation_Full_Nocam"
+load_policy_name = "Nocam_state_fixedscene_contreward_batch_90_lra_1e-05_lrc_3e-05_clip0.13"
 policy_name = "Nocam_state_fixedscene_contreward"
-head_less = False
-EVAL = True #if you want to evaluate the model
+head_less = True
+EVAL = False #if you want to evaluate the model
 action_std = 0.1 if not EVAL else 1e-9        # starting std for action distribution (Multivariate Normal)
 load_policy = True
 policy_name = "{}_batch_{}_lra_{}_lrc_{}_clip{}".format(policy_name, update_size, lr_actor, lr_critic, eps_clip)
 load_policy_version = 93                   # specify policy version (i.e. int, 50) when loading a trained policy
-ne = 1               # number of environments
+ne = 90               # number of environments
 res_net = False
 
 print("training environment name : " + env_name)
@@ -161,7 +162,8 @@ if not os.path.exists(directory):
 
 directory = "PPO_preTrained" + '/' + env_name + '/'
 #checkpoint_path = directory + policy_name
-checkpoint_path = model_name(directory, policy_name, load_policy_version)
+load_policy_checkpoint_path = model_name(directory, load_policy_name, load_policy_version)
+checkpoint_path = model_name(directory, policy_name, policy_num)
 
 print("save checkpoint path : " + checkpoint_path)
 
@@ -212,9 +214,9 @@ ppo_agent = PPO(state_dim, action_dim, lr_actor, lr_critic, gamma, K_epochs, eps
 
 
 if load_policy:
-    if os.path.exists(checkpoint_path):
-        print("loading network from : " + checkpoint_path)
-        ppo_agent.load(checkpoint_path)
+    if os.path.exists(load_policy_checkpoint_path):
+        print("loading network from : " + load_policy_checkpoint_path)
+        ppo_agent.load(load_policy_checkpoint_path)
         if EVAL:
             ppo_agent.policy.eval()
             ppo_agent.policy_old.eval()
