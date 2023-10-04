@@ -162,7 +162,7 @@ class RL_UR16eManipulation(VecTask):
         self.frame_count = torch.zeros(self.num_envs).to(self.device)
         self.free_envs_list = torch.ones(self.num_envs).to(self.device)
         self.object_pose_check_list = torch.ones(self.num_envs).to(self.device)
-        self.object_target_id = torch.zeros(self.num_envs).type(torch.int).to(self.device)
+        self.object_target_id = torch.ones(self.num_envs).type(torch.int).to(self.device)
         self.speed = torch.ones(self.num_envs).to(self.device)*0.1
         print("No. of environments: ", self.num_envs)
 
@@ -812,10 +812,10 @@ class RL_UR16eManipulation(VecTask):
                 ##############################################
                 
                 # print("object count", object_count)
-                if object_count == 5 and not self.obj_randomization:
-                    offset_object = offset_objects[1]
-                elif not self.obj_randomization: 
-                    offset_object = offset_objects[object_count-1]
+                # if object_count == 5 and not self.obj_randomization:
+                #     offset_object = offset_objects[1]
+                # elif not self.obj_randomization: 
+                #     offset_object = offset_objects[object_count-1]
                 ##############################################
                 # set position and orientation
                 quat = euler_angles_to_quaternion(
@@ -1047,12 +1047,7 @@ class RL_UR16eManipulation(VecTask):
             # print("diff_target_area_tensor", diff_target_area_tensor)
 
             # target object pose
-            
-            # model_ids = torch.index_select(torch.tensor(self._object_model_id).to(self.device), 0, self.object_target_id - 1)
-            # print("model_ids", model_ids)
-            # print("self.object_target_id", self.object_target_id)
-            model_ids = torch.tensor(42).repeat(self.num_envs, 1).squeeze(1).to(self.device)
-            # print("model_ids", model_ids)
+            model_ids = torch.index_select(torch.tensor(self._object_model_id).to(self.device), 0, self.object_target_id - 1)
             # model_ids = model_ids - 1
             first_dim = torch.arange(self._root_state.shape[0])
             target_object_pose = self._root_state[first_dim, model_ids, :3]
@@ -1061,15 +1056,12 @@ class RL_UR16eManipulation(VecTask):
             all_objects_current_pose = torch.zeros(self.num_envs, 3, 3).to(self.device)
             selected_object_env = torch.stack(list(self.selected_object_env.values())).to(self.device).clone().detach() - 1
             selected_object_ids = torch.index_select(torch.tensor(self._object_model_id).to(self.device), 0, selected_object_env.long().flatten()).view(self.num_envs, -1)
-            # print("selected_object_ids", selected_object_ids.shape)
-            # print("model_ids", model_ids.shape)
             selected_object_ids = selected_object_ids[:, selected_object_ids[0] != model_ids[0]]
             if selected_object_ids.shape[1] == 3:
                 selected_object_ids = selected_object_ids[:, 1:]
             first_dim = torch.arange(self._root_state.shape[0]).view(-1, 1).repeat(1, 2).to(self.device)
             all_objects_current_pose = self._root_state[first_dim, selected_object_ids, :3].squeeze(1)
             torch_objstate_tensor = torch.cat([target_object_pose.unsqueeze(1), all_objects_current_pose], dim=1)
-            
 
             # flatten it into num_envs * 9
             torch_objstate_tensor = torch_objstate_tensor.view(self.num_envs, -1)
