@@ -277,7 +277,7 @@ class calcualte_suction_score():
                 continue
             elif (self.segmask[V[i].type(torch.int)][U[i].type(torch.int)] != object_id):
                 count += 1
-        if (count >= 3):
+        if (count >= 2):
             return torch.tensor(0)
 
         # TO check if any of the point is within the threshold or not

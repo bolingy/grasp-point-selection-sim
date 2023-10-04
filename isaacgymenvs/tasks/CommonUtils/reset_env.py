@@ -4,14 +4,13 @@ import torch
 from homogeneous_trasnformation_and_conversion.rotation_conversions import *
 from isaacgym import gymtorch
 from isaacgym.torch_utils import *
-from isaacgymenvs.tasks.CommonUtils.setup_env import EnvSetup
+from pathlib import Path
 
-class EnvReset:
-    def __init__(self, gym, sim):
+class EnvReset():
+    def __init__(self, gym, sim, physics_engine):
         self.gym = gym
         self.sim = sim
-        self.env_setup_instance = EnvSetup(gym, sim)
-        self.ur16e_dof_lower_limits = self.env_setup_instance.ur16e_dof_lower_limits
+        self.physics_engine = physics_engine
 
     '''
     Reset the arm pose for heading towards pre grasp pose
@@ -26,11 +25,9 @@ class EnvReset:
     def reset_init_arm_pose(self, env_ids):
         for env_count in env_ids:
             env_count = env_count.item()
-            # How many objects should we spawn 2 or 3
             probabilities = self.object_bin_prob_spawn[self.bin_id]
             random_number = self.random_number_with_probabilities(
                 probabilities)
-            # random_number = random.choice([1, 2, 3])
             random_number += 1
             object_list_env = {}
             object_set = range(1, self.object_count_unique+1)
@@ -85,10 +82,40 @@ class EnvReset:
 
         return pos
 
+    def reset_init_object_state(self, object, env_ids, offset):
+        """
+        Simple method to sample @cube's position based on self.startPositionNoise and self.startRotationNoise, and
+        automaticlly reset the pose internally. Populates the appropriate self._init_cubeX_state
+
+        If @check_valid is True, then this will also make sure that the sampled position is not in contact with the
+        other cube.
+
+        Args:
+            cube(str): Which cube to sample location for. Either 'A' or 'B'
+            env_ids (tensor or None): Specific environments to reset cube for
+            check_valid (bool): Whether to make sure sampled position is collision-free with the other cube.
+        """
+
+        # Initialize buffer to hold sampled values
+        num_resets = len(env_ids)
+        sampled_object_state = torch.zeros(num_resets, 13, device=self.device)
+
+        # Get correct references depending on which one was selected
+        for i in range(len(self.object_models)):
+            if object == self.object_models[i]:
+                this_object_state_all = self._init_object_model_state[i]
+
+        # Indexes corresponding to envs we're still actively sampling for
+        active_idx = torch.arange(num_resets, device=self.device)
+        sampled_object_state[:, 3:7] = offset[:, 3:7]
+        sampled_object_state[:, :3] = offset[:, :3]
+
+        # Lastly, set these sampled values as the new init state
+        this_object_state_all[env_ids, :] = sampled_object_state
+
     '''
     Resetting object poses and quering object pose from the saved object pose
     '''
-
     def reset_object_pose(self, env_ids):
         for counter in range(len(self.object_models)):
             self.object_poses = torch.zeros(0, 7).to(self.device)
@@ -143,9 +170,140 @@ class EnvReset:
         self.object_movement_enabled = 0
         self.cmd_limit = to_torch(
             [0.1, 0.1, 0.1, 0.5, 0.5, 0.5], device=self.device).unsqueeze(0)
+        
+    def reset_pre_grasp_pose(self, env_ids):
+        pos = torch.zeros(0, self.num_ur16e_dofs).to(self.device)
+        for _ in env_ids:
+            path = str(Path(__file__).parent.absolute())
+            joint_poses_list = torch.load(f"{path}/../../../misc/joint_poses.pt")
+            temp_pos = joint_poses_list[torch.randint(
+                0, len(joint_poses_list), (1,))[0]].to(self.device)
+            temp_pos = torch.reshape(temp_pos, (1, len(temp_pos)))
+            temp_pos = torch.cat(
+                (temp_pos, torch.tensor([[0]]).to(self.device)), dim=1)
+            # temp_pos = tensor_clamp(temp_pos.unsqueeze(0), self.ur16e_dof_lower_limits.unsqueeze(0), self.ur16e_dof_upper_limits)
+            pos = torch.cat([pos, temp_pos])
+        return pos
 
     def reset_idx_init(self, env_ids):
         pos = self.reset_init_arm_pose(env_ids)
         self.deploy_actions(env_ids, pos)
         # Update objects states
         self.reset_object_pose(env_ids)
+
+    def reset_env_with_log(self, env_count, message, env_complete_reset):
+        print(message)
+        env_complete_reset = torch.cat(
+            (env_complete_reset, torch.tensor([env_count])), axis=0)
+        self.free_envs_list[env_count] = torch.tensor(0)
+        return env_complete_reset
+
+    def reset_env_conditions(self, env_list_reset_arm_pose, env_list_reset_objects, env_complete_reset):
+        # Parallelizing multiple environments for resetting the arm for pre grasp pose or to reset the particular environment
+        if (len(env_complete_reset) != 0 and len(env_list_reset_arm_pose) != 0):
+            env_complete_reset = torch.unique(env_complete_reset)
+
+            env_list_reset_objects = torch.cat(
+                (env_list_reset_objects, env_complete_reset), axis=0)
+
+            env_list_reset_arm_pose = torch.unique(env_list_reset_arm_pose)
+            env_list_reset_arm_pose = torch.tensor(
+                [x for x in env_list_reset_arm_pose if x not in env_complete_reset])
+
+            env_ids = torch.cat(
+                (env_list_reset_arm_pose, env_complete_reset), axis=0)
+            env_ids = env_ids.to(self.device).type(torch.long)
+            pos1 = self.reset_pre_grasp_pose(
+                env_list_reset_arm_pose.to(self.device).type(torch.long))
+            pos2 = self.reset_init_arm_pose(
+                env_complete_reset.to(self.device).type(torch.long))
+
+            pos = torch.cat([pos1, pos2])
+            self.deploy_actions(env_ids, pos)
+
+        elif (len(env_list_reset_arm_pose) != 0):
+            env_list_reset_arm_pose = torch.unique(env_list_reset_arm_pose)
+            pos = self.reset_pre_grasp_pose(
+                env_list_reset_arm_pose.to(self.device).type(torch.long))
+
+            env_ids = env_list_reset_arm_pose.to(self.device).type(torch.long)
+            self.deploy_actions(env_ids, pos)
+
+        elif (len(env_complete_reset) != 0):
+            env_complete_reset = torch.unique(env_complete_reset)
+            env_list_reset_objects = torch.cat(
+                (env_list_reset_objects, env_complete_reset), axis=0)
+            pos = self.reset_init_arm_pose(
+                env_complete_reset.to(self.device).type(torch.long))
+            env_ids = env_complete_reset.to(self.device).type(torch.long)
+            self.deploy_actions(env_ids, pos)
+
+        if (len(env_list_reset_objects) != 0):
+            env_list_reset_objects = torch.unique(env_list_reset_objects)
+            self.reset_object_pose(env_list_reset_objects.to(
+                self.device).type(torch.long))
+            
+    def check_reset_conditions(self, env_count, env_complete_reset):
+        segmask = self.get_segmask(env_count, camera_id=0)
+        segmask_bin_crop = segmask[self.check_object_coord[0]:self.check_object_coord[1],
+                                   self.check_object_coord[2]:self.check_object_coord[3]]
+
+        objects_spawned = len(torch.unique(segmask_bin_crop)) - 1
+        total_objects = len(self.selected_object_env[env_count])
+
+        object_coords_match = torch.count_nonzero(
+            segmask) == torch.count_nonzero(segmask_bin_crop)
+
+        # collecting pose of all objects
+        total_position_error, obj_drop_status = self.calculate_objects_position_error(
+            env_count)
+
+        # Calculate mask areas.
+        object_mask_area = self.min_area_object(segmask, segmask_bin_crop)
+
+        # Check conditions for resetting the environment.
+        conditions_messages = [
+            (object_mask_area < 1000,
+                f"Object in environment {env_count} not visible in the camera (due to occlusion) with area {object_mask_area}"),
+            ((not object_coords_match) or (total_objects != objects_spawned),
+                f"Object in environment {env_count} extends beyond the bin's boundaries"),
+            (torch.abs(total_position_error) > self.POSE_ERROR_THRESHOLD,
+                f"Object in environment {env_count}, not visible in the camera (due to occlusion) with area {object_mask_area}"),
+            (obj_drop_status,
+                f"Object falled down in environment {env_count}, where total objects are {total_objects} and only {objects_spawned} were spawned inside the bin")
+        ]
+
+        for condition, message in conditions_messages:
+            if condition:
+                env_complete_reset = self.reset_env_with_log(
+                    env_count, message, env_complete_reset)
+                break
+
+        return segmask, env_complete_reset
+            
+    def reset_until_valid(self, env_count, env_list_reset_arm_pose, env_list_reset_objects, env_complete_reset):
+        if ((self.frame_count[env_count] == self.COOLDOWN_FRAMES) and self.object_pose_check_list[env_count]):
+            # setting the pose of the object after cool down period
+            self.object_pose_store[env_count] = self.store_objects_current_pose(
+                env_count)
+            env_list_reset_objects = torch.cat(
+                (env_list_reset_objects, torch.tensor([env_count])), axis=0)
+            self.object_pose_check_list[env_count] -= torch.tensor(1)
+
+        ''' 
+        Spawning objects until they acquire stable pose and also doesn't falls down
+        '''
+        if ((self.frame_count[env_count] == self.COOLDOWN_FRAMES) and (not self.object_pose_check_list[env_count]) and (self.free_envs_list[env_count] == torch.tensor(1))):
+            segmask, env_complete_reset = self.check_reset_conditions(
+                env_count, env_complete_reset)
+
+            # check if the environment returned from reset and the frame for that enviornment is 30 or not
+            # 30 frames is for cooldown period at the start for the simualtor to settle down
+            if (env_count not in env_complete_reset):
+                '''
+                Running DexNet 3.0 after investigating the pose error after spawning
+                '''
+                env_list_reset_arm_pose, env_list_reset_objects, env_complete_reset = self.dexnet_sample_node(
+                    env_count, segmask, env_list_reset_arm_pose, env_list_reset_objects, env_complete_reset)
+
+        return env_list_reset_arm_pose, env_list_reset_objects, env_complete_reset

@@ -4,10 +4,12 @@ import torch
 import yaml
 import assets.urdf_models.models_data as md
 from isaacgym.torch_utils import *
+from isaacgym import gymapi
 
 class InitVariablesConfigs(VecTask):
     def __init__(self, cfg, rl_device, sim_device, graphics_device_id, headless, virtual_screen_capture, force_render, bin_id, data_path=None):
         self.cfg = cfg
+        self.data_path = data_path
 
         self.max_episode_length = self.cfg["env"]["episodeLength"]
 
@@ -79,29 +81,33 @@ class InitVariablesConfigs(VecTask):
         # Parallelization
         self.init_camera_capture = 1
 
-        with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../configs")+'/collision_primitives_'+str(self.bin_id)+'.yml') as file:
+        with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../../configs")+'/collision_primitives_'+str(self.bin_id)+'.yml') as file:
             self.world_params = yaml.load(file, Loader=yaml.FullLoader)
 
         VecTask.__init__(self, config=self.cfg, rl_device=rl_device, sim_device=sim_device, graphics_device_id=graphics_device_id,
                          headless=headless, virtual_screen_capture=virtual_screen_capture, force_render=force_render)
 
-        self.ur16e_default_dof_pos = to_torch(
-            [-1.57, 0, 0, 0, 0, 0, 0], device=self.device
-        )
+    def setup_env(self):
+        # Reset all environments
+        self.reset_idx_init(torch.arange(self.num_envs, device=self.device))
+        # Refresh tensors
+        self.refresh_env_tensors()
+        self.current_directory = os.getcwd()
 
+    def initialize_var(self):
         # Constants
         # TODO: explain all the constants here
-        self.COOLDOWN_FRAMES = 150
+        self.DEFAULT_EE_VEL = torch.tensor(0.15)
         self.RETRY_OBJECT_STABILITY = torch.tensor(3)
+        self.COOLDOWN_FRAMES = 150
         self.OBJECT_FALL_HEIGHT = torch.tensor(0.5)
         self.POSE_ERROR_THRESHOLD = torch.tensor(0.0055)
         self.OBJECT_MASK_THRESHOLD = 1000
         self.DEPTH_IMAGE_OFFSET = 0.2
         self.GRASP_LIMIT = 10
-        self.DEFAULT_EE_VEL = torch.tensor(0.15)
 
         # System IDentification data results
-        self.data_path = data_path or os.path.expanduser(
+        self.data_path = self.data_path or os.path.expanduser(
             "~/temp/grasp_data_05/")
         for env_number in range(self.num_envs):
             new_dir_path = os.path.join(
@@ -178,6 +184,20 @@ class InitVariablesConfigs(VecTask):
 
         self.env_reset_id_env = torch.ones(self.num_envs)
 
+        self.object_bin_prob_spawn = {
+            "3F": [1, 0.4, 1],
+            "3E": [0.05, 0.45, 1],
+            "3H": [0.05, 0.45, 1],
+        }
+        self.object_height_spawn = {
+            "3F": 1.3,
+            "3E": 1.4,
+            "3H": 1.4,
+        }
+        self.ur16e_default_dof_pos = to_torch(
+            [-1.57, 0, 0, 0, 0, 0, 0], device=self.device
+        )
+
         self.check_object_coord_bins = {
             "3F": [113, 638, 366, 906],
             "3E": [273, 547, 366, 906],
@@ -188,19 +208,7 @@ class InitVariablesConfigs(VecTask):
             "3F": [0, 720, 0, 1280],
             "3E": [0, 720, 0, 1280],
             "3H": [0, 720, 0, 1280],
-        }
-
-        self.object_bin_prob_spawn = {
-            "3F": [1, 0.4, 1],
-            "3E": [0.05, 0.45, 1],
-            "3H": [0.05, 0.45, 1],
-        }
-
-        self.object_height_spawn = {
-            "3F": 1.3,
-            "3E": 1.4,
-            "3H": 1.4,
-        }
+        }   
 
         if (self.bin_id == "3E" or self.bin_id == "3H"):
             self.smaller_bin = True
@@ -214,9 +222,36 @@ class InitVariablesConfigs(VecTask):
         self.cmd_limit = to_torch([0.1, 0.1, 0.1, 0.5, 0.5, 0.5], device=self.device).unsqueeze(0) if \
             self.control_type == "osc" else self._ur16e_effort_limits[:6].unsqueeze(0)
 
-        # Reset all environments
-        self.reset_idx_init(torch.arange(self.num_envs, device=self.device))
+    def create_sim(self):
+        self.sim_params.up_axis = gymapi.UP_AXIS_Z
+        self.sim_params.gravity.x = 0
+        self.sim_params.gravity.y = 0
+        self.sim_params.gravity.z = -9.81
+        self.sim = super().create_sim(
+            self.device_id, self.graphics_device_id, self.physics_engine, self.sim_params)
+        self.create_ground_plane()
+        self.create_envs(
+            self.num_envs, self.cfg["env"]['envSpacing'], int(np.sqrt(self.num_envs)))
 
-        # Refresh tensors
-        self.refresh_env_tensors()
-        self.current_directory = os.getcwd()
+    # TODO: Explain what it does
+    def refresh_env_tensors(self):
+        self.gym.refresh_actor_root_state_tensor(self.sim)
+        self.gym.refresh_dof_state_tensor(self.sim)
+        self.gym.refresh_rigid_body_state_tensor(self.sim)
+        self.gym.refresh_jacobian_tensors(self.sim)
+        self.gym.refresh_mass_matrix_tensors(self.sim)
+        # Refresh states
+        self.update_states()
+
+    def update_states(self):
+        self.states.update({
+            # ur16e
+            "base_link": self._base_link[:, :7],
+            "wrist_3_link": self._wrist_3_link[:, :7],
+            "wrist_3_link_vel": self._wrist_3_link[:, 7:],
+            "q": self._q[:, :],
+            "q_gripper": self._q[:, -2:],
+            "eef_pos": self._eef_state[:, :3],
+            "eef_quat": self._eef_state[:, 3:7],
+            "eef_vel": self._eef_state[:, 7:],
+        })
