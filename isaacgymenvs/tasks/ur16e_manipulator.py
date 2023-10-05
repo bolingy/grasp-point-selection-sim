@@ -114,13 +114,16 @@ class UR16eManipulation(
         return self.obs_buf
 
     def pre_physics_step(self, actions):
+        """
+        Perform preliminary physics calculations and apply actions prior to the simulation step.
+        """
         self.refresh_real_time_sensors()
         self.actions = torch.zeros(0, 7)
         # Variables to track environments where reset conditions have been met
         env_list_reset_objects = torch.tensor([])
         env_list_reset_arm_pose = torch.tensor([])
         env_complete_reset = torch.tensor([])
-        # TODO: what this loop does
+        # Looping over all environments and for each environment action is calculated for that particular environment
         for env_count in range(self.num_envs):
             self.cmd_limit = to_torch(
                 [0.1, 0.1, 0.1, 0.5, 0.5, 0.5], device=self.device
@@ -192,7 +195,7 @@ class UR16eManipulation(
                         ],
                         dtype=torch.float,
                     )
-                    # Reset environment if environment is unstable
+                    # Reset environment if the environment is unstable
                     (
                         env_list_reset_arm_pose,
                         env_list_reset_objects,
@@ -237,7 +240,8 @@ class UR16eManipulation(
 
             self.actions = torch.cat([self.actions, self.action_env])
             self.frame_count[env_count] += torch.tensor(1)
-
+            
+        # Here it resets the environment, arm pose and object pose, if the reset conditions are met
         self.reset_env_conditions(
             env_list_reset_arm_pose, env_list_reset_objects, env_complete_reset
         )
@@ -245,10 +249,14 @@ class UR16eManipulation(
         self.execute_control_actions()
 
     def post_physics_step(self):
+        """
+        Perform post-simulation step operations such as checking for timeout and resetting.
+        """
+        # Check if the environment has timed out
         self.progress_buf += 1
         env_ids = self.reset_buf.nonzero(as_tuple=False).squeeze(-1)
 
-        # check if there is a timeout
+        # check if there is a timeout and reset the environment
         if len(env_ids) > 0:
             for env_id in env_ids:
                 env_count = env_id.item()
@@ -266,8 +274,8 @@ class UR16eManipulation(
             self.reset_object_pose(env_ids)
 
         self.compute_observations()
-        # Compute resets
 
+        # Compute possible resets
         self.reset_buf = torch.where(
             (self.progress_buf >= self.max_episode_length - 1),
             torch.ones_like(self.reset_buf),

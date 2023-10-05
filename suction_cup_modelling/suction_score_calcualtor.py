@@ -68,6 +68,9 @@ class calcualte_suction_score:
         return U, V
 
     def find_nearest(self, centroid, points):
+        """
+        Identify the closest point in `suction points projection` to each suction point with respect to camera and return them.
+        """
         suction_points = centroid[:2] + self.suction_coordinates[:, :2]
         distances = torch.cdist(
             points[:, :2].type(torch.float64), suction_points.type(torch.float64)
@@ -79,6 +82,21 @@ class calcualte_suction_score:
     def calculator(
         self, depth_image, segmask, rgb_img, grasps_and_predictions, object_id, offset
     ):
+        """
+        Compute suction score and pose adjustments for robotic arm during suction-based manipulation.
+
+        Parameters:
+        - depth_image, segmask, rgb_img: Input image data for processing.
+        - grasps_and_predictions: sample points obtained from dexnet method.
+        - object_id: Identifier for the target object.
+        - offset: Offset for compensating the cropping of the image.
+
+        Returns:
+        Tuple containing:
+        - suction_score: Computed score indicating suction effectiveness.
+        - Pre-grasp Pose: The configuration of the robot arm prior to executing a pushing action.
+        - centroid_angle: Angle of the object's normal vector.
+        """
         self.depth_image = depth_image
         self.segmask = segmask
         self.rgb_img = rgb_img
@@ -86,7 +104,7 @@ class calcualte_suction_score:
         self.object_id = object_id
         self.pre_grasp_pose_x = torch.min(depth_image)
 
-        # Calculate the normals of the object
+        # Calculate object normals
         self.depth_image_normal = depth_image.clone().cpu().numpy()
         depth_normal = DepthImage(
             self.depth_image_normal, frame=self.camera_intrinsics.frame
@@ -98,7 +116,7 @@ class calcualte_suction_score:
         self.depth_image[self.segmask == 0] = 0
         centroid_angle = torch.tensor([0, 0, 0]).to(self.device)
 
-        # Centroid method using median of point cloud
+        # Refine segmask and calculate centroid using point cloud median
         points = self.convert_rgb_depth_to_point_cloud()
         centroid_point = torch.FloatTensor(
             [
@@ -113,7 +131,8 @@ class calcualte_suction_score:
                 torch.tensor([0, 0, 0]),
                 torch.tensor([centroid_angle[0], centroid_angle[1], centroid_angle[2]]),
             )
-        # Given sample point convert to xyz point
+
+        # Obtain xyz coordinates, handle cases with negative z-values, and initialize suction_coordinates
         if self.grasps_and_predictions == None:
             xyz_point = self.convert_uv_point_to_xyz_point(
                 int(self.segmask.shape[1] / 2), int(self.segmask.shape[0] / 2)
@@ -130,10 +149,9 @@ class calcualte_suction_score:
                 torch.tensor([centroid_angle[0], centroid_angle[1], centroid_angle[2]]),
             )
 
-        # Store the base coordiantes of the suction cup points
+        # Iterate through all the projections to calculate and append suction coordinates
         base_coordinate = torch.tensor([0.02, 0, 0]).to(self.device)
         self.suction_coordinates = base_coordinate.view(1, 3)
-        # |x --y
         for angle in range(45, 360, 45):
             x = base_coordinate[0] * math.cos(angle * math.pi / 180) - base_coordinate[
                 1
@@ -141,7 +159,6 @@ class calcualte_suction_score:
             y = base_coordinate[0] * math.sin(angle * math.pi / 180) + base_coordinate[
                 1
             ] * math.cos(angle * math.pi / 180)
-            # Appending all the coordiantes in suction_cooridnates and the object_suction_coordinate is the x and y 3D cooridnate of the object suction points
             self.suction_coordinates = torch.cat(
                 (self.suction_coordinates, torch.tensor([[x, y, 0.0]]).to(self.device)),
                 dim=0,
@@ -173,7 +190,7 @@ class calcualte_suction_score:
             centroid_angle = torch.tensor(
                 [0.0, -centroid_angle[1], centroid_angle[0]]
             ).to(self.device, dtype=torch.float64)
-        # Finding the suction points accordint to the base coordiante
+        # Calcualting the suction projection points with respect to the base coordinate (camera)
         point_cloud_suction = self.find_nearest(xyz_point, points)
         U, V = self.convert_xyz_point_to_uv_point(point_cloud_suction)
 
@@ -190,7 +207,7 @@ class calcualte_suction_score:
                         centroid_angle,
                     )
 
-        # Calculate the differnce in suction 3d coordinates and nearest points obtained from the suction projection
+        # Evaluate difference in xy plane between obtained point cloud and suction coordinates projections
         difference_xy_plane = point_cloud_suction[:, :2] - (
             self.suction_coordinates[:, :2] + xyz_point[:2]
         )
@@ -210,7 +227,45 @@ class calcualte_suction_score:
                     centroid_angle,
                 )
 
-        # Calcualte the conical spring score
+        # This block of code is related to calculating the suction score and
+        # transforming the robotic arm to ensure the end-effector (eef) is facing
+        # the normal of the target object. While this code is kept commented and
+        # not in active use, it might be valuable for future reference or alternative
+        # approaches.
+
+        # The following section calcualtes point_cloud_suction_facing_normal. This
+        # ensures that the eef faces towards the normal derived from the centroid angle.
+        #
+        # point_cloud_suction_facing_normal = torch.mm(
+        #     point_cloud_suction.clone().detach().type(torch.float64),
+        #     euler_angles_to_matrix(
+        #         torch.tensor([centroid_angle[1], -centroid_angle[2], 0.0]).to(
+        #             self.device
+        #         ),
+        #         "XYZ",
+        #         degrees=False,
+        #     ).type(torch.float64),
+        #     out=None,
+        # )
+        # minimum_suction_point = torch.min(point_cloud_suction_facing_normal[:, 2]).to(
+        #     self.device
+        # )
+
+        # ri calculates a normalized relative inverse distance score, clamped to [0,1],
+        # representing the inverted and scaled proximity of each point to the minimal suction point.
+        #
+        # ri = torch.clamp(
+        #     torch.abs(point_cloud_suction_facing_normal[:, 2] - minimum_suction_point)
+        #     / 0.023,
+        #     max=1.0,
+        # )
+
+        # suction_score_facing_normal calculates the final suction score as 1 minus
+        # the maximum value in ri, providing a measure of suction efficacy based on proximity.
+        #
+        # suction_score_facing_normal = 1 - torch.max(ri)
+
+        # Calcualte the conical spring suction deformation score
         minimum_suction_point = torch.min(point_cloud_suction[:, 2]).to(self.device)
         ri = torch.clamp(
             torch.abs(point_cloud_suction[:, 2] - minimum_suction_point) / 0.023,
@@ -218,6 +273,7 @@ class calcualte_suction_score:
         )
         suction_score = 1 - torch.max(ri)
 
+        # Return calculated suction_score along with pre grasp pose and angle of the centre of suction cup
         if grasps_and_predictions == None:
             return (
                 suction_score,
@@ -230,9 +286,18 @@ class calcualte_suction_score:
             torch.tensor([0, 0, 0]),
         )
 
-    def calculate_contact(
-        self, depth_image, segmask, rgb_img, grasps_and_predictions, object_id
-    ):
+    def calculate_contact(self, depth_image, segmask, object_id):
+        """
+        Calculate the existence of a valid contact between the suction points and the object surface.
+
+        Parameters:
+        - depth_image (tensor): Depth image of the scene.
+        - segmask (tensor): Segmentation mask identifying objects.
+        - object_id (int): Identifier of the target object.
+
+        Returns:
+        - torch.tensor: Binary indicator (0/1) of whether a valid contact is made.
+        """
         self.depth_image = depth_image
         self.segmask = segmask
         self.object_id = object_id
@@ -255,10 +320,9 @@ class calcualte_suction_score:
             int(self.segmask.shape[1] / 2), int(self.segmask.shape[0] / 2)
         )
 
-        # Store the base coordiantes of the suction cup points
+        # Store the base projections of the suction cup points
         base_coordinate = torch.tensor([0.02, 0, 0]).to(self.device)
         self.suction_coordinates = base_coordinate.view(1, 3)
-        # |x --y
         for angle in range(45, 360, 45):
             x = base_coordinate[0] * math.cos(angle * math.pi / 180) - base_coordinate[
                 1
@@ -266,16 +330,14 @@ class calcualte_suction_score:
             y = base_coordinate[0] * math.sin(angle * math.pi / 180) + base_coordinate[
                 1
             ] * math.cos(angle * math.pi / 180)
-            # Appending all the coordiantes in suction_cooridnates and the object_suction_coordinate is the x and y 3D cooridnate of the object suction points
             self.suction_coordinates = torch.cat(
                 (self.suction_coordinates, torch.tensor([[x, y, 0.0]]).to(self.device)),
                 dim=0,
             ).type(torch.float64)
-        # Finding the suction points accordint to the base coordiante
         point_cloud_suction = self.find_nearest(xyz_point, points)
         U, V = self.convert_xyz_point_to_uv_point(point_cloud_suction)
 
-        # To check if any point is facing the object or not
+        # Ensure at least 6 points of the suction cup are facing the object
         count = 0
         for i in range(8):
             if torch.isnan(U[i]) or torch.isnan(V[i]):
@@ -286,9 +348,8 @@ class calcualte_suction_score:
         if count >= 2:
             return torch.tensor(0)
 
-        # TO check if any of the point is within the threshold or not
+        # Check depth constraints to ensure viable suction contact
         count = 0
-
         furthest_suction_projection_point = -1000.0
         nearest_suction_projection_point = 1000.0
         for i in range(8):
@@ -319,6 +380,7 @@ class calcualte_suction_score:
         ):
             return torch.tensor(0)
 
+        # Ensure that at least 6 points have depth within tolerance
         for i in range(8):
             if torch.isnan(U[i]) or torch.isnan(V[i]):
                 count += 1

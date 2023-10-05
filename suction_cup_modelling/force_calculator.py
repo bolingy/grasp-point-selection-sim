@@ -11,21 +11,26 @@ class calcualte_force:
     def __init__(
         self,
     ):
+        """
+        Initialize regression model parameters and device for computation.
+        """
         self.curved_object_intercept = 22.26361025
         self.curved_object_slope = -0.17844147
-
-        # # Lasso for flat objects
-        # self.flat_object_intercept = 2.7684182
-        # self.flat_object_slope =  0.0
-
-        # Ridge for flat objects
         self.flat_object_intercept = 7.66228198
         self.flat_object_slope = -0.05622074
 
         self.device = "cuda:0"
 
     def regression(self, suction_score):
-        # mapping score in percentage
+        """
+        Compute force based on the provided suction deformation score using a regression model.
+        
+        Parameters:
+        - suction_score: Score indicating quality of suction (float).
+        
+        Returns:
+        - force: Predicted force (torch.Tensor).
+        """
         self.suction_score = suction_score * 100
         if self.suction_score < 80:
             prediction = (

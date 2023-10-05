@@ -15,6 +15,9 @@ class ErrorCalculator:
         env_list_reset_objects,
         env_complete_reset,
     ):
+        """
+        Method to reset environments until a valid configuration is found.
+        """
         if (
             self.frame_count[env_count] == self.COOLDOWN_FRAMES
         ) and self.object_pose_check_list[env_count]:
@@ -26,10 +29,8 @@ class ErrorCalculator:
                 (env_list_reset_objects, torch.tensor([env_count])), axis=0
             )
             self.object_pose_check_list[env_count] -= torch.tensor(1)
-
-        """ 
-        Spawning objects until they acquire stable pose and also doesn't falls down
-        """
+ 
+        # Spawning objects until they acquire stable pose and also doesn't falls down
         if (
             (self.frame_count[env_count] == self.COOLDOWN_FRAMES)
             and (not self.object_pose_check_list[env_count])
@@ -39,12 +40,11 @@ class ErrorCalculator:
                 env_count, env_complete_reset
             )
 
-            # check if the environment returned from reset and the frame for that enviornment is 30 or not
-            # 30 frames is for cooldown period at the start for the simualtor to settle down
+            # Check if the environment returned from reset and the frame for that enviornment is 
+            # equal to the COOLDOWN_FRAMES
             if env_count not in env_complete_reset:
-                """
-                Running DexNet 3.0 after investigating the pose error after spawning
-                """
+                # Running DexNet 3.0 after investigating the pose error of the objects for sampling 
+                # grasp points
                 (
                     env_list_reset_arm_pose,
                     env_list_reset_objects,
@@ -60,6 +60,9 @@ class ErrorCalculator:
         return env_list_reset_arm_pose, env_list_reset_objects, env_complete_reset
 
     def get_object_current_pose(self, env_count, object_id):
+        """
+        Retrieve the current pose of a specific object.
+        """
         object_actor_index = self._object_model_id[int(object_id.item()) - 1]
         return (
             self._root_state[env_count, object_actor_index, :][:7]
@@ -69,6 +72,9 @@ class ErrorCalculator:
         )
 
     def min_area_object(self, segmask_check, segmask_bin_crop):
+        """
+        Find the object with the minimum area in the segmask.
+        """
         areas = [
             (segmask_check == int(object_id.item())).sum()
             for object_id in torch.unique(segmask_bin_crop)
@@ -83,6 +89,9 @@ class ErrorCalculator:
         env_list_reset_objects,
         env_complete_reset,
     ):
+        """
+        Check the position error of objects within the environment and determine if a reset is required.
+        """
         _all_objects_current_pose = {}
         _all_object_position_error = torch.tensor(0.0).to(self.device)
         _all_object_rotation_error = torch.tensor(0.0).to(self.device)
@@ -146,7 +155,7 @@ class ErrorCalculator:
         _all_objects_current_pose,
     ):
         """
-        detecting contacts with other objects before contact to the target object
+        Detecting interactions with incidental objects prior to reaching the target object.
         """
         _all_object_pose_error = torch.tensor(0.0).to(self.device)
         try:
@@ -177,9 +186,8 @@ class ErrorCalculator:
                 _all_object_pose_error,
                 "reset because of object collision before contact",
             )
-
             self.save_config_grasp_json(env_count, False, torch.tensor(0), True)
-
+        # Storing current pose of all objects
         for object_id in self.selected_object_env[env_count]:
             self.all_objects_last_pose[env_count][
                 int(object_id.item())
@@ -196,6 +204,9 @@ class ErrorCalculator:
         return bin_objects_current_pose
 
     def calculate_objects_position_error(self, env_count):
+        """
+        Check objects pose error with respect to the stored pose.
+        """
         total_position_error = torch.tensor(0.0).to(self.device)
         for object_id in self.selected_object_env[env_count]:
             curr_pose = self.get_object_current_pose(env_count, object_id)[:3]
@@ -208,9 +219,12 @@ class ErrorCalculator:
     def detect_contact_non_target_object(
         self, env_count, _all_objects_current_pose, contact_exist
     ):
-        # TODO: be more specific about the contact
         """
-        detecting contacts with other objects before it contacts with the target object
+        Identify and manage unintended interactions with non-target objects.
+
+        This function monitors the movement of all non-target objects within 
+        a given environment. If movement is detected without contact with the 
+        target object, it resets the environment using the store pose. 
         """
         _all_object_pose_error = torch.tensor(0.0).to(self.device)
         try:
@@ -247,6 +261,10 @@ class ErrorCalculator:
     def calculate_angle_error(
         self, env_count, env_list_reset_arm_pose, env_list_reset_objects
     ):
+        """
+        detect the arm angle insertion error and reset the environment if the arm is not 
+        in the correct orientation with respect to pre grasp psoe
+        """
         if self.action_contrib[env_count] == 0:
             angle_error = quaternion_to_euler_angles(
                 self._eef_state[env_count][3:7], "XYZ", degrees=False
@@ -269,6 +287,9 @@ class ErrorCalculator:
         return env_list_reset_arm_pose, env_list_reset_objects
 
     def detect_target_object_movement(self, env_count, _all_objects_current_pose):
+        """
+        Monitor and react to the target object's movement during grasping.
+        """
         current_object_pose = (
             self._root_state[
                 env_count,
@@ -279,6 +300,7 @@ class ErrorCalculator:
             .detach()
             .clone()
         )
+        # Calculate error by calculating the norm of the difference between the current and last object pose
         try:
             object_pose_error = torch.abs(
                 torch.norm(current_object_pose - self.last_object_pose[env_count])
@@ -292,13 +314,11 @@ class ErrorCalculator:
 
         depth_numpy_gripper = self.get_depth_image(env_count, camera_id=1)
 
-        # Calculate the contact existance of the suction gripper and the target object
+        # Calculate the contact existence between the suction gripper and the target object surface
         try:
             contact_exist = self.suction_score_object_gripper.calculate_contact(
                 depth_numpy_gripper,
                 segmask_gripper,
-                None,
-                None,
                 self.object_target_id[env_count],
             )
         except Exception as e:
@@ -315,8 +335,7 @@ class ErrorCalculator:
         else:
             depth_point_cam = torch.tensor(10.0)
 
-        # If the object is moving then increase the ee_vel else go to the default value of 0.1
-        # print(depth_point_cam, object_pose_error, self.action_contrib[env_count], contact_exist)
+        # If the object is moving then increase the ee_vel, else use the DEFAULT_EE_VEL value
         if (
             (depth_point_cam < torch.tensor(0.03))
             and (self.action_contrib[env_count] == torch.tensor(0))
@@ -345,11 +364,10 @@ class ErrorCalculator:
 
         return contact_exist
 
-    """
-    Detecting oscillations while grasping due to slippage
-    """
-
     def detect_oscillation(self, force_list):
+        """
+        Detecting oscillations while grasping due to motion planning of the arm.
+        """
         try:
             force = pd.DataFrame(force_list)
             force = force.astype(float)
