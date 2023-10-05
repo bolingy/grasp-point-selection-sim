@@ -20,6 +20,10 @@ class EnvSetup:
         self.gym.add_ground(self.sim, plane_params)
 
     def create_envs(self, num_envs, spacing, num_per_row):
+        """
+        Creates and initializes environments by loading the robot model, object models and table model.
+
+        """
         lower = gymapi.Vec3(-spacing, -spacing, 0.0)
         upper = gymapi.Vec3(spacing, spacing, spacing)
 
@@ -46,7 +50,7 @@ class EnvSetup:
             [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], dtype=torch.float, device=self.device
         )
 
-        # Create table asset
+        # Create table asset and load table model
         table_pos = [0.0, 0.0, 1.0]
         table_thickness = 0.05
         table_opts = gymapi.AssetOptions()
@@ -61,6 +65,7 @@ class EnvSetup:
         asset_options.default_dof_drive_mode = gymapi.DOF_MODE_EFFORT
         asset_options.use_mesh_materials = True
 
+        # Load object models from the object list with domain randomization
         self.object_models = []
         objects_file = open(
             f"misc/object_list_domain_randomization_{self.bin_id}.txt", "r"
@@ -75,7 +80,6 @@ class EnvSetup:
             self.object_prob = np.append(self.object_prob, int(object_class[1]))
 
         self.object_count_unique = 0
-        # Strips the newline character
         for object in objects:
             self.object_count_unique += 1
             for domain in range(5):
@@ -102,7 +106,7 @@ class EnvSetup:
         print("num ur16e bodies: ", self.num_ur16e_bodies)
         print("num ur16e dofs: ", self.num_ur16e_dofs)
 
-        # set ur16e dof properties
+        # Set ur16e dof properties
         ur16e_dof_props = self.gym.get_asset_dof_properties(ur16e_asset)
         self.ur16e_dof_lower_limits = []
         self.ur16e_dof_upper_limits = []
@@ -135,7 +139,6 @@ class EnvSetup:
 
         # Define start pose for ur16e
         ur16e_start_pose = gymapi.Transform()
-        # gymapi.Vec3(-0.45, 0.0, 1.0 + table_thickness / 2 + table_stand_height)
         ur16e_start_pose.p = gymapi.Vec3(0, 0, 2.020)
 
         quat = euler_angles_to_quaternion(
@@ -158,13 +161,12 @@ class EnvSetup:
             object_model_start_pose[counter].r = gymapi.Quat(0.0, 0.0, 0.0, 1.0)
 
         self.table_count = 0
-        # Count cubes for building the pod
         if "cube" in self.world_params["world_model"]["coll_objs"]:
             cube = self.world_params["world_model"]["coll_objs"]["cube"]
             for obj in cube.keys():
                 self.table_count += 1
 
-        # compute aggregate size
+        # Compute aggregate size for all assets
         num_ur16e_bodies = self.gym.get_asset_rigid_body_count(ur16e_asset)
         num_ur16e_shapes = self.gym.get_asset_rigid_shape_count(ur16e_asset)
         max_agg_bodies = num_ur16e_bodies + self.table_count + len(self.object_models)
@@ -184,13 +186,12 @@ class EnvSetup:
             ),
         }
 
-        # force sensor
         sensor_pose = gymapi.Transform()
         self.gym.create_asset_force_sensor(
             ur16e_asset, self.multi_body_idx["wrist_3_link"], sensor_pose
         )
 
-        # Create environments
+        # Create environments and actors for each environment
         for i in range(self.num_envs):
             # create env instance
             env_ptr = self.gym.create_env(self.sim, lower, upper, num_per_row)
@@ -200,7 +201,7 @@ class EnvSetup:
             if self.aggregate_mode >= 3:
                 self.gym.begin_aggregate(env_ptr, max_agg_bodies, max_agg_shapes, True)
 
-            # Create ur16e
+            # Create ur16e actor
             self.ur16e_actor = self.gym.create_actor(
                 env_ptr, ur16e_asset, ur16e_start_pose, "ur16e", i, 0, 0
             )
@@ -208,15 +209,13 @@ class EnvSetup:
                 env_ptr, self.ur16e_actor, ur16e_dof_props
             )
             self.gym.enable_actor_dof_force_sensors(env_ptr, self.ur16e_actor)
-
             if self.aggregate_mode == 2:
                 self.gym.begin_aggregate(env_ptr, max_agg_bodies, max_agg_shapes, True)
 
-            # Create pod
+            # Create pod using the cubes in the world model
             if "cube" in self.world_params["world_model"]["coll_objs"]:
                 cube = self.world_params["world_model"]["coll_objs"]["cube"]
                 for obj in cube.keys():
-                    # For flap
                     if int(obj[4:]) >= 100:
                         dims = cube[obj]["dims"]
                         pose = cube[obj]["pose"]
@@ -245,7 +244,7 @@ class EnvSetup:
             if self.aggregate_mode == 1:
                 self.gym.begin_aggregate(env_ptr, max_agg_bodies, max_agg_shapes, True)
 
-            # Set urdf objects
+            # Spawn urdf primitive shapes objects
             self._object_model_id = []
             for counter in range(len(self.object_models)):
                 self._object_model_id.append(
@@ -263,11 +262,11 @@ class EnvSetup:
             if self.aggregate_mode > 0:
                 self.gym.end_aggregate(env_ptr)
 
-            # Store the created env pointers
+            # Store the created env and ur16e pointers
             self.envs.append(env_ptr)
             self.ur16es.append(self.ur16e_actor)
 
-            # Addign friction to the suction cup
+            # Adding friction to the suction gripper
             ur16e_handle = 0
             suction_gripper_handle = self.gym.find_actor_rigid_body_handle(
                 env_ptr, ur16e_handle, self.suction_gripper
@@ -275,15 +274,14 @@ class EnvSetup:
             suction_gripper_shape_props = self.gym.get_actor_rigid_shape_properties(
                 env_ptr, suction_gripper_handle
             )
+            # High friction for suction gripper to avoid slipping and fill the gap between
+            # real robot and simulator
             suction_gripper_shape_props[0].friction = 1.0
             self.gym.set_actor_rigid_shape_properties(
                 env_ptr, suction_gripper_handle, suction_gripper_shape_props
             )
 
-            """
-            Camera Setup
-            """
-            # Camera environment setup (Back cam)
+            # Camera environment setup (Back cam) and its properties
             self.camera_handles.append([])
             self.body_states = []
             self.camera_properties_back_cam = gymapi.CameraProperties()
@@ -294,7 +292,6 @@ class EnvSetup:
             camera_handle = self.gym.create_camera_sensor(
                 env_ptr, self.camera_properties_back_cam
             )
-            # for camera at center of the bin, coordinates are [-0.48, 0.05, 0.6]
             self.camera_base_link_translation = torch.tensor([0.2, 0.175, 0.64]).to(
                 self.device
             )
@@ -321,7 +318,8 @@ class EnvSetup:
             )
             self.camera_handles[i].append(camera_handle)
 
-            # Embedded camera at gripper for real time feedback
+            # Setup embedded camera at gripper for real time feedback (Gripper cam)
+            # and its properties
             ur16e_hand_link_handle = self.gym.find_actor_rigid_body_handle(
                 env_ptr, 0, "ee_link"
             )
@@ -359,7 +357,7 @@ class EnvSetup:
             l_direction = gymapi.Vec3(-1, 1, 1)
             self.gym.set_light_parameters(self.sim, 1, l_color, l_ambient, l_direction)
 
-        # Setup data
+        # Setup data structures for rendering
         self.init_data()
 
         # List for storing the object poses
@@ -369,7 +367,6 @@ class EnvSetup:
                 torch.zeros(self.num_envs, 13, device=self.device)
             )
 
-    # For pod
     def add_table(
         self,
         table_dims,
@@ -380,6 +377,9 @@ class EnvSetup:
         color=[1.0, 0.0, 0.0],
         mesh_visual_only=False,
     ):
+        """
+        Pod is setup by adding the cubes to form bins
+        """
         table_dims = gymapi.Vec3(table_dims[0], table_dims[1], table_dims[2])
 
         asset_options = gymapi.AssetOptions()
@@ -415,11 +415,10 @@ class EnvSetup:
         )
 
     def init_data(self):
-        # Setup sim handles
+        # Setup sim handles and object models for rendering
         env_ptr = self.envs[0]
         ur16e_handle = 0
         self.handles = {
-            # ur16e
             "base_link": self.gym.find_actor_rigid_body_handle(
                 env_ptr, ur16e_handle, self.ur16e_base
             ),
@@ -499,10 +498,7 @@ class EnvSetup:
             device=self.device,
         ).view(self.num_envs, -1)
 
-        """
-        camera intrinsics for back cam and gripper cam
-        """
-        # cam_vinv_back_cam = torch.inverse((torch.tensor(self.gym.get_camera_view_matrix(self.sim, self.envs[i], self.camera_handles[i][0])))).to(self.device)
+        # camera intrinsics for back camera and gripper camera
         cam_proj_back_cam = torch.tensor(
             self.gym.get_camera_proj_matrix(
                 self.sim, self.envs[0], self.camera_handles[0][0]
@@ -533,7 +529,6 @@ class EnvSetup:
 
         print("focal length in x axis: ", self.fx_back_cam)
         print("focal length in y axis: ", self.fy_back_cam)
-        # cam_vinv_gripper = torch.inverse((torch.tensor(self.gym.get_camera_view_matrix(self.sim, self.envs[i], self.camera_handles[i][0])))).to(self.device)
         cam_proj_gripper = torch.tensor(
             self.gym.get_camera_proj_matrix(
                 self.sim, self.envs[0], self.camera_handles[0][1]
@@ -556,6 +551,8 @@ class EnvSetup:
             height=self.height_gripper,
             width=self.width_gripper,
         )
+
+        # Creating instances for calculating suction score and force threshold
         self.suction_score_object_gripper = calcualte_suction_score(
             self.camera_intrinsics_gripper
         )

@@ -4,6 +4,9 @@ from isaacgym import gymapi
 
 
 class GetSensorValues:
+    """
+    This method is used to get the sensor values (force and camera images) from the gym environment
+    """
     def __init__(self) -> None:
         pass
 

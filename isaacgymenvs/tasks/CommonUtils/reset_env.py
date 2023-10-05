@@ -13,9 +13,6 @@ class EnvReset:
         self.sim = sim
         self.physics_engine = physics_engine
 
-    """
-    Reset the arm pose for heading towards pre grasp pose
-    """
     def random_number_with_probabilities(self, probabilities):
         random_number = random.random()
         for i, probability in enumerate(probabilities):
@@ -26,6 +23,7 @@ class EnvReset:
     def reset_init_arm_pose(self, env_ids):
         for env_count in env_ids:
             env_count = env_count.item()
+            # Calculating the random poses and random number of objects for the particular environment
             probabilities = self.object_bin_prob_spawn[self.bin_id]
             random_number = self.random_number_with_probabilities(probabilities)
             random_number += 1
@@ -47,6 +45,7 @@ class EnvReset:
             list_objects_domain_randomizer = torch.tensor([])
             for object_count in selected_object:
                 domain_randomizer = random_number = random.choice([1, 2, 3, 4, 5])
+                # Spawning objects with random poses, but height is fixed
                 offset_object = np.array(
                     [
                         np.random.uniform(0.67, 0.7, 1).reshape(
@@ -67,7 +66,6 @@ class EnvReset:
                         )[0],
                     ]
                 )
-
                 quat = euler_angles_to_quaternion(
                     torch.tensor(offset_object[3:6]), "XYZ", degrees=False
                 )
@@ -81,8 +79,6 @@ class EnvReset:
             self.object_pose_store[env_count] = object_list_env
 
         print("Object configuration in each bin: ", self.selected_object_env)
-        # pos = torch.tensor(np.random.uniform(low=-6.2832, high=6.2832, size=(6,))).to(self.device).type(torch.float)
-        # pos = tensor_clamp(pos.unsqueeze(0), self.ur16e_dof_lower_limits.unsqueeze(0), self.ur16e_dof_upper_limits)
         pos = tensor_clamp(
             self.ur16e_default_dof_pos.unsqueeze(0),
             self.ur16e_dof_lower_limits.unsqueeze(0),
@@ -90,7 +86,7 @@ class EnvReset:
         )
         pos = pos.repeat(len(env_ids), 1)
 
-        # reinitializing the variables
+        # Reinitializing the variables for resetting the environment
         for env_id in env_ids:
             self.action_contrib[env_id] = 2
             self.force_encounter[env_id] = 0
@@ -107,19 +103,6 @@ class EnvReset:
         return pos
 
     def reset_init_object_state(self, object, env_ids, offset):
-        """
-        Simple method to sample @cube's position based on self.startPositionNoise and self.startRotationNoise, and
-        automaticlly reset the pose internally. Populates the appropriate self._init_cubeX_state
-
-        If @check_valid is True, then this will also make sure that the sampled position is not in contact with the
-        other cube.
-
-        Args:
-            cube(str): Which cube to sample location for. Either 'A' or 'B'
-            env_ids (tensor or None): Specific environments to reset cube for
-            check_valid (bool): Whether to make sure sampled position is collision-free with the other cube.
-        """
-
         # Initialize buffer to hold sampled values
         num_resets = len(env_ids)
         sampled_object_state = torch.zeros(num_resets, 13, device=self.device)
@@ -137,10 +120,10 @@ class EnvReset:
         # Lastly, set these sampled values as the new init state
         this_object_state_all[env_ids, :] = sampled_object_state
 
-    """
-    Resetting object poses and quering object pose from the saved object pose
-    """
     def reset_object_pose(self, env_ids):
+        """
+        Resetting object poses and quering object pose from the saved object pose
+        """
         for counter in range(len(self.object_models)):
             self.object_poses = torch.zeros(0, 7).to(self.device)
             for env_count in env_ids:
@@ -166,7 +149,7 @@ class EnvReset:
                 object=self.object_models[counter],
                 offset=self.object_poses,
             )
-
+        # Resetting variables for resetting the object poses
         for env_count in env_ids:
             self.force_list_save[env_count.item()] = None
             self.target_object_disp_save[env_count.item()] = None
@@ -178,7 +161,7 @@ class EnvReset:
             self._object_model_state[counter][env_ids] = self._init_object_model_state[
                 counter
             ][env_ids]
-
+        # Setting the object poses in the simulation
         multi_env_ids_cubes_int32 = self._global_indices[
             env_ids, -len(self.object_models) :
         ].flatten()
@@ -208,6 +191,10 @@ class EnvReset:
         ).unsqueeze(0)
 
     def reset_pre_grasp_pose(self, env_ids):
+        """
+        Resetting the pre grasp pose by randomly selecting the pre grasp pose from the
+        list of pre grasp poses (for now there are only 2 pre grasp poses)
+        """
         pos = torch.zeros(0, self.num_ur16e_dofs).to(self.device)
         for _ in env_ids:
             path = str(Path(__file__).parent.absolute())
@@ -217,14 +204,15 @@ class EnvReset:
             ].to(self.device)
             temp_pos = torch.reshape(temp_pos, (1, len(temp_pos)))
             temp_pos = torch.cat((temp_pos, torch.tensor([[0]]).to(self.device)), dim=1)
-            # temp_pos = tensor_clamp(temp_pos.unsqueeze(0), self.ur16e_dof_lower_limits.unsqueeze(0), self.ur16e_dof_upper_limits)
             pos = torch.cat([pos, temp_pos])
         return pos
 
     def reset_idx_init(self, env_ids):
+        """
+        Resetting the arm to the initial arm pose and reset the object poses
+        """
         pos = self.reset_init_arm_pose(env_ids)
         self.deploy_actions(env_ids, pos)
-        # Update objects states
         self.reset_object_pose(env_ids)
 
     def reset_env_with_log(self, env_count, message, env_complete_reset):
@@ -238,7 +226,9 @@ class EnvReset:
     def reset_env_conditions(
         self, env_list_reset_arm_pose, env_list_reset_objects, env_complete_reset
     ):
-        # Parallelizing multiple environments for resetting the arm for pre grasp pose or to reset the particular environment
+        """
+        Resetting the arm to a pre-grasp pose, adjusting object pose/configuration, or resetting a specific environment
+        """
         if len(env_complete_reset) != 0 and len(env_list_reset_arm_pose) != 0:
             env_complete_reset = torch.unique(env_complete_reset)
 
@@ -291,31 +281,27 @@ class EnvReset:
 
     def check_reset_conditions(self, env_count, env_complete_reset):
         segmask = self.get_segmask(env_count, camera_id=0)
+        # Cropping bin area from the segmask
         segmask_bin_crop = segmask[
             self.check_object_coord[0] : self.check_object_coord[1],
             self.check_object_coord[2] : self.check_object_coord[3],
         ]
-
+        # Calculating the number of objects spawned in the bin within the boundaries of the bin
         objects_spawned = len(torch.unique(segmask_bin_crop)) - 1
         total_objects = len(self.selected_object_env[env_count])
-
         object_coords_match = torch.count_nonzero(segmask) == torch.count_nonzero(
             segmask_bin_crop
         )
-
-        # collecting pose of all objects
         total_position_error, obj_drop_status = self.calculate_objects_position_error(
             env_count
         )
-
-        # Calculate mask areas.
         object_mask_area = self.min_area_object(segmask, segmask_bin_crop)
-
         # Check conditions for resetting the environment.
         conditions_messages = [
             (
                 object_mask_area < 1000,
-                f"Object in environment {env_count} not visible in the camera (due to occlusion) with area {object_mask_area}",
+                f"Object in environment {env_count} not visible in the camera (due to occlusion) \
+                    with area {object_mask_area}",
             ),
             (
                 (not object_coords_match) or (total_objects != objects_spawned),
@@ -323,19 +309,19 @@ class EnvReset:
             ),
             (
                 torch.abs(total_position_error) > self.POSE_ERROR_THRESHOLD,
-                f"Object in environment {env_count}, not visible in the camera (due to occlusion) with area {object_mask_area}",
+                f"Object in environment {env_count}, not visible in the camera (due to occlusion) \
+                    with area {object_mask_area}",
             ),
             (
                 obj_drop_status,
-                f"Object falled down in environment {env_count}, where total objects are {total_objects} and only {objects_spawned} were spawned inside the bin",
+                f"Object falled down in environment {env_count}, where total objects are {total_objects} \
+                    and only {objects_spawned} were spawned inside the bin",
             ),
         ]
-
         for condition, message in conditions_messages:
             if condition:
                 env_complete_reset = self.reset_env_with_log(
                     env_count, message, env_complete_reset
                 )
                 break
-
         return segmask, env_complete_reset

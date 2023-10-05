@@ -17,6 +17,10 @@ class SampleGrasp:
         env_list_reset_objects,
         env_complete_reset,
     ):
+        """
+        Getting grasp angle, suction deformation score, xyz point, grasp point, dexnet score
+        and force score from the stored values calcualted after sampling grasp points
+        """
         self.env_reset_id_env[env_count] = torch.tensor(0)
         self.action_env = torch.tensor([[0, 0, 0, 0, 0, 0, 1]], dtype=torch.float)
 
@@ -75,7 +79,7 @@ class SampleGrasp:
         env_complete_reset,
     ):
         """
-        Running DexNet 3.0 after investigating the pose error after spawning
+        Running DexNet 3.0 and extracting sample points after investigating the pose error after spawning
         """
         random_object_select = random.sample(
             self.selected_object_env[env_count].tolist(), 1
@@ -83,9 +87,7 @@ class SampleGrasp:
         self.object_target_id[env_count] = (
             torch.tensor(random_object_select).to(self.device).type(torch.int)
         )
-
         rgb_image = self.get_rgb_image(env_count, camera_id=0)
-
         self.rgb_save[env_count] = (
             rgb_image[
                 self.crop_coord[0] : self.crop_coord[1],
@@ -94,9 +96,7 @@ class SampleGrasp:
             .cpu()
             .numpy()
         )
-
         depth_image = self.get_depth_image(env_count, camera_id=0)
-
         segmask_dexnet = segmask.clone().detach()
         self.segmask_save[env_count] = (
             segmask[
@@ -109,7 +109,6 @@ class SampleGrasp:
             .numpy()
             .astype(np.uint8)
         )
-
         segmask_numpy = np.zeros_like(segmask_dexnet.cpu().numpy().astype(np.uint8))
         segmask_numpy_temp = np.zeros_like(
             segmask_dexnet.cpu().numpy().astype(np.uint8)
@@ -129,20 +128,17 @@ class SampleGrasp:
             ],
             frame=self.camera_intrinsics_back_cam.frame,
         )
-
         depth_image_dexnet = depth_image.clone().detach()
         noise_image = torch.normal(0, 0.0005, size=depth_image_dexnet.size()).to(
             self.device
         )
         depth_image_dexnet = depth_image_dexnet + noise_image
-
         depth_image_save_temp = depth_image_dexnet.clone().detach().cpu().numpy()
         self.depth_image_save[env_count] = depth_image_save_temp[
             self.crop_coord[0] : self.crop_coord[1],
             self.crop_coord[2] : self.crop_coord[3],
         ]
-
-        # saving depth image, rgb image and segmentation mask
+        # saving depth image, rgb image and segmentation mask only once before sampling grasp points
         self.config_env_count[env_count] += torch.tensor(1).type(torch.int)
 
         env_number = env_count
@@ -162,15 +158,11 @@ class SampleGrasp:
         save_dir_rgb_png = os.path.join(
             new_dir_path, f"rgb_{env_number}_{env_config}.png"
         )
-
         Image.fromarray(self.rgb_save[env_count]).save(save_dir_rgb_png)
-
         with open(save_dir_depth_npy, "wb") as f:
             np.save(f, self.depth_image_save[env_count])
-
         with open(save_dir_segmask_npy, "wb") as f:
             np.save(f, self.segmask_save[env_count])
-
         with open(save_dir_rgb_npy, "wb") as f:
             np.save(f, self.rgb_save[env_count])
 
@@ -193,7 +185,7 @@ class SampleGrasp:
         )
         max_num_grasps = 0
 
-        # Storing all the sampled grasp point and its properties
+        # Storing all the sampled grasp point and its properties from DexNet 3.0 in their respective buffers
         try:
             (
                 action,
@@ -303,12 +295,12 @@ class SampleGrasp:
             and self.suction_deformation_score[env_count] > self.force_threshold
             and self.force_encounter[env_count] == 0
         ):
+            """
+            Calculates the suction deformation score for the object using the suction gripper camera
+            """
             rgb_image_copy_gripper = self.get_rgb_image(env_count, camera_id=1)
-
             segmask_gripper = self.get_segmask(env_count, camera_id=1)
-
             depth_image = self.get_depth_image(env_count, camera_id=1)
-
             depth_numpy_gripper = depth_image.clone().detach()
             offset = torch.tensor([self.crop_coord[2], self.crop_coord[0]])
             (

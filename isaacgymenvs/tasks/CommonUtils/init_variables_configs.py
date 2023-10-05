@@ -20,34 +20,28 @@ class InitVariablesConfigs(VecTask):
         bin_id,
         data_path=None,
     ):
+        # Configuration and path assignments
         self.cfg = cfg
         self.data_path = data_path
-
+        # Episode and action settings from configuration
         self.max_episode_length = self.cfg["env"]["episodeLength"]
-
         self.action_scale = self.cfg["env"]["actionScale"]
         self.aggregate_mode = self.cfg["env"]["aggregateMode"]
 
-        # Bin ID (bin size)
+        # Bin and control type assignments
         self.bin_id = bin_id
-
-        # Controller type
         self.control_type = self.cfg["env"]["controlType"]
         assert self.control_type in {
             "osc",
             "joint_tor",
         }, "Invalid control type specified. Must be one of: {osc, joint_tor}"
 
-        # dimensions
-        # obs include: cubeA_pose (7) + cubeB_pos (3) + eef_pose (7) + q_gripper (2)
+        # Setting observation and action dimensions based on control type
         self.cfg["env"]["numObservations"] = 9 if self.control_type == "osc" else 28
-        # actions include: delta EEF if OSC (6) or joint torques (7) + bool gripper (1)
         self.cfg["env"]["numActions"] = 6 if self.control_type == "osc" else 7
 
-        # Values to be filled in at runtime
-        # will be dict filled with relevant states to use for reward calculation
+        # Initializing runtime variables, models, and tensor placeholders
         self.states = {}
-        # will be dict mapping names to relevant sim handles
         self.handles = {}
         self.num_dofs = None  # Total number of DOFs per env
         self.actions = None  # Current actions to be deployed
@@ -55,13 +49,13 @@ class InitVariablesConfigs(VecTask):
         self.models_lib = md.model_lib()
 
         # Tensor placeholders
-        # State of root body        (n_envs, 13)
+        # State of root body (n_envs, 13)
         self._root_state = None
-        self._dof_state = None  # State of all joints       (n_envs, n_dof)
-        self._q = None  # Joint positions           (n_envs, n_dof)
-        # Joint velocities          (n_envs, n_dof)
+        self._dof_state = None  # State of all joints (n_envs, n_dof)
+        self._q = None  # Joint positions (n_envs, n_dof)
+        # Joint velocities (n_envs, n_dof)
         self._qd = None
-        # State of all rigid bodies             (n_envs, n_bodies, 13)
+        # State of all rigid bodies (n_envs, n_bodies, 13)
         self._rigid_body_state = None
         self._contact_forces = None  # Contact forces in sim
         self._eef_state = None  # end effector state (at grasping point)
@@ -92,9 +86,7 @@ class InitVariablesConfigs(VecTask):
         self.force_threshold = 0.1
         self.object_coordiante_camera = torch.tensor([0, 0, 0])
 
-        # Parallelization
-        self.init_camera_capture = 1
-
+        # Loading world parameters from a YAML file
         with open(
             os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../../configs")
             + "/collision_primitives_"
@@ -103,6 +95,7 @@ class InitVariablesConfigs(VecTask):
         ) as file:
             self.world_params = yaml.load(file, Loader=yaml.FullLoader)
 
+        # Invoking the VecTask's constructor
         VecTask.__init__(
             self,
             config=self.cfg,
@@ -123,22 +116,24 @@ class InitVariablesConfigs(VecTask):
 
     def initialize_var(self):
         # Constants
-        # TODO: explain all the constants here
         self.DEFAULT_EE_VEL = torch.tensor(0.15)
+        # default velocity of the gripper
         self.RETRY_OBJECT_STABILITY = torch.tensor(3)
+        # number of retries for object stability
         self.COOLDOWN_FRAMES = 150
+        # cooldown frames for objects to settle
         self.OBJECT_FALL_HEIGHT = torch.tensor(0.5)
+        # all other object except from object used for the configuration is dropped from this height
         self.POSE_ERROR_THRESHOLD = torch.tensor(0.0055)
-        self.OBJECT_MASK_THRESHOLD = 1000
-        self.DEPTH_IMAGE_OFFSET = 0.2
-        self.GRASP_LIMIT = 10
+        # pose error threshold for object to be considered stable
 
-        # System IDentification data results
+        # Data path to store the data
         self.data_path = self.data_path or os.path.expanduser("~/temp/grasp_data_05/")
         for env_number in range(self.num_envs):
             new_dir_path = os.path.join(self.data_path, f"{self.bin_id}/{env_number}/")
             os.makedirs(new_dir_path, exist_ok=True)
 
+        # Establishing directories for storing data results
         self.force_list = np.array([])
         self.rgb_camera_visualization = None
         self.dexnet_coordinates = np.array([])
@@ -165,7 +160,7 @@ class InitVariablesConfigs(VecTask):
         self.ee_vel = torch.ones(self.num_envs) * self.DEFAULT_EE_VEL
         print("No. of environments: ", self.num_envs)
 
-        # Parameter storage and Trackers for each environments
+        # Parameter storage and trackers for each environments
         self.suction_deformation_score_temp = torch.Tensor()
         self.xyz_point_temp = torch.Tensor([])
         self.grasp_angle_temp = torch.Tensor([])
@@ -210,6 +205,7 @@ class InitVariablesConfigs(VecTask):
 
         self.env_reset_id_env = torch.ones(self.num_envs)
 
+        # Defining bin specific configurations and control limits
         self.object_bin_prob_spawn = {
             "3F": [0.025, 0.4, 1],
             "3E": [0.05, 0.45, 1],
@@ -252,6 +248,9 @@ class InitVariablesConfigs(VecTask):
         )
 
     def create_sim(self):
+        """
+        Defining simulation parameters and creating simulation environments
+        """
         self.sim_params.up_axis = gymapi.UP_AXIS_Z
         self.sim_params.gravity.x = 0
         self.sim_params.gravity.y = 0
@@ -269,6 +268,9 @@ class InitVariablesConfigs(VecTask):
 
     # TODO: Explain what it does
     def refresh_env_tensors(self):
+        """
+        Refreshing the tensors for the simulation environments
+        """
         self.gym.refresh_actor_root_state_tensor(self.sim)
         self.gym.refresh_dof_state_tensor(self.sim)
         self.gym.refresh_rigid_body_state_tensor(self.sim)
@@ -278,6 +280,9 @@ class InitVariablesConfigs(VecTask):
         self.update_states()
 
     def update_states(self):
+        """
+        Updating states with current environment and robotic parameters
+        """
         self.states.update(
             {
                 # ur16e

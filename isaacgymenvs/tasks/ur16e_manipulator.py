@@ -123,12 +123,13 @@ class UR16eManipulation(
         env_list_reset_objects = torch.tensor([])
         env_list_reset_arm_pose = torch.tensor([])
         env_complete_reset = torch.tensor([])
-        # Looping over all environments and for each environment action is calculated for that particular environment
+        # Looping over all environments and for each environment, action is calculated and appended
+        # to the action buffer according to the pipeline
         for env_count in range(self.num_envs):
             self.cmd_limit = to_torch(
                 [0.1, 0.1, 0.1, 0.5, 0.5, 0.5], device=self.device
             ).unsqueeze(0)
-            # Checking reset conditions
+            # Checking reset conditions until a valid configuration is found
             (
                 env_list_reset_arm_pose,
                 env_list_reset_objects,
@@ -139,13 +140,14 @@ class UR16eManipulation(
                 env_list_reset_objects,
                 env_complete_reset,
             )
-            # reset storage tensor
+            # Reset action tensor to zero before calculating new action
             self.action_env = torch.tensor([[0, 0, 0, 0, 0, 0, 1]], dtype=torch.float)
             # Checking condition for grasp point sampling
             if (self.env_reset_id_env[env_count] == 1) and (
                 self.frame_count[env_count] > self.COOLDOWN_FRAMES
             ):
-                # Sample grasp points and calculate correponding suciton deformation score and required force to grasp the object
+                # Sample grasp points and calculate correponding suciton deformation score and required
+                # force to grasp the object
                 (
                     env_list_reset_arm_pose,
                     env_list_reset_objects,
@@ -162,10 +164,11 @@ class UR16eManipulation(
                 and self.frame_count[env_count] > torch.tensor(self.COOLDOWN_FRAMES)
                 and self.free_envs_list[env_count] == torch.tensor(0)
             ):
+                # Append force values from the force sensor at 'wrist_3_link' and displacement values of the
+                # target object to their respective buffers
                 self.store_force_and_displacement(env_count)
                 # Calculate transformations for robot control
                 self.transformation_static_dynamic(env_count)
-
                 (
                     env_list_reset_arm_pose,
                     env_list_reset_objects,
@@ -178,7 +181,8 @@ class UR16eManipulation(
                     env_complete_reset,
                 )
 
-                # Setting the control input for pregrasp pose
+                # Setting the control input for pregrasp pose by using the transformation
+                # between the current end-effector pose and the pre-grasp pose
                 if self.action_contrib[env_count] >= torch.tensor(1):
                     pose_factor, ori_factor = 1.0, 0.3
                     self.action_env = torch.tensor(
@@ -195,7 +199,8 @@ class UR16eManipulation(
                         ],
                         dtype=torch.float,
                     )
-                    # Reset environment if the environment is unstable
+                    # Reset environment if the configuration is unstable by checking position
+                    # error of all objects except the target object
                     (
                         env_list_reset_arm_pose,
                         env_list_reset_objects,
@@ -205,27 +210,23 @@ class UR16eManipulation(
                         env_list_reset_objects,
                         _all_objects_current_pose,
                     )
-                # Execute the grasp action
                 else:
+                    # Execute the grasp action
                     self.calculate_grasp_action(env_count)
-
                     self.update_suction_deformation_score(env_count)
-
                     contact_exist = self.detect_target_object_movement(
                         env_count, _all_objects_current_pose
                     )
-
                     (
                         env_list_reset_arm_pose,
                         env_list_reset_objects,
                     ) = self.calculate_angle_error(
                         env_count, env_list_reset_arm_pose, env_list_reset_objects
                     )
-
                     self.detect_contact_non_target_object(
                         env_count, _all_objects_current_pose, contact_exist
                     )
-
+                # Evaluating if the force threshold has been crossed and if the grasp is successful
                 (
                     env_list_reset_arm_pose,
                     env_list_reset_objects,
@@ -240,12 +241,11 @@ class UR16eManipulation(
 
             self.actions = torch.cat([self.actions, self.action_env])
             self.frame_count[env_count] += torch.tensor(1)
-            
+
         # Here it resets the environment, arm pose and object pose, if the reset conditions are met
         self.reset_env_conditions(
             env_list_reset_arm_pose, env_list_reset_objects, env_complete_reset
         )
-
         self.execute_control_actions()
 
     def post_physics_step(self):

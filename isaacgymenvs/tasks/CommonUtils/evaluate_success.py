@@ -8,7 +8,10 @@ class EvlauateSuccess:
     def evaluate_suction_grasp_success(
         self, env_count, env_list_reset_arm_pose, env_list_reset_objects
     ):
-        # If arm cross the force required to grasp the object
+        """
+        Evaluate the success of a suction grasp attempt and also detect collision of the arm with the environment.
+        """
+        # If arm pushes the object such that it crosses the force threshold required to grasp the object
         if self.frame_count[env_count] > torch.tensor(
             self.COOLDOWN_FRAMES
         ) and self.frame_count_contact_object[env_count] == torch.tensor(0):
@@ -17,12 +20,10 @@ class EvlauateSuccess:
             ) <= 0.001:
                 self.action_contrib[env_count] -= 1
 
+                # Gripper camera
                 rgb_image_copy_gripper = self.get_rgb_image(env_count, camera_id=1)
-
                 segmask_gripper = self.get_segmask(env_count, camera_id=1)
-
                 depth_image = self.get_depth_image(env_count, camera_id=1)
-
                 depth_numpy_gripper = depth_image.clone().detach()
                 offset = torch.tensor([self.crop_coord[2], self.crop_coord[0]])
                 (
@@ -56,17 +57,11 @@ class EvlauateSuccess:
                 and self.action_contrib[env_count] == 0
             ):
                 self.force_encounter[env_count] = 1
-                """
-                Gripper camera
-                """
+                # Gripper camera
                 rgb_image_copy_gripper = self.get_rgb_image(env_count, camera_id=1)
-
                 segmask_gripper = self.get_segmask(env_count, camera_id=1)
-
                 depth_image = self.get_depth_image(env_count, camera_id=1)
-
                 depth_numpy_gripper = depth_image.clone().detach()
-
                 offset = torch.tensor([self.crop_coord[2], self.crop_coord[0]])
                 score_gripper, _, _ = self.suction_score_object_gripper.calculator(
                     depth_numpy_gripper,
@@ -83,7 +78,7 @@ class EvlauateSuccess:
 
                 self.save_config_grasp_json(env_count, True, score_gripper, False)
 
-            # If the arm collided with the environment
+            # If the arm collided with the environment, reset the environment
             elif (
                 self.force_pre_physics > torch.tensor(10)
                 and self.action_contrib[env_count] == 1
@@ -95,9 +90,9 @@ class EvlauateSuccess:
                 env_list_reset_objects = torch.cat(
                     (env_list_reset_objects, torch.tensor([env_count])), axis=0
                 )
-
                 self.save_config_grasp_json(env_count, False, torch.tensor(0), True)
 
+        # This condition is to try next grasp point if the current grasp point is successfully grased
         elif self.frame_count_contact_object[env_count] == torch.tensor(
             1
         ) and self.frame_count[env_count] > torch.tensor(self.COOLDOWN_FRAMES):

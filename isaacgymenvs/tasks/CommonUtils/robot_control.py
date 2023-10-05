@@ -112,7 +112,7 @@ class RobotControl:
         translation_grasp_pose = torch.matmul(
             rotation_matrix_grasp_pose, translation_grasp_pose
         )
-
+        # Get the transformation of pre grasp pose, object pose, and end effector pose
         start_point = self.T_world_to_pre_grasp_pose[:3, 3].clone().detach()
         end_point = self.T_world_to_object[:3, 3].clone().detach()
         current_point = self.T_world_to_ee_pose[:3, 3].clone().detach()

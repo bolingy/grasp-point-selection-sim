@@ -9,7 +9,9 @@ class SavingData:
         pass
 
     def store_force_and_displacement(self, env_count):
-        # force sensor update
+        """
+        Continuously storing the force values and object displacement
+        """
         self.force_pre_physics = self.get_force_sensor_values(env_count)
 
         if self.action_contrib[env_count] <= 1:
@@ -49,6 +51,9 @@ class SavingData:
     def save_config_grasp_json(
         self, env_count, save_force_disp_config, push_suction_deform_score, unreachable
     ):
+        """
+        Saving config, suction properties and grasp point data in json file
+        """
         success = False
         oscillation = False
         penetration = False
