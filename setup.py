@@ -82,6 +82,9 @@ requirements = [
     "hydra-core>=1.1",
     "rl-games==1.5.2",
     "pyvirtualdisplay",
+    "sphinx",
+    "myst-parser",
+    "sphinx_rtd_theme",
 ]
 
 packages = find_packages()

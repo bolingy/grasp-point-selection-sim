@@ -1,15 +1,25 @@
 #!/usr/bin/env python
-
+import isaacgym
 import isaacgymenvs
 import torch
 
 import click
 import os
+import subprocess
 
 os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
 os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
 os.environ["TF_FORCE_GPU_ALLOW_GROWTH"] = "true"
 
+conda_env_path = os.environ.get('CONDA_PREFIX')
+
+if conda_env_path:
+    lib_path = os.path.join(conda_env_path, 'lib')
+    os.environ["LD_LIBRARY_PATH"] = lib_path
+else:
+    print("Warning: CONDA_PREFIX is not set. Are you sure Conda environment is activated?")
+
+subprocess.run(f"export LD_LIBRARY_PATH={lib_path}", shell=True, executable="/bin/bash")
 
 def _get_data_path(bin_id):
     from datetime import datetime
