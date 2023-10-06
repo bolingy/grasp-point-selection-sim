@@ -13,7 +13,7 @@ env:
   objRandomization: False
   retract: True
 
-  saveData: True
+  saveData: False
   newDirName: "RL_UR16eManipulation_Full_Nocam"
 
   clipObservations: 255.0
