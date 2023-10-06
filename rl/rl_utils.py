@@ -72,20 +72,21 @@ def step_primitives(action, envs):
 		if torch.sum(obs['obs']) == 0:
 			continue
 		# print("obs", obs['obs'])
-		imgs = obs['obs'][:, :-3]
-		info = obs['obs'][:, -3:]
+		imgs = obs['obs'][:, :-4]
+		info = obs['obs'][:, -4:]
 		# return all imgs that has info[env, 0] == 1
 		# if all info[env, 0] == 0, then don't return anything
-		indicies = info[:, 2].to(torch.int64)
+		indicies = info[:, 3].to(torch.int64)
 		# select and return imgs with the selected indicies
 		if imgs.shape[0] > 0:
 			# print("info indicies", info[indicies])
-			reward_temp = info[:, 0]
-			done_temp = info[:, 1]
+			scrap_temp = info[:, 0]
+			reward_temp = info[:, 1]
+			done_temp = info[:, 2]
 			# convert done to uint8
 			done_temp = done_temp.to(torch.uint8)
 			# print("imgs, reward, done", imgs.shape, reward_temp.shape, done_temp.shape)
-			return imgs, reward_temp, done_temp, indicies
+			return imgs, scrap_temp, reward_temp, done_temp, indicies
 		
 def step_primitives_env_0(action, envs):
 	while True:
@@ -110,12 +111,13 @@ def create_env_action_via_true_indicies(true_indicies, action, actions, ne, sim_
 	one_hot_vec[true_indicies] = 1
 	actions[one_hot_vec] = action
 
-def returns_to_device(state, reward, done, indicies, device):
+def returns_to_device(state, scrap, reward, done, indicies, device):
 	state = state.to(device)
+	scrap = scrap.to(device)
 	reward = reward.to(device)
 	done = done.to(device)
 	indicies = indicies.to(device)
-	return state, reward, done, indicies
+	return state, scrap, reward, done, indicies
 	
 def model_name(directory, policy_name, version=None, extension=True):
 	if version is None:

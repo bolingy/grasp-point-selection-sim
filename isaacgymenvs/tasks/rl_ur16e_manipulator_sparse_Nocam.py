@@ -912,7 +912,7 @@ class RL_UR16eManipulation(VecTask):
                     env_ids=env_ids, object=self.object_models[counter], offset=self.object_poses)
 
             for env_count in env_ids:
-                self.force_list_save[env_count.item()] = None
+                # self.force_list_save[env_count.item()] = None
                 self.all_objects_last_pose[env_count.item()] = {}
                 self.object_disp_save[env_count.item()] = {}
                 self.all_objects_last_pose[env_count.item()] = {}
@@ -999,7 +999,8 @@ class RL_UR16eManipulation(VecTask):
             force_numpy = force_z_average.to_numpy()
             dx = np.gradient(np.squeeze(force_numpy))
             dx = dx[~np.isnan(dx)]
-            if (np.min(dx) < -0.8):
+            # print("npmindx", np.min(dx))
+            if (np.min(dx) < -3.0):
                 return True
             else:
                 return False
@@ -1011,14 +1012,23 @@ class RL_UR16eManipulation(VecTask):
         self._refresh()
         # image observations
         self.obs_buf = torch.zeros(93600).to(self.device)
-        
-        
-
         # print("self.finished_prim.sum() > 0", self.finished_prim.sum() > 0)
         if self.finished_prim.sum() > 0:
+            torch_scrap_tensor = torch.tensor([]).to(self.device)
             torch_prim_tensor = self.finished_prim.clone().detach()
             envs_finished_prim = torch.nonzero(torch_prim_tensor).long().squeeze(1)
             for env_count in envs_finished_prim:
+                # print("self.force_list_save", self.force_list_save.keys())
+                # print("env_count", env_count)
+                if env_count.item() in self.force_list_save.keys() and self.force_list_save[env_count.item()] is not None:
+                    # print("self.force_list_save.shape", self.force_list_save[env_count.item()].shape)
+                    oscillation = self.detect_oscillation(self.force_list_save[env_count.item()])
+                    self.force_list_save[env_count.item()] = None
+                else:
+                    oscillation = False
+                torch_scrap_tensor = torch.cat((torch_scrap_tensor, torch.tensor([oscillation]).to(self.device)))
+
+                # print("oscillation", oscillation)
                 torch_rgb_tensor = self.rgb_camera_tensors[env_count]
                 rgb_image = torch_rgb_tensor.to(self.device)
                 rgb_image_copy = torch.reshape(
@@ -1112,12 +1122,13 @@ class RL_UR16eManipulation(VecTask):
             torch_indicies_tensor = envs_finished_prim
 
             torch_primcount_tensor = self.primitive_count[envs_finished_prim].clone().detach()
-            
+            torch_scrap_tensor = torch_scrap_tensor.clone().detach()
             # self.obs_buf =
             self.obs_buf = torch.cat((torch_depth_tensor, torch_segmask_tensor), dim=1)
             if torch_indicies_tensor.shape[0] > 1:
                 self.obs_buf = torch.cat((self.obs_buf,  torch_objstate_tensor.to(self.device)), dim=1)
                 self.obs_buf = torch.cat((self.obs_buf,  torch_primcount_tensor.unsqueeze(0).T.to(self.device)), dim=1)
+                self.obs_buf = torch.cat((self.obs_buf,  torch_scrap_tensor.unsqueeze(0).T.to(self.device)), dim=1)
                 self.obs_buf = torch.cat((self.obs_buf,  torch_success_tensor.unsqueeze(0).T.to(self.device)), dim=1)
                 self.obs_buf = torch.cat((self.obs_buf,  torch_done_tensor.unsqueeze(0).T.to(self.device)), dim=1)
                 self.obs_buf = torch.cat((self.obs_buf,  torch_indicies_tensor.unsqueeze(0).T.to(self.device)), dim=1)
@@ -1127,6 +1138,7 @@ class RL_UR16eManipulation(VecTask):
                 # print("torch_primcount_tensor.shape", torch_primcount_tensor.shape)
                 self.obs_buf = torch.cat((self.obs_buf.squeeze(0),  torch_objstate_tensor.to(self.device).squeeze(0)), dim=0)
                 self.obs_buf = torch.cat((self.obs_buf,  torch_primcount_tensor.to(self.device)), dim=0)
+                self.obs_buf = torch.cat((self.obs_buf,  torch_scrap_tensor.to(self.device)), dim=0)
                 self.obs_buf = torch.cat((self.obs_buf,  torch_success_tensor.to(self.device)), dim=0)
                 self.obs_buf = torch.cat((self.obs_buf,  torch_done_tensor.to(self.device)), dim=0)
                 self.obs_buf = torch.cat((self.obs_buf,  torch_indicies_tensor.to(self.device)), dim=0)
@@ -1753,7 +1765,34 @@ class RL_UR16eManipulation(VecTask):
                         self.temp_action = action_str
 
                         self.action_env = u_arm_temp.cpu()
-                        self.action_env = torch.cat((self.action_env,  torch.tensor([0, 0, 0, 0, 0]).unsqueeze(0) ), dim=1)# .repeat(self.action_env.shape[0], 1)), dim=1)       
+                        self.action_env = torch.cat((self.action_env,  torch.tensor([0, 0, 0, 0, 0]).unsqueeze(0) ), dim=1)# .repeat(self.action_env.shape[0], 1)), dim=1)      
+                        # force sensor update
+                        self.gym.refresh_force_sensor_tensor(self.sim)
+
+                        _fsdata = self.gym.acquire_force_sensor_tensor(self.sim)
+                        fsdata = gymtorch.wrap_tensor(_fsdata)
+                        self.force_pre_physics = - \
+                            fsdata[env_count][2].detach().cpu().numpy() 
+                        if (self.RL_flag[env_count] == torch.tensor(1)):
+                            retKey = self.force_list_save.get(env_count)
+                            if (retKey == None):
+                                self.force_list_save[env_count] = torch.tensor(
+                                    [self.force_pre_physics])
+                            else:
+                                force_list_env = self.force_list_save[env_count]
+                                force_list_env = torch.cat(
+                                    (force_list_env, torch.tensor([self.force_pre_physics])))
+                                self.force_list_save[env_count] = force_list_env
+                            object_disp_env = self.object_disp_save[env_count].copy()
+                            for object_id in self.selected_object_env[env_count]:
+                                object_current_pose = self._root_state[env_count, self._object_model_id[int(object_id.item())-1], :][:7].type(
+                                    torch.float).detach().clone()
+                                if (int(object_id.item()) not in object_disp_env):
+                                    object_disp_env[int(object_id.item())] = torch.empty(
+                                        (0, 7)).to(self.device)
+                                object_disp_env[int(object_id.item())] = torch.cat(
+                                    [object_disp_env[int(object_id.item())], object_current_pose.unsqueeze(0)], dim=0)
+                            self.object_disp_save[env_count] = object_disp_env
                 else:
 
                     # force sensor update

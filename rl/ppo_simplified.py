@@ -25,6 +25,7 @@ class RolloutBuffer:
         self.actions = []
         self.states = []
         self.logprobs = []
+        self.scraps = []
         self.rewards = []
         self.state_values = []
         self.is_terminals = []
@@ -41,6 +42,7 @@ class RolloutBuffer:
         self.actions.extend(buf_to_append.actions)
         self.states.extend(buf_to_append.states)
         self.logprobs.extend(buf_to_append.logprobs)
+        self.scraps.extend(buf_to_append.scraps)
         self.rewards.extend(buf_to_append.rewards)
         self.state_values.extend(buf_to_append.state_values)
         self.is_terminals.extend(buf_to_append.is_terminals)
@@ -52,6 +54,7 @@ class RolloutBuffer:
         del self.actions[:]
         del self.states[:]
         del self.logprobs[:]
+        del self.scraps[:]
         del self.rewards[:]
         del self.state_values[:]
         del self.is_terminals[:]

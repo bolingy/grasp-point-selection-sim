@@ -35,7 +35,7 @@ import warnings
 warnings.filterwarnings("ignore")
 
 # check cuda
-train_device = torch.device('cuda:1')
+train_device = torch.device('cuda:0')
 sim_device = torch.device('cuda:0')
 
 # if(torch.cuda.is_available()): 
@@ -72,15 +72,15 @@ random_seed = 1       # set random seed if required (0 = no random seed)
 
 '''Training/Evaluation Parameter'''
 env_name = "RL_UR16eManipulation_Full_Nocam"
-load_policy_name = "Nocam_state_fixedscene_contreward_batch_90_lra_1e-05_lrc_3e-05_clip0.13"
+load_policy_name = "Nocam_state_fixedscene_contreward_batch_270_lra_1e-07_lrc_1e-07_clip0.13"
 policy_name = "Nocam_state_fixedscene_contreward"
-head_less = True
+head_less = False
 EVAL = False #if you want to evaluate the model
 action_std = 0.1 if not EVAL else 1e-9        # starting std for action distribution (Multivariate Normal)
 load_policy = True
 policy_name = "{}_batch_{}_lra_{}_lrc_{}_clip{}".format(policy_name, update_size, lr_actor, lr_critic, eps_clip)
-load_policy_version = 93                   # specify policy version (i.e. int, 50) when loading a trained policy
-ne = 90               # number of environments
+load_policy_version = 19                   # specify policy version (i.e. int, 50) when loading a trained policy
+ne = 2               # number of environments
 res_net = False
 
 print("training environment name : " + env_name)
@@ -254,8 +254,8 @@ buf_envs = [RolloutBuffer() for _ in range(ne)]
 buf_central = RolloutBuffer()
 actions = torch.tensor(ne * [[0.11, 0., 0.28, 0.22]]).to(sim_device)
 
-state, reward, done, true_indicies = step_primitives(actions, env) #env.reset() by kickstarting w random action
-state, reward, done, true_indicies = returns_to_device(state, reward, done, true_indicies, train_device)
+state, scrap, reward, done, true_indicies = step_primitives(actions, env) #env.reset() by kickstarting w random action
+state, scrap, reward, done, true_indicies = returns_to_device(state, scrap, reward, done, true_indicies, train_device)
 # true_idx = torch.nonzero(indicies).squeeze(1)
 
 # print(state.shape, reward.shape, done.shape, indicies)
@@ -302,7 +302,7 @@ while time_step <= max_training_timesteps: ## prim_step
     create_env_action_via_true_indicies(true_indicies, action, actions, ne, sim_device)
     # print("actions", actions)
 
-    state, reward, done, true_indicies = step_primitives(actions, env)
+    state, scrap, reward, done, true_indicies = step_primitives(actions, env) #env.reset() by kickstarting w random action
 
     if EVAL and true_indicies[0] == 0:
         imgs = state
@@ -345,7 +345,7 @@ while time_step <= max_training_timesteps: ## prim_step
         else:
             print("target is x-middle")
 
-    state, reward, done, true_indicies = returns_to_device(state, reward, done, true_indicies, train_device)
+    state, scrap, reward, done, true_indicies = returns_to_device(state, scrap, reward, done, true_indicies, train_device)
     if res_net:
         real_ys, real_dxs = get_real_ys_dxs(state)
         state = rearrange_state_timestep(state)
@@ -364,20 +364,22 @@ while time_step <= max_training_timesteps: ## prim_step
             if true_i == 0 and EVAL:
                 print("reward of env 0", reward[i])
                 print("done of env 0", done[i])
+            buf_envs[true_i].scraps.append(scrap[i].clone().detach().unsqueeze(0))
             buf_envs[true_i].rewards.append(reward[i].clone().detach().unsqueeze(0))
             buf_envs[true_i].is_terminals.append(done[i].clone().detach().unsqueeze(0))
             time_step += 1
 
         # check picking in done
         if buf_envs[true_i].is_done():
-            if len(buf_envs[true_i].rewards) == len(buf_envs[true_i].states):
+            if len(buf_envs[true_i].rewards) == len(buf_envs[true_i].states) and (1 not in buf_envs[true_i].scraps):
                 assert len(buf_envs[true_i].rewards) == len(buf_envs[true_i].states), "rewards and states are not the same length at env {}".format(i)
                 buf_central.append(copy.deepcopy(buf_envs[true_i]))
                 if not EVAL:
                     wandb.log({"Central buffer size": len(buf_central.states)})
                 buf_envs[true_i].clear()
             else:
-                print("rewards and states are not the same length at env {}".format(true_i))
+                # print("rewards and states are not the same length at env {}".format(true_i))
+                print("Scrapped env {}".format(true_i))
                 buf_envs[true_i].clear()
 
     if buf_central.size() >= update_size and not EVAL:
