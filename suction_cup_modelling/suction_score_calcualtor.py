@@ -1,9 +1,4 @@
 import math
-import numpy as np
-import cv2
-from matplotlib import pyplot as plt, patches
-import open3d as o3d
-import os
 import torch
 from autolab_core import DepthImage
 from homogeneous_trasnformation_and_conversion.rotation_conversions import *
@@ -12,6 +7,9 @@ from homogeneous_trasnformation_and_conversion.rotation_conversions import *
 class calcualte_suction_score:
     def __init__(self, camera_intrinsics):
         self.camera_intrinsics = camera_intrinsics
+        self.suction_projection_bound = torch.tensor([0.0375, 0.0175])
+        self.num_suction_projections = 8
+        self.flexion_deofrmation_thresh = 0.008
         self.device = "cuda:0"
 
     def convert_rgb_depth_to_point_cloud(self):
@@ -33,7 +31,6 @@ class calcualte_suction_score:
             :, valid
         ]
         position = position.permute(1, 0)
-        # position = position@vinv
         points = position[:, 0:3]
         return points
 
@@ -52,7 +49,6 @@ class calcualte_suction_score:
             :, valid
         ]
         position = position.permute(1, 0)
-        # position = position@vinv
         points = position[:, 0:3]
         if len(points) == 0:
             return torch.tensor([0, 0, -1]).to(self.device)
@@ -150,6 +146,7 @@ class calcualte_suction_score:
             )
 
         # Iterate through all the projections to calculate and append suction coordinates
+        # 0.02 m is the radius of the suction cup
         base_coordinate = torch.tensor([0.02, 0, 0]).to(self.device)
         self.suction_coordinates = base_coordinate.view(1, 3)
         for angle in range(45, 360, 45):
@@ -213,7 +210,7 @@ class calcualte_suction_score:
         )
         thresh = torch.sum(torch.sum(difference_xy_plane, 1))
 
-        if abs(thresh) > 0.008:
+        if abs(thresh) > self.flexion_deofrmation_thresh:
             if grasps_and_predictions == None:
                 return (
                     torch.tensor(0),
@@ -266,6 +263,7 @@ class calcualte_suction_score:
         # suction_score_facing_normal = 1 - torch.max(ri)
 
         # Calcualte the conical spring suction deformation score
+        # 0.023 m is the height of the suction cup
         minimum_suction_point = torch.min(point_cloud_suction[:, 2]).to(self.device)
         ri = torch.clamp(
             torch.abs(point_cloud_suction[:, 2] - minimum_suction_point) / 0.023,
@@ -339,7 +337,7 @@ class calcualte_suction_score:
 
         # Ensure at least 6 points of the suction cup are facing the object
         count = 0
-        for i in range(8):
+        for i in range(self.num_suction_projections):
             if torch.isnan(U[i]) or torch.isnan(V[i]):
                 count += 1
                 continue
@@ -352,7 +350,7 @@ class calcualte_suction_score:
         count = 0
         furthest_suction_projection_point = -1000.0
         nearest_suction_projection_point = 1000.0
-        for i in range(8):
+        for i in range(self.num_suction_projections):
             if (
                 torch.isnan(U[i])
                 or torch.isnan(V[i])
@@ -375,22 +373,26 @@ class calcualte_suction_score:
                 ][U[i].type(torch.int)]
 
         if (
-            furthest_suction_projection_point > 0.0375
-            or nearest_suction_projection_point > 0.0175
+            furthest_suction_projection_point > self.suction_projection_bound[0]
+            or nearest_suction_projection_point > self.suction_projection_bound[1]
         ):
             return torch.tensor(0)
 
         # Ensure that at least 6 points have depth within tolerance
-        for i in range(8):
+        for i in range(self.num_suction_projections):
             if torch.isnan(U[i]) or torch.isnan(V[i]):
                 count += 1
                 continue
             if (
                 furthest_suction_projection_point
                 - self.depth_image[V[i].type(torch.int)][U[i].type(torch.int)]
-            ) > 0.0175 or self.depth_image[V[i].type(torch.int)][
+            ) > self.suction_projection_bound[1] or self.depth_image[
+                V[i].type(torch.int)
+            ][
                 U[i].type(torch.int)
-            ] > 0.02:
+            ] > self.suction_projection_bound[
+                1
+            ]:
                 count += 1
 
         if count >= 2:
