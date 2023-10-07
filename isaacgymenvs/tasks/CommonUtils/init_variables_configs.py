@@ -219,20 +219,19 @@ class InitVariablesConfigs(VecTask):
         self.ur16e_default_dof_pos = to_torch(
             [-1.57, 0, 0, 0, 0, 0, 0], device=self.device
         )
-
         self.check_object_coord_bins = {
             "3F": [113, 638, 366, 906],
             "3E": [273, 547, 366, 906],
             "3H": [226, 589, 366, 906],
         }
-
         self.crop_coord_bins = {
             "3F": [0, 720, 0, 1280],
             "3E": [0, 720, 0, 1280],
             "3H": [0, 720, 0, 1280],
         }
+        self.smaller_bins_set = ["3E", "3H"]
 
-        if self.bin_id == "3E" or self.bin_id == "3H":
+        if self.bin_id in self.smaller_bins_set:
             self.smaller_bin = True
         else:
             self.smaller_bin = False

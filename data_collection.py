@@ -33,7 +33,7 @@ def _get_data_path(bin_id):
 
 
 @click.command()
-@click.option("--bin-id", type=click.Choice(["3H", "3E", "3F"]), default="3F")
+@click.option("--bin-id", default="3F")
 @click.option("--num-envs", default=50)
 def generate(bin_id, num_envs):
     envs = isaacgymenvs.make(
