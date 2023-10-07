@@ -111,6 +111,7 @@ class ActorCritic(nn.Module):
                             nn.Tanh(),
                             nn.Linear(64, 1)
                         )
+        self.batch_norm = nn.BatchNorm1d(state_dim)
         
         
     def set_action_std(self, new_action_std):
@@ -125,6 +126,8 @@ class ActorCritic(nn.Module):
         raise NotImplementedError
 
     def act(self, state):
+        if state.shape[0] > 1:
+            state = self.batch_norm(state)
         action = self.actor(state)
 
         action_probs = action[:, :6]

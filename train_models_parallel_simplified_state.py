@@ -72,15 +72,15 @@ random_seed = 1       # set random seed if required (0 = no random seed)
 
 '''Training/Evaluation Parameter'''
 env_name = "RL_UR16eManipulation_Full_Nocam"
-load_policy_name = "Nocam_state_fixedscene_contreward_batch_270_lra_1e-07_lrc_1e-07_clip0.13"
-policy_name = "Nocam_state_fixedscene_contreward"
-head_less = False
+load_policy_name = "Nocam_state_fixedscene_contreward_batch_90_lra_1e-05_lrc_3e-05_clip0.13"
+policy_name = "Nocam_state_fixedscene_contreward_batchnorm"
+head_less = True
 EVAL = False #if you want to evaluate the model
 action_std = 0.1 if not EVAL else 1e-9        # starting std for action distribution (Multivariate Normal)
-load_policy = True
+load_policy = False
 policy_name = "{}_batch_{}_lra_{}_lrc_{}_clip{}".format(policy_name, update_size, lr_actor, lr_critic, eps_clip)
-load_policy_version = 19                   # specify policy version (i.e. int, 50) when loading a trained policy
-ne = 2               # number of environments
+load_policy_version = 93                   # specify policy version (i.e. int, 50) when loading a trained policy
+ne = 30               # number of environments
 res_net = False
 
 print("training environment name : " + env_name)
