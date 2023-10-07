@@ -111,6 +111,30 @@ def create_env_action_via_true_indicies(true_indicies, action, actions, ne, sim_
 	one_hot_vec[true_indicies] = 1
 	actions[one_hot_vec] = action
 
+def normalize_state(objstate):
+	# [target_x, target_y, target_z, obj1_x, obj1_y, obj1_z, obj2_x, obj2_y, obj2_z]
+	# x has range [0.5, 0.8]
+	# y has range [-0.2, 0.2]
+	# z has range [1.3, 1.5]
+
+	x_low = 0.5
+	x_high = 0.8
+	y_low = -0.2
+	y_high = 0.2
+	z_low = 1.3
+	z_high = 1.5
+
+	objstate[:, 0] = (objstate[:, 0] - x_low) / (x_high - x_low)
+	objstate[:, 1] = (objstate[:, 1] - y_low) / (y_high - y_low)
+	objstate[:, 2] = (objstate[:, 2] - z_low) / (z_high - z_low)
+	objstate[:, 3] = (objstate[:, 3] - x_low) / (x_high - x_low)
+	objstate[:, 4] = (objstate[:, 4] - y_low) / (y_high - y_low)
+	objstate[:, 5] = (objstate[:, 5] - z_low) / (z_high - z_low)
+	objstate[:, 6] = (objstate[:, 6] - x_low) / (x_high - x_low)
+	objstate[:, 7] = (objstate[:, 7] - y_low) / (y_high - y_low)
+	objstate[:, 8] = (objstate[:, 8] - z_low) / (z_high - z_low)
+	return objstate
+
 def returns_to_device(state, scrap, reward, done, indicies, device):
 	state = state.to(device)
 	scrap = scrap.to(device)

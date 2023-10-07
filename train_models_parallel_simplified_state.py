@@ -272,7 +272,7 @@ else:
     # print("state.shape", state.shape)
     real_ys, real_dxs = get_real_ys_dxs(state)
     state = rearrange_state(state)
-
+obj_state = normalize_state(obj_state)
 
 curr_rewards = 0
 # training loop
@@ -344,7 +344,6 @@ while time_step <= max_training_timesteps: ## prim_step
             print("target is back")
         else:
             print("target is x-middle")
-
     state, scrap, reward, done, true_indicies = returns_to_device(state, scrap, reward, done, true_indicies, train_device)
     if res_net:
         real_ys, real_dxs = get_real_ys_dxs(state)
@@ -356,6 +355,7 @@ while time_step <= max_training_timesteps: ## prim_step
         # print("state.shape", state.shape)
         real_ys, real_dxs = get_real_ys_dxs(state)
         state = rearrange_state(state)
+    obj_state = normalize_state(obj_state)
     # true_idx = torch.nonzero(indicies).squeeze(1)
     # print("true indicies", true_indicies)
     # print("reward ", reward)
