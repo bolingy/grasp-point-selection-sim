@@ -16,12 +16,20 @@ For source code, visit our [GitHub repository](https://github.com/bolingy/grasp-
 ```
 ## Table Contents
 
+ - [Publication](publications.md) <br/>
  - [Installation](installation.md) <br/>
  - [Getting Started](usage.md) <br/>
  - [Dataset](dataset.md) <br/>
- - [Publication](publications.md) <br/>
  - [License](license.md) <br/>
 
+
+```{toctree}
+:caption: Publications
+:hidden:
+
+publications.md
+
+```
 
 ```{toctree}
 :caption: Setup Instructions
@@ -37,7 +45,13 @@ usage.md
 :hidden:
 
 dataset.md
-publications.md
+
+```
+
+```{toctree}
+:caption: License Information
+:hidden:
+
 license.md
 
 ```

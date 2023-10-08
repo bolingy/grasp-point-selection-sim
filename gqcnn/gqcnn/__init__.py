@@ -23,7 +23,6 @@ HEREUNDER IS PROVIDED "AS IS". REGENTS HAS NO OBLIGATION TO PROVIDE
 MAINTENANCE, SUPPORT, UPDATES, ENHANCEMENTS, OR MODIFICATIONS.
 """
 from .model import get_gqcnn_model, get_fc_gqcnn_model
-from .training import get_gqcnn_trainer
 from .grasping import (RobustGraspingPolicy, UniformRandomGraspingPolicy,
                        CrossEntropyRobustGraspingPolicy, RgbdImageState,
                        FullyConvolutionalGraspingPolicyParallelJaw,

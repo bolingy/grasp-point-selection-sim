@@ -37,7 +37,6 @@ import sys
 import numpy as np
 
 from ..model import get_gqcnn_model
-from ..training import get_gqcnn_trainer
 from ..utils import GeneralConstants, GQCNNTrainingStatus
 from ..analysis import GQCNNAnalyzer
 
