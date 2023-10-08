@@ -1216,7 +1216,8 @@ class UR16eManipulation(VecTask):
                     # cropping the image and modifying depth to match the DexNet 3.0 input configuration
                     dexnet_thresh_offset = 0.2
                     depth_image_dexnet += dexnet_thresh_offset
-                    pod_back_panel_distance = torch.max(depth_image).item()
+                    pod_back_panel_distance = torch.max(depth_image[self.crop_coord[0]:self.crop_coord[1],
+                                         self.crop_coord[2]:self.crop_coord[3]]).item()
                     # To make the depth of the image ranging from 0.5m to 0.7m for valid configuration for DexNet 3.0
                     depth_numpy = depth_image_dexnet.cpu().numpy()
                     depth_numpy_temp = depth_numpy*segmask_numpy_temp
