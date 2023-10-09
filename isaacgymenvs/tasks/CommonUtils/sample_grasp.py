@@ -142,7 +142,7 @@ class SampleGrasp:
         self.config_env_count[env_count] += torch.tensor(1).type(torch.int)
 
         env_number = env_count
-        new_dir_path = os.path.join(self.data_path, f"{self.bin_id}/{env_number}/")
+        new_dir_path = os.path.join(self.data_path, f"{env_number}/")
 
         env_config = self.config_env_count[env_count].type(torch.int).item()
 
@@ -167,6 +167,7 @@ class SampleGrasp:
             np.save(f, self.rgb_save[env_count])
 
         # cropping the image and modifying depth to match the DexNet 3.0 input configuration
+        # Adjusting depth for DexNet: adding dexnet_thresh_offset to ensure depth is between 0.5 and 0.7 m
         dexnet_thresh_offset = 0.2
         depth_image_dexnet += dexnet_thresh_offset
         pod_back_panel_distance = torch.max(

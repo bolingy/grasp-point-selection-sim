@@ -130,7 +130,7 @@ class InitVariablesConfigs(VecTask):
         # Data path to store the data
         self.data_path = self.data_path or os.path.expanduser("~/temp/grasp_data_05/")
         for env_number in range(self.num_envs):
-            new_dir_path = os.path.join(self.data_path, f"{self.bin_id}/{env_number}/")
+            new_dir_path = os.path.join(self.data_path, f"{env_number}/")
             os.makedirs(new_dir_path, exist_ok=True)
 
         # Establishing directories for storing data results

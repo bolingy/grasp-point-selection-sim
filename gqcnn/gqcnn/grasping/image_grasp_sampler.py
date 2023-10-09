@@ -998,7 +998,7 @@ class DepthImageSuctionPointGridSampler(ImageGraspSampler):
             y_max = int(np.max(segmentation[0]))
 
         depth_im_ = depth_im.data
-        # Adding 0.2 to compensate with the depth used for dexnet which was used to ensure that it lies between 0.5 to 0.7 m depth
+        # Adding 0.2 to negate the alignment previously applied to DexNet's depth, maintaining a 0.5 to 0.7 m range
         depth_left = depth_im_[y_min, x_min]-0.2
         depth_right = depth_im_[y_max, x_max]-0.2
         depth_plane = max(depth_left, depth_right)

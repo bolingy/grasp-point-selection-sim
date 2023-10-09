@@ -10,7 +10,6 @@ This repository provides the codebase for collecting data through simulation. Th
 
 1. [Installation](#installation)
 2. [Running the Project](#running)
-3. [Alternate Python Version](#python38)
 
 ## Installation
 
@@ -24,18 +23,14 @@ conda activate myenv
 
 
 ```bash
-
 pip install -e .
 
-# Also export the LD_LIBRARY_PATH for cuda
-export LD_LIBRARY_PATH=path/to/miniconda3/envs/myenv/lib
-
-# Outside this repo create two folders for saving the data(grasp point properties, depth image, segmentation mask and rgb image),
-mkdir System_Identification_Data
+# Create a folder inside the repo for saving the data(grasp point properties, depth image, segmentation mask and rgb image),
+mkdir scenario_grasp_configurations
 ```
 
 ## Running
-To run the project, use the data_collection.py script:
+To run the project, use the dynamo_grasp.sh bash script:
 ```bash
-python data_collection.py --bin-id 3F --num-envs 50
+./dynamo_grasp.sh --bin-id 3F --num-envs 50
 ```

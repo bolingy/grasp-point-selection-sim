@@ -85,6 +85,9 @@ requirements = [
     "sphinx",
     "myst-parser",
     "sphinx_rtd_theme",
+    'einops>=0.6.1',
+    'wandb',
+    'linformer',
 ]
 
 packages = find_packages()

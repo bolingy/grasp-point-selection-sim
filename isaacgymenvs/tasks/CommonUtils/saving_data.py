@@ -24,28 +24,23 @@ class SavingData:
                 )
                 self.force_list_save[env_count] = force_list_env
 
-            object_disp_env = self.object_disp_save[env_count].copy()
-            for object_id in self.selected_object_env[env_count]:
-                object_current_pose = (
-                    self._root_state[
-                        env_count, self._object_model_id[int(object_id.item()) - 1], :
-                    ][:7]
-                    .type(torch.float)
-                    .detach()
-                    .clone()
-                )
-                if int(object_id.item()) not in object_disp_env:
-                    object_disp_env[int(object_id.item())] = torch.empty((0, 7)).to(
-                        self.device
-                    )
-                object_disp_env[int(object_id.item())] = torch.cat(
-                    [
-                        object_disp_env[int(object_id.item())],
-                        object_current_pose.unsqueeze(0),
-                    ],
-                    dim=0,
-                )
-            self.object_disp_save[env_count] = object_disp_env
+            target_object_current_pose = (
+                self._root_state[
+                    env_count,
+                    self._object_model_id[self.object_target_id[env_count] - 1],
+                    :,
+                ][:7]
+                .type(torch.float)
+                .detach()
+                .clone()
+            )
+            target_object_disp_env = self.target_object_disp_save[env_count]
+            if target_object_disp_env == None:
+                target_object_disp_env = torch.empty((0, 7)).to(self.device)
+            target_object_disp_env = torch.cat(
+                [target_object_disp_env, target_object_current_pose.unsqueeze(0)], dim=0
+            )
+            self.target_object_disp_save[env_count] = target_object_disp_env
 
     def save_config_grasp_json(
         self, env_count, save_force_disp_config, push_suction_deform_score, unreachable
@@ -57,9 +52,8 @@ class SavingData:
         oscillation = False
         penetration = False
         if not save_force_disp_config:
-            end_effector_forces = []
-            object_disp_json_save = {}
             self.force_list_save[env_count] = np.array([])
+            self.target_object_disp_save[env_count] = np.array([])
         else:
             end_effector_forces = self.force_list_save[env_count].tolist()
             oscillation = self.detect_oscillation(end_effector_forces)
@@ -68,16 +62,10 @@ class SavingData:
             if push_suction_deform_score == torch.tensor(0):
                 penetration = True
 
-            object_disp_json_save = self.object_disp_save[env_count].copy()
-            for object_id in self.selected_object_env[env_count]:
-                object_disp_json_save[int(object_id.item())] = object_disp_json_save[
-                    int(object_id.item())
-                ].tolist()
-
         # saving the grasp point ad its properties if it was a successfull grasp
         json_save = {
             "force_array": self.force_list_save[env_count].tolist(),
-            "object_disp": object_disp_json_save,
+            "object_disp": self.target_object_disp_save[env_count].tolist(),
             "grasp point": self.grasp_point[env_count].tolist(),
             "grasp_angle": self.grasp_angle[env_count].tolist(),
             "dexnet_score": self.dexnet_score[env_count].item(),
@@ -98,8 +86,6 @@ class SavingData:
         )
         save_dir_json = (
             self.data_path
-            + str(self.bin_id)
-            + "/"
             + str(env_count)
             + "/json_data_"
             + new_dir_name

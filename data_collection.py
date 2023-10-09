@@ -28,13 +28,13 @@ def _get_data_path(bin_id):
 
     datetime_string = datetime.now().isoformat().replace(":", "")[:-7]
     random_string = "".join(random.choice(string.ascii_letters) for _ in range(6))
-    temp_path = f"/home/soofiyan_ws/Documents/Issac_gym_ws/System_Identification_Data/{datetime_string}-{random_string}-grasp_data_{bin_id}/"
+    temp_path = f"scenario_grasp_configurations/{datetime_string}-{random_string}-grasp_data_{bin_id}/"
     return os.path.expanduser(temp_path)
 
 
 @click.command()
 @click.option("--bin-id", default="3F")
-@click.option("--num-envs", default=50)
+@click.option("--num-envs", default=1)
 def generate(bin_id, num_envs):
     envs = isaacgymenvs.make(
         seed=0,

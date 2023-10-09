@@ -9,3 +9,9 @@ __pycache__/
 
 # Ignore build directory (typically contains compiled files and various build outputs)
 build/
+
+# Ignore data directory (typically contains data and model files)
+data/
+models/
+wandb/
+scenario_grasp_configurations/
