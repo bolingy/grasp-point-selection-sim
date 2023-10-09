@@ -1,6 +1,6 @@
 # Dataset
 
-Link to the dataset: TODO <br/>
+Link to the dataset: [Prcessed_Data.zip](https://drive.google.com/file/d/16CvCuETpmtBYbqEcMIOIJCxDMaO8c4Uu/view?usp=sharing) <br/>
 This dataset consist of input which include 4 channel such as 3D point clouds, segmentation Mask. Grasp labels consist of a zero background image with float values at each sampled point. This dataset contains data collected for 3F bin only.
 
 The dataset is organized as follows:
@@ -19,7 +19,7 @@ This dataset is used with a specific back camera setup. The camera setup is as f
 self.camera_properties_back_cam.horizontal_fov = 80
 self.camera_properties_back_cam.width = 1280
 self.camera_properties_back_cam.height = 786
-self.camera_base_link_translation = [-0.18, 0.175, 0.6]
+self.camera_base_link_translation = torch.tensor([-0.18, 0.175, 0.6]).to(self.device)
 ```
 Then this is cropped and passed with resolution 640x480 to the GQCNN network for sampling.
 
@@ -32,3 +32,8 @@ If you want to change the camera setup, you need to change in multiple files,
 
 3. `gqcnn/gqcnn/grasping/image_grasp_sampler.py` - Change the sampling resolution for GQCNN network. <br/>
     Change focal length and depth comprenation in the following variables: fx, fy, depth_left, depth_right
+
+```{note}
+The data collection code is configured with increased camera resolution and no cropping.
+This setup maintains performance consistency, enabling data collection using these settings.
+```

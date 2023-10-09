@@ -81,12 +81,15 @@ def add_noise_to_xyz(xyz_img, depth_img):
 
 
 id = 0
+# Specify the path to the simulated data directory here.
+# You can add multiple paths to the list.
 PATH_list = ["2023-10-09T125543-JPhZbq-grasp_data_3F/"]
 output_dir = "src/data/Processed_Data_high_res/"
 raw_data_dir = "../scenario_grasp_configurations/"
 
 bin_back = 0.925
 background_value = 0.771
+# Bin crop coordinates
 crop_coords = [117, 338, 207, 436]
 
 for path in PATH_list:
@@ -139,7 +142,6 @@ for path in PATH_list:
         depth_mask[segmask != 0] = 1
 
         y, x = np.where(segmask_numpy == 1)
-
         center_x, center_y = np.mean(x), np.mean(y)
 
         top_left_x = int(center_x) - int(bin_crop_dim / 2)
@@ -147,6 +149,7 @@ for path in PATH_list:
         bottom_right_x = int(center_x) + int(bin_crop_dim / 2)
         bottom_right_y = int(center_y) + int(bin_crop_dim / 2)
 
+        # Update depth image to simulate a centered bin around the object with a uniform background.
         depth_image[depth_mask != 1] = bin_back
 
         depth_image[: crop_coords[0], :] = background_value
@@ -162,7 +165,7 @@ for path in PATH_list:
         bottom_right_y_pad = (
             int(center_y) + int(bin_crop_dim / 2) + int(bin_crop_dim / 2)
         )
-
+        # Add padding to include the entire bin in the crop.
         depth_pad = add_padding(depth_image, 1, background_value)
         depth_processed = depth_pad[
             top_left_y_pad:bottom_right_y_pad, top_left_x_pad:bottom_right_x_pad

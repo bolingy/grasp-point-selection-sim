@@ -20,6 +20,7 @@ For source code, visit our [GitHub repository](https://github.com/bolingy/grasp-
  - [Installation](installation.md) <br/>
  - [Getting Started](usage.md) <br/>
  - [Dataset](dataset.md) <br/>
+ - [Training](training.md) <br/>
  - [License](license.md) <br/>
 
 
@@ -45,6 +46,14 @@ usage.md
 :hidden:
 
 dataset.md
+
+```
+
+```{toctree}
+:caption: Training models
+:hidden:
+
+training.md
 
 ```
 
