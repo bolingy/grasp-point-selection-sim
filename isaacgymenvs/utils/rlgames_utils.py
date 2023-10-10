@@ -84,6 +84,7 @@ def get_rlgames_env_creator(
             virtual_screen_capture=virtual_screen_capture,
             force_render=force_render,
         )
+        set_seed(seed)
 
         if post_create_hook is not None:
             post_create_hook()
