@@ -17,8 +17,6 @@ from torch.distributions import MultivariateNormal
 from torch.distributions import Categorical
 import matplotlib.pyplot as plt
 
-import numpy as np
-
 import einops
 import gym
 # import roboschool
@@ -59,7 +57,7 @@ save_model_freq = 2      # save model frequency (in num timesteps)
 ################ PPO hyperparameters ################
 
 pick_len = 3
-update_size = pick_len * 30  #20
+update_size = pick_len * 90  #20
 K_epochs = 40               # update policy for K epochs
 eps_clip = 0.13              # clip parameter for PPO
 gamma = 0.99                # discount factor
@@ -72,16 +70,18 @@ random_seed = 1       # set random seed if required (0 = no random seed)
 
 '''Training/Evaluation Parameter'''
 env_name = "RL_UR16eManipulation_Full_Nocam"
-load_policy_name = "Nocam_state_fixedscene_contreward_batch_90_lra_1e-05_lrc_3e-05_clip0.13"
+load_policy_name = "Nocam_state_fixedscene_contreward_batch_270_lra_1e-07_lrc_3e-07_clip0.13"
 policy_name = "Nocam_state_fixedscene_contreward_batchnorm"
 head_less = True
 EVAL = False #if you want to evaluate the model
 action_std = 0.1 if not EVAL else 1e-9        # starting std for action distribution (Multivariate Normal)
-load_policy = False
+load_policy = True
 policy_name = "{}_batch_{}_lra_{}_lrc_{}_clip{}".format(policy_name, update_size, lr_actor, lr_critic, eps_clip)
-load_policy_version = 93                   # specify policy version (i.e. int, 50) when loading a trained policy
-ne = 30               # number of environments
+load_policy_version = 19                   # specify policy version (i.e. int, 50) when loading a trained policy
+ne = 90               # number of environments
 res_net = False
+
+torch.manual_seed(random_seed)
 
 print("training environment name : " + env_name)
 if not EVAL:
@@ -97,12 +97,13 @@ if not EVAL:
         "gamma": gamma,
         "lr_actor": lr_actor,
         "lr_critic": lr_critic,
+        "seed": random_seed
         }
     )
 
 
 env = isaacgymenvs.make(
-	seed=0,
+	seed=random_seed,
 	task=env_name,
 	num_envs=ne,
 	sim_device='cuda:0', # cpu cuda:0
@@ -198,11 +199,10 @@ print("-------------------------------------------------------------------------
 print("optimizer learning rate actor : ", lr_actor)
 print("optimizer learning rate critic : ", lr_critic)
 
-if random_seed:
-    random_seed = random.randint(1, 10000)
+if random_seed > 0:
+    # random_seed = random.randint(1, 10000)
     print("--------------------------------------------------------------------------------------------")
     print("setting random seed to ", random_seed)
-    random_seed = 2
     #####################################################
 
 print("============================================================================================")
@@ -210,7 +210,7 @@ print("=========================================================================
 ################# training procedure ################
 
 # initialize a PPO agent
-ppo_agent = PPO(state_dim, action_dim, lr_actor, lr_critic, gamma, K_epochs, eps_clip, has_continuous_action_space, action_std, train_device, res_net)
+ppo_agent = PPO(state_dim, action_dim, lr_actor, lr_critic, gamma, K_epochs, eps_clip, has_continuous_action_space, action_std, train_device, res_net, random_seed)
 
 
 if load_policy:

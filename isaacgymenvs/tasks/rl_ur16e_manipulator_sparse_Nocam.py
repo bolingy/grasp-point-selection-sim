@@ -36,10 +36,14 @@ import einops
 
 class RL_UR16eManipulation(VecTask):
 
-    def __init__(self, cfg, rl_device, sim_device, graphics_device_id, headless, virtual_screen_capture, force_render):
+    def __init__(self, cfg, rl_device, sim_device, graphics_device_id, headless, virtual_screen_capture, force_render, seed):
         self.cfg = cfg
 
         self.temp_flag = 1
+
+        torch.manual_seed(seed)
+        random.seed(seed)
+        np.random.seed(seed)
 
         self.max_episode_length = self.cfg["env"]["episodeLength"]
 
@@ -795,7 +799,7 @@ class RL_UR16eManipulation(VecTask):
             offset_object3 = np.array([0.62, -0.1, 1.45, 0.0, 0.0, 0.0])
             offset_objects = [offset_object2, offset_object3, offset_object1]
             mean = 0
-            std_dev = 0.00
+            std_dev = 0.02
             offset_objects = [np.concatenate([offset[:2] + np.random.normal(mean, std_dev, 2), offset[2:]]) for offset in offset_objects]
             # apply sampled object pose and weight
             for object_count in selected_object:

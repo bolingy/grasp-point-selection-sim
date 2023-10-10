@@ -9,8 +9,6 @@ from torch.distributions import MultivariateNormal
 from torch.distributions import Categorical
 import copy
 
-import numpy as np
-
 import gym
 from .models import ResidualBlock, ResNet, ActorTimestepNet, ActorTimestepNetState
 from matplotlib import pyplot as plt
@@ -169,7 +167,8 @@ class ActorCritic(nn.Module):
         return action_logprobs, torch.squeeze(state_values), dist_entropy
 
 class PPO:
-    def __init__(self, state_dim, action_dim, lr_actor, lr_critic, gamma, K_epochs, eps_clip, has_continuous_action_space, action_std_init=0.6, device='cpu', res_net=True):
+    def __init__(self, state_dim, action_dim, lr_actor, lr_critic, gamma, K_epochs, eps_clip, has_continuous_action_space, action_std_init=0.6, device='cpu', res_net=True, rand_seed=0):
+        torch.manual_seed(rand_seed)
 
         self.has_continuous_action_space = has_continuous_action_space
 
