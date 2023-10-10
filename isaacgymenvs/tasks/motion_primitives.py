@@ -2,7 +2,7 @@ from isaacgym import gymapi
 import torch
 import numpy as np
 
-DEFAULT_OSC_DIST = 0.3
+DEFAULT_OSC_DIST = 0.4
 DEFAULT_MIN_DIST_MUL = 0.1
 class Primitives():
     def __init__(self, num_envs, init_pose, device):
@@ -117,7 +117,7 @@ class Primitives():
         # print("current_pose", self.current_pose)
         # print("prev_pose", self.prev_pose)
         # print("pose_diff", torch.max(torch.abs(self.current_pose - self.prev_pose)))
-        if torch.max(torch.abs(self.current_pose - self.prev_pose)) < 0.001:
+        if torch.max(torch.abs(self.current_pose - self.prev_pose)) < 0.002:
             self.stuck_counter += 1
         else:
             self.stuck_counter = 0
