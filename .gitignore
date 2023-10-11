@@ -163,3 +163,7 @@ assets/urdf/Aurmar_description/meshes/pod/texture_1004.png
 assets/urdf/Aurmar_description/meshes/pod/untitled.dae
 
 assets/google_scanned_models/*
+gqcnn/.gitignore
+scenario_grasp_configurations/
+wandb/
+models/
