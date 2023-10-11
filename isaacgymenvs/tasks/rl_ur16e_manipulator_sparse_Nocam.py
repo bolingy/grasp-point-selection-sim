@@ -1033,20 +1033,20 @@ class RL_UR16eManipulation(VecTask):
                 rgb_image_copy = torch.reshape(
                     rgb_image, (rgb_image.shape[0], -1, 4))[..., :3]
 
-                self.rgb_save[env_count] = rgb_image_copy[180:660,
-                                                            410:1050].clone().detach().cpu().numpy()
-                try:
-                    # new_dir_name = str(
-                    #         env_count)+"_"+str(self.track_save[env_count].type(torch.int).item())
-                    # print("new_dir_name", new_dir_name)
-                    os.mkdir(
-                        cur_path+"/../../System_Identification_Data/AutoEncoder/"+self.new_dir_name)
-                except:
-                    pass
-                save_dir_rgb_npy = cur_path+"/../../System_Identification_Data/AutoEncoder/" + \
-                    self.new_dir_name+"/rgb_" + str(int(env_count)) + "_"+str(self.track_save[env_count].type(torch.int).item()) + "_" + str(int(self.primitive_count[env_count].item())) +".npy"
-                if self.save_data:
-                    np.save(save_dir_rgb_npy, self.rgb_save[env_count])
+                # self.rgb_save[env_count] = rgb_image_copy[180:660,
+                #                                             410:1050].clone().detach().cpu().numpy()
+                # try:
+                #     # new_dir_name = str(
+                #     #         env_count)+"_"+str(self.track_save[env_count].type(torch.int).item())
+                #     # print("new_dir_name", new_dir_name)
+                #     os.mkdir(
+                #         cur_path+"/../../System_Identification_Data/AutoEncoder/"+self.new_dir_name)
+                # except:
+                #     pass
+                # save_dir_rgb_npy = cur_path+"/../../System_Identification_Data/AutoEncoder/" + \
+                #     self.new_dir_name+"/rgb_" + str(int(env_count)) + "_"+str(self.track_save[env_count].type(torch.int).item()) + "_" + str(int(self.primitive_count[env_count].item())) +".npy"
+                # if self.save_data:
+                #     np.save(save_dir_rgb_npy, self.rgb_save[env_count])
                     # print("saved rgb image")
                 
 
@@ -1280,7 +1280,7 @@ class RL_UR16eManipulation(VecTask):
         '''
         actions = torch.concat((torch.tensor(self.num_envs*[[0.0001, 0., 0., 0., 0., 0., 0.3]]).to(self.device), actions), dim=1)
         
-        self.actions = torch.zeros(0, 11)
+        self.actions = torch.zeros(0, 11).to(self.device)
         # Before each loop this will track all the environments where a condition for reset has been called
         env_list_reset_objects = torch.tensor([])
         env_list_reset_arm_pose = torch.tensor([])
@@ -1379,8 +1379,8 @@ class RL_UR16eManipulation(VecTask):
                     rgb_image_copy = torch.reshape(
                         rgb_image, (rgb_image.shape[0], -1, 4))[..., :3]
 
-                    self.rgb_save[env_count] = rgb_image_copy[180:660,
-                                                                410:1050].clone().detach().cpu().numpy()
+                    # self.rgb_save[env_count] = rgb_image_copy[180:660,
+                    #                                             410:1050].clone().detach().cpu().numpy()
                     # plt.imshow(self.rgb_save[env_count])
                     # plt.show()
                     # plt.savefig("gym_test.png")                    
@@ -1389,8 +1389,8 @@ class RL_UR16eManipulation(VecTask):
                     depth_image = -depth_image
 
                     segmask_dexnet = segmask.clone().detach()
-                    self.segmask_save[env_count] = segmask[180:660, 410:1050].clone(
-                    ).detach().cpu().numpy().astype(np.uint8)
+                    # self.segmask_save[env_count] = segmask[180:660, 410:1050].clone(
+                    # ).detach().cpu().numpy().astype(np.uint8)
 
                     segmask_numpy = np.zeros_like(
                         segmask_dexnet.cpu().numpy().astype(np.uint8))
@@ -1523,13 +1523,13 @@ class RL_UR16eManipulation(VecTask):
 
             # After every reset popping out each prperty to be used for the pick
             self.action_env = torch.tensor(
-                    [[0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0]], dtype=torch.float)
+                    [[0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0]], dtype=torch.float).to(self.device)
             if self.RL_flag[env_count] == torch.tensor(1):
                 self.env_reset_id_env[env_count] = torch.tensor(0)
             if ((self.env_reset_id_env[env_count] == 1) and (self.frame_count[env_count] > self.cooldown_frames) and self.RL_flag[env_count] == torch.tensor(0)):
                 self.env_reset_id_env[env_count] = torch.tensor(0)
                 self.action_env = torch.tensor(
-                    [[0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0]], dtype=torch.float)
+                    [[0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0]], dtype=torch.float).to(self.device)
 
                 if ((env_count in self.grasp_angle_env) and (len(self.grasp_angle_env[env_count]) != 0)):
                     self.suction_deformation_score[env_count] = self.suction_deformation_score_env[env_count][0]
@@ -1694,7 +1694,7 @@ class RL_UR16eManipulation(VecTask):
                                                         pose_factor *
                                                         T_ee_pose_to_pre_grasp_pose[2][3], ori_factor *
                                                         action_orientation[0],
-                                                        ori_factor*action_orientation[1], ori_factor*action_orientation[2], 0, 0, 0, 0, 0]], dtype=torch.float)
+                                                        ori_factor*action_orientation[1], ori_factor*action_orientation[2], 0, 0, 0, 0, 0]], dtype=torch.float).to(self.device)
                         if ((torch.max(torch.abs(self.action_env[0][:3]))) <= 0.005 and (torch.max(torch.abs(self.action_env[0][3:6]))) <= 0.005):
                             self.go_to_start[env_count] = False
                         
@@ -1763,15 +1763,15 @@ class RL_UR16eManipulation(VecTask):
                                     self.go_to_start[env_count] = True
                         self.temp_action = action_str
 
-                        self.action_env = u_arm_temp.cpu()
-                        self.action_env = torch.cat((self.action_env,  torch.tensor([0, 0, 0, 0, 0]).unsqueeze(0) ), dim=1)# .repeat(self.action_env.shape[0], 1)), dim=1)      
+                        self.action_env = u_arm_temp.to(self.device)
+                        self.action_env = torch.cat((self.action_env,  torch.tensor([0, 0, 0, 0, 0]).unsqueeze(0).to(self.device) ), dim=1)# .repeat(self.action_env.shape[0], 1)), dim=1)      
                         # force sensor update
                         self.gym.refresh_force_sensor_tensor(self.sim)
 
                         _fsdata = self.gym.acquire_force_sensor_tensor(self.sim)
                         fsdata = gymtorch.wrap_tensor(_fsdata)
                         self.force_pre_physics = - \
-                            fsdata[env_count][2].detach().cpu().numpy() 
+                            fsdata[env_count][2].detach()
                         if (self.RL_flag[env_count] == torch.tensor(1)):
                             retKey = self.force_list_save.get(env_count)
                             if (retKey == None):
@@ -1921,7 +1921,7 @@ class RL_UR16eManipulation(VecTask):
                                                         pose_factor *
                                                         T_ee_pose_to_pre_grasp_pose[2][3], ori_factor *
                                                         action_orientation[0],
-                                                        ori_factor*action_orientation[1], ori_factor*action_orientation[2], 1, 0, 0, 0, 0]], dtype=torch.float)
+                                                        ori_factor*action_orientation[1], ori_factor*action_orientation[2], 1, 0, 0, 0, 0]], dtype=torch.float).to(self.device)
                         
                         '''
                         detecting contacts with other objects before contact to the target object
@@ -1979,7 +1979,7 @@ class RL_UR16eManipulation(VecTask):
                                                         action_orientation[0],
                                                         self.speed[env_count]*100 *
                                                         action_orientation[1],
-                                                        self.speed[env_count]*100*action_orientation[2], 1, 0, 0, 0, 0]], dtype=torch.float)
+                                                        self.speed[env_count]*100*action_orientation[2], 1, 0, 0, 0, 0]], dtype=torch.float).to(self.device)
 
                         current_object_pose = self._root_state[env_count, self._object_model_id[self.object_target_id[env_count]-1], :][:3].type(
                             torch.float).detach().clone()
@@ -2301,7 +2301,7 @@ class RL_UR16eManipulation(VecTask):
                                                                 action_orientation[0],
                                                                 self.speed[env_count]*50 *
                                                                 action_orientation[1],
-                                                                self.speed[env_count]*50*action_orientation[2], 1, 0, 0, 0, 0]], dtype=torch.float)
+                                                                self.speed[env_count]*50*action_orientation[2], 1, 0, 0, 0, 0]], dtype=torch.float).to(self.device)
 
                             if (self.retract_up[env_count] == 1):
                                 self.action_env = torch.tensor([[-self.speed[env_count],
@@ -2317,7 +2317,7 @@ class RL_UR16eManipulation(VecTask):
                                                                 action_orientation[0],
                                                                 self.speed[env_count]*50 *
                                                                 action_orientation[1],
-                                                                self.speed[env_count]*50*action_orientation[2], 1, 0, 0, 0, 0]], dtype=torch.float)
+                                                                self.speed[env_count]*50*action_orientation[2], 1, 0, 0, 0, 0]], dtype=torch.float).to(self.device)
 
                             self.env_reset_retract = torch.cat(
                                 (self.env_reset_retract, torch.tensor([env_count]).to(self.device)), axis=0).type(torch.long)
@@ -2437,7 +2437,7 @@ class RL_UR16eManipulation(VecTask):
 
             if (self.frame_count[env_count] <= torch.tensor(self.cooldown_frames)):
                 self.action_env = torch.tensor(
-                    [[0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0]], dtype=torch.float)
+                    [[0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0]], dtype=torch.float).to(self.device)
                 
             # Get action from policy
             self.actions = torch.cat([self.actions, self.action_env])
