@@ -15,3 +15,4 @@ data/
 models/
 wandb/
 scenario_grasp_configurations/
+assets/google_scanned_models/
