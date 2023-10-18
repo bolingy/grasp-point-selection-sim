@@ -1,4 +1,26 @@
 import os
+import argparse
+
+
+# Initialize parser
+parser = argparse.ArgumentParser()
+
+# Adding optional argument
+parser.add_argument("-m", "--MESA_VK_DEVICE_SELECT_ID", help="Check device ID with MESA_VK_DEVICE_SELECT=list vulkaninfo", type=str, default="10de:158fd430-e32a-4a59-71f7-adb085a91b8a")
+parser.add_argument("-d", "--DEVICE", help = "Select GPU DEVICES (CUDA)", type=str, default="0")
+
+# Read arguments from command line
+args = parser.parse_args()
+
+if args.DEVICE and args.MESA_VK_DEVICE_SELECT_ID:
+    print("MESA VK DEVICE ID %s" % args.MESA_VK_DEVICE_SELECT_ID)
+    print("GPU DEVICES (CUDA) SELECTED: % s" % args.DEVICE)
+
+import os
+os.environ['MESA_VK_DEVICE_SELECT'] = args.MESA_VK_DEVICE_SELECT_ID
+os.environ["CUDA_VISIBLE_DEVICES"] = args.DEVICE
+
+import os
 import glob
 import time
 import wandb
@@ -35,7 +57,7 @@ import warnings
 warnings.filterwarnings("ignore")
 
 # check cuda
-train_device = torch.device('cuda:0')
+train_device = torch.device('cuda:1')
 sim_device = torch.device('cuda:0')
 
 # if(torch.cuda.is_available()): 
@@ -72,12 +94,12 @@ random_seed = 1       # set random seed if required (0 = no random seed)
 
 '''Training/Evaluation Parameter'''
 env_name = "RL_UR16eManipulation_Full"
-policy_name = "PPO_pick_backobj_fixedbinconfig_ActorNET"
+load_policy_name = "PPO_pick_backobj_fixedbinconfig_ActorNET_batch_90_lra_1e-05_lrc_3e-05_clip0.13"
 head_less = True
 EVAL = False #if you want to evaluate the model
 action_std = 0.1 if not EVAL else 1e-9        # starting std for action distribution (Multivariate Normal)
-load_policy = True
-policy_name = "PPO_pick_backobj_fixedbinconfig_ActorNET_batch_90_lra_1e-05_lrc_3e-05_clip0.13"
+load_policy = False
+policy_name = "Visual_PPO_pick_backobj_fixedbinconfig_ActorNET"
 # policy_name = "{}_batch_{}_lra_{}_lrc_{}_clip{}".format(policy_name, update_size, lr_actor, lr_critic, eps_clip)
 load_policy_version = 28                   # specify policy version (i.e. int, 50) when loading a trained policy
 ne = 90               # number of environments
@@ -159,10 +181,10 @@ directory = directory + '/' + env_name + '/'
 if not os.path.exists(directory):
       os.makedirs(directory)
 
-
 directory = "PPO_preTrained" + '/' + env_name + '/'
 #checkpoint_path = directory + policy_name
-checkpoint_path = model_name(directory, policy_name, load_policy_version)
+load_policy_checkpoint_path = model_name(directory, load_policy_name, load_policy_version)
+checkpoint_path = model_name(directory, policy_name, policy_num)
 
 print("save checkpoint path : " + checkpoint_path)
 
@@ -213,15 +235,15 @@ ppo_agent = PPO(state_dim, action_dim, lr_actor, lr_critic, gamma, K_epochs, eps
 
 
 if load_policy:
-    if os.path.exists(checkpoint_path):
-        print("loading network from : " + checkpoint_path)
-        ppo_agent.load(checkpoint_path)
+    if os.path.exists(load_policy_checkpoint_path):
+        print("loading network from : " + load_policy_checkpoint_path)
+        ppo_agent.load(load_policy_checkpoint_path)
         if EVAL:
             ppo_agent.policy.eval()
             ppo_agent.policy_old.eval()
         print("network loaded")
     else:
-        print("No preTrained network exists. New network created")
+        print("Path: " + load_policy_checkpoint_path + " does not exist. New network created")
 
 
 
@@ -358,7 +380,8 @@ while time_step <= max_training_timesteps: ## prim_step
                     wandb.log({"Central buffer size": len(buf_central.states)})
                 buf_envs[true_i].clear()
             else:
-                print("rewards and states are not the same length at env {}".format(true_i))
+                # print("rewards and states are not the same length at env {}".format(true_i))
+                print("Scrapped env {}".format(true_i))
                 buf_envs[true_i].clear()
 
     if buf_central.size() >= update_size and not EVAL:
