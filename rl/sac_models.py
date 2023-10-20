@@ -511,3 +511,68 @@ class ResNet(nn.Module):
         x = self.fc(x)
         x = self.sigmoid(x)
         return x
+
+class ActorTimestepStatePolicy(nn.Module):
+    def __init__(self, state_dim, hidden_dim=64, disc_output_dim=6, cont_output_dim=1):
+        super(ActorTimestepStatePolicy, self).__init__()
+        # Define the layers
+        self.fc1 = nn.Linear(state_dim, hidden_dim)
+        self.tanh1 = nn.Tanh()
+        self.fc2 = nn.Linear(hidden_dim, hidden_dim)
+        self.tanh2 = nn.Tanh()
+        self.fc3 = nn.Linear(hidden_dim, disc_output_dim + cont_output_dim)
+        self.softmax = nn.Softmax(dim=-1)
+        self.sigmoid = nn.Sigmoid()
+
+        self.action_scale = torch.tensor(0.5)
+        self.action_bias = torch.tensor(0.5)
+
+    def forward(self, x):
+        # Define the forward pass
+        x = self.fc1(x)
+        x = self.tanh1(x)
+        x = self.fc2(x)
+        x = self.tanh2(x)
+        x = self.fc3(x)
+        action_1 = self.softmax(x[:, :6])
+        action_2 = self.sigmoid(x[:, 6:])
+        result = torch.cat((action_1, action_2), dim = 1)
+        return result
+
+    
+    def sample(self, state):
+        action = self.forward(state)
+        action_probs = action[:, :6]
+        # print("action_probs: ", action_probs.shape)
+        dist_1 = Categorical(action_probs)
+        action_1 = dist_1.sample()
+        action_mean_1 = torch.argmax(action_probs, dim = 1)
+
+        action_mean = action[:, -2]
+        action_log_std = action[:, -1]
+        action_std = action_log_std.exp()
+        # num_continuous_action = action_mean.shape[0]
+        dist_2 = Normal(action_mean, action_std)
+        x_t = dist_2.rsample()
+        y_t = torch.tanh(x_t)
+        action_2 = y_t * self.action_scale + self.action_bias
+        action_logprob_2 = dist_2.log_prob(x_t)
+        # Enforcing Action Bound
+        action_logprob_2 -= torch.log(self.action_scale * (1 - y_t.pow(2)) + epsilon)
+        action_logprob_2 = action_logprob_2.unsqueeze(dim=-1)
+
+        action_logprob_2 = action_logprob_2.sum(1, keepdim=True)
+        action_mean_2 = torch.tanh(action_mean) * self.action_scale + self.action_bias
+
+        # print("action_1: ", action_1.shape)
+        # print("action_2: ", action_2.shape)
+        action = torch.cat((action_1.unsqueeze(dim=-1), action_2.unsqueeze(dim=-1)), dim=-1)
+        action_logprob_1 = dist_1.log_prob(action[:, 0])
+        action_logprob = action_logprob_1 + action_logprob_2
+        
+        mean_action = torch.cat((action_mean_1.unsqueeze(dim=-1), action_mean_2.unsqueeze(dim=-1)), dim=-1)
+
+        return action.detach(), action_logprob.detach(), mean_action.detach()
+    
+    def to(self, device):
+        return super(ActorTimestepStatePolicy, self).to(device)

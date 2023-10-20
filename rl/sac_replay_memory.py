@@ -10,7 +10,6 @@ class ReplayMemory:
 
     def push(self, state, action, reward, next_state, done):
         # convert to cpu
-    
         if len(self.buffer) < self.capacity:
             self.buffer.append(None)
         self.buffer[self.position] = (state, action, reward, next_state, done)

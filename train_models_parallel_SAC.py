@@ -24,12 +24,11 @@ import gym
 # import roboschool
 #import pybullet_envs
 from rl.sac import *
-from rl.ppo import RolloutBuffer
 from rl.rl_utils import *
 from rl.sac_replay_memory import *
 import wandb
 import time
-wandb.login()
+wandb.login(key='0ce23b9ac23d5e7e466e1bb6aa633ff0a3624a7b')
 
 import random
 
@@ -60,28 +59,28 @@ save_model_freq = 480      # save model frequency (in num timesteps)
 ## Note : print/log frequencies should be > than max_ep_len
 ################ SAC hyperparameters ################
 
-pick_len = 1
-update_size = pick_len * 480
-start_steps = 480
+pick_len = 3
+update_size = pick_len * 90
+start_steps = 270
 updates_per_step = 1
 max_size = 1000000
-actor_lr = 1e-6
-critic_lr = 3e-6
+actor_lr = 1e-7
+critic_lr = 3e-7
 alpha_lr = 0.00003
 gamma = 0.99                # discount factor
 tau = 0.005                 # target network update rate
 autoentropy = True          # automatically udpates alpha for entropy
 alpha = 0.9
 init_alpha = 0.2
-hidden_size = 128           # size of hidden layers
+hidden_size = 64           # size of hidden layers
 
 random_seed = 1       # set random seed if required (0 = no random seed)
 
 
 '''Training/Evaluation Parameter'''
-env_name = "RL_UR16eManipulation_Full"
-policy_name = "seq_multiobjbinpick_SAC_masked_dones"
-ne = 20               # number of environments
+env_name = "RL_UR16eManipulation_Full_Nocam"
+policy_name = "SAC_state_gauss0.2std_attempt2"
+ne = 90               # number of environments
 head_less = True
 EVAL = False #if you want to evaluate the model
 if EVAL:
@@ -92,7 +91,7 @@ load_policy = False
 policy_name = "{0}_batch_{1}_actorlr_{2}_criticlr_{3}_gamma_{4}_tau_{5}".format(policy_name, update_size, actor_lr, critic_lr, gamma, tau)
 # policy_name = "seq_multiobjreachori_SAC_batch_1000_actorlr_0.001_criticlr_0.001_gamma_0.99_tau_0.005_3"
 load_policy_version = None                  # specify policy version (i.e. int, 50) when loading a trained policy
-res_net = True
+res_net = False
 
 print("training environment name : " + env_name)
 if not EVAL:
@@ -264,10 +263,13 @@ prev_i_episode = 0
 
 buf_envs = [RolloutBuffer() for _ in range(ne)]
 memory = ReplayMemory(max_size, random_seed)
+prev_mem_size = 0
 
 actions = torch.tensor(ne * [[0.11, 0., 0.28, 0.22]]).to(sim_device)
 
-state, reward, done, true_indicies = step_primitives(actions, env) #env.reset() by kickstarting w random action
+state, scrap, reward, done, true_indicies = step_primitives(actions, env) #env.reset() by kickstarting w random action
+state, scrap, reward, done, true_indicies = returns_to_device(state, scrap, reward, done, true_indicies, train_device)
+
 # state, reward, done, true_indicies = returns_to_device(state, reward, done, true_indicies, train_device)
 # true_idx = torch.nonzero(indicies).squeeze(1)
 
@@ -276,7 +278,16 @@ state, reward, done, true_indicies = step_primitives(actions, env) #env.reset() 
 
 if res_net:
     real_ys, real_dxs = get_real_ys_dxs(state)
+    state = rearrange_state_timestep(state)
+else:
+    # print("state.shape", state.shape)
+    obj_state = state[:, -10:]
+    # print("obj_state.shape", obj_state.shape)
+    state = state[:, :-10]
+    # print("state.shape", state.shape)
+    real_ys, real_dxs = get_real_ys_dxs(state)
     state = rearrange_state(state)
+obj_state = normalize_state(obj_state)
 
 curr_rewards = 0
 score_history = []
@@ -291,27 +302,28 @@ while total_timesteps <= max_training_timesteps:
         action_2 = torch.rand(state.shape[0], 1).to(sim_device)
         action = torch.cat((action_1, action_2), dim = 1)
     else:
-        action = sac_agent.select_action(state, EVAL)
+        action = sac_agent.select_action(obj_state, EVAL)
     for i, true_i in enumerate(true_indicies):
-        buf_envs[true_i].states.append(state[i][:, None].clone().detach())
+        buf_envs[true_i].states.append(obj_state[i][:, None].clone().detach())
         buf_envs[true_i].actions.append(action[i].clone().detach())
         if true_i == 0:
             print("action of env 0 updated", action[i])
     action = convert_actions(action, real_ys, real_dxs, sim_device=sim_device)
 
-    if len(memory) > update_size and not EVAL:
+    if len(memory) > update_size and len(memory) != prev_mem_size and not EVAL:
+        prev_mem_size = len(memory)
         # Number of updates per step in environment
         for i in range(updates_per_step):
             # Update parameters of all the networks
             critic_1_loss, critic_2_loss, policy_loss, ent_loss, alpha = sac_agent.update_parameters(memory, update_size, updates)
             updates += 1
             wandb.log({'critic_1_loss': critic_1_loss, 'critic_2_loss': critic_2_loss, 'policy_loss': policy_loss, 'ent_loss': ent_loss, 'alpha': alpha})
-
+            print("Updated parameters of sac agent")
+            print("critic_1_loss: ", critic_1_loss, "critic_2_loss: ", critic_2_loss, "policy_loss: ", policy_loss, "ent_loss: ", ent_loss, "alpha: ", alpha)
 
     # action = torch.cat((action, torch.zeros(true_indicies.shape[0], 1).to(sim_device)), dim=1)
     create_env_action_via_true_indicies(true_indicies, action, actions, ne, sim_device)
-    state, reward, done, true_indicies = step_primitives(actions, env)
-    real_ys, real_dxs = get_real_ys_dxs(state)
+    state, scrap, reward, done, true_indicies = step_primitives(actions, env) #env.reset() by kickstarting w random action
     
     if EVAL and true_indicies[0] == 0 and res_net:
         imgs = state
@@ -354,16 +366,25 @@ while total_timesteps <= max_training_timesteps:
         else:
             print("target is x-middle")
 
-    # state, reward, done, true_indicies = returns_to_device(state, reward, done, true_indicies, train_device)
+    state, scrap, reward, done, true_indicies = returns_to_device(state, scrap, reward, done, true_indicies, train_device)
     if res_net:
+        real_ys, real_dxs = get_real_ys_dxs(state)
+        state = rearrange_state_timestep(state)
+    else:
+        obj_state = state[:, -10:]
+        # print("obj_state.shape", obj_state.shape)
+        state = state[:, :-10]
+        # print("state.shape", state.shape)
+        real_ys, real_dxs = get_real_ys_dxs(state)
         state = rearrange_state(state)
+    obj_state = normalize_state(obj_state)
 
     for i, true_i in enumerate(true_indicies):
         if len(buf_envs[true_i].rewards) != len(buf_envs[true_i].states):
-            reward[i] = reward[i] * 10
             buf_envs[true_i].rewards.append(reward[i].clone().detach().unsqueeze(0))
+            buf_envs[true_i]. scraps.append(scrap[i].clone().detach().unsqueeze(0))
             buf_envs[true_i].is_terminals.append(done[i].clone().detach().unsqueeze(0))
-            new_state = state[i][:, None].clone().detach()
+            buf_envs[true_i].new_states.append(obj_state[i][:, None].clone().detach())
             if done[i]:
                 score_history.append(reward[i].item())
             i_episode += 1
@@ -372,9 +393,16 @@ while total_timesteps <= max_training_timesteps:
             print_running_reward += reward[i].item()
             print_running_episodes += 1
             # !!!!!!!!!!!mask (?)
-            memory.push(buf_envs[true_i].states[-1], buf_envs[true_i].actions[-1], buf_envs[true_i].rewards[-1], new_state, ~ torch.tensor(buf_envs[true_i].is_terminals[-1], dtype=torch.bool))
-            wandb.log({"Buffer size": len(memory)})
-            buf_envs[true_i].clear()
+        if(buf_envs[true_i].is_terminals[-1] == True):
+            if(1 not in buf_envs[true_i].scraps):
+                # memory.push(buf_envs[true_i].states[-1], buf_envs[true_i].actions[-1], buf_envs[true_i].rewards[-1], buf_envs[true_i].new_state[-1], ~ torch.tensor(buf_envs[true_i].is_terminals[-1], dtype=torch.bool))
+                for i in range(len(buf_envs[true_i].states)):
+                    memory.push(buf_envs[true_i].states[i], buf_envs[true_i].actions[i], buf_envs[true_i].rewards[i], buf_envs[true_i].new_states[i], ~ torch.tensor(buf_envs[true_i].is_terminals[i], dtype=torch.bool))
+                wandb.log({"Buffer size": len(memory)})
+                buf_envs[true_i].clear()
+            else:
+                print("Scrapped env {}".format(true_i))
+                buf_envs[true_i].clear()
 
 
     # printing average reward

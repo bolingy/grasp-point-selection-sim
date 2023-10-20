@@ -3,8 +3,61 @@ import torch
 import torch.nn.functional as F
 from torch.optim import Adam
 from rl.sac_utils import soft_update, hard_update
-from rl.sac_models import GaussianPolicy, QNetwork, DeterministicPolicy, ActorTimestepPolicy, QResNetwork, ResidualBlock, ResNet
+from rl.sac_models import GaussianPolicy, QNetwork, DeterministicPolicy, ActorTimestepPolicy, ActorTimestepStatePolicy, QResNetwork, ResidualBlock, ResNet
 
+
+class RolloutBuffer:
+    def __init__(self):
+        self.actions = []
+        self.states = []
+        self.new_states = []
+        self.logprobs = []
+        self.scraps = []
+        self.rewards = []
+        self.state_values = []
+        self.is_terminals = []
+    
+    def is_done(self):
+        if len(self.is_terminals) == 0:
+            return False
+        return self.is_terminals[-1]
+
+    # def is_ready_to_update(self, max_ep_len):
+    #     return len(self.states) >= max_ep_len -1 and len(self.actions) == len(self.rewards)
+
+    def append(self, buf_to_append):
+        self.actions.extend(buf_to_append.actions)
+        self.states.extend(buf_to_append.states)
+        self.new_states.extend(buf_to_append.new_states)
+        self.logprobs.extend(buf_to_append.logprobs)
+        self.scraps.extend(buf_to_append.scraps)
+        self.rewards.extend(buf_to_append.rewards)
+        self.state_values.extend(buf_to_append.state_values)
+        self.is_terminals.extend(buf_to_append.is_terminals)
+
+    def size(self):
+        return len(self.states)
+
+    def clear(self):
+        del self.actions[:]
+        del self.states[:]
+        del self.new_states[:]
+        del self.logprobs[:]
+        del self.scraps[:]
+        del self.rewards[:]
+        del self.state_values[:]
+        del self.is_terminals[:]
+
+    def __str__(self) -> str:
+        return "RolloutBuffer(actions={}, states={}, logprobs={}, rewards={}, state_values={}, is_terminals={})".format(
+            len(self.actions), len(self.states), len(self.logprobs), len(self.rewards), len(self.state_values), len(self.is_terminals)
+        )
+    
+    # print full buffer
+    def print_buffer(self):
+        print("RolloutBuffer(actions={}, logprobs={}, rewards={}, state_values={}, is_terminals={})".format(
+            self.actions, self.logprobs, self.rewards, self.state_values, self.is_terminals
+        ))
 
 class SAC(object):
     def __init__(self, num_inputs, action_space, gamma, tau, alpha, init_alpha, policy, target_update_interval, automatic_entropy_tuning, device, hidden_size, actor_lr, critic_lr, alpha_lr, res_net):
@@ -20,10 +73,10 @@ class SAC(object):
         self.device = device
         self.res_net = res_net
 
-        self.critic = QResNetwork(ResidualBlock, [3, 4, 6, 3]).to(self.device)
+        self.critic = QNetwork(num_inputs, action_space.shape[0], hidden_size).to(self.device)
         self.critic_optim = Adam(self.critic.parameters(), lr=critic_lr)
 
-        self.critic_target = QResNetwork(ResidualBlock, [3, 4, 6, 3]).to(self.device)
+        self.critic_target = QNetwork(num_inputs, action_space.shape[0], hidden_size).to(self.device)
         hard_update(self.critic_target, self.critic)
 
         if self.policy_type == "Gaussian":
@@ -43,7 +96,8 @@ class SAC(object):
                 # self.log_alpha = torch.zeros(1, requires_grad=True, device=self.device)
                 self.alpha_optim = Adam([self.log_alpha], lr=alpha_lr)
 
-            self.policy = ActorTimestepPolicy(ResidualBlock, [3, 4, 6, 3]).to(self.device)
+            self.policy = ActorTimestepStatePolicy(num_inputs, hidden_dim=64, disc_output_dim=6, cont_output_dim=1).to(self.device)
+            # self.policy = ActorTimestepPolicy(ResidualBlock, [3, 4, 6, 3]).to(self.device)
             self.policy_optim = Adam(self.policy.parameters(), lr=actor_lr)
         else:
             self.alpha = 0
