@@ -52,15 +52,15 @@ has_continuous_action_space = True
 #max_ep_len = 2                     # max timesteps in one episode
 max_training_timesteps = int(1e5)   # break training loop if timeteps > max_training_timesteps
 
-print_freq = 480                  # print avg reward in the interval (in num timesteps)
+print_freq = 270                  # print avg reward in the interval (in num timesteps)
 log_freq = 90 #max_ep_len * 10      # log avg reward in the interval (in num timesteps)
-save_model_freq = 480      # save model frequency (in num timesteps)
+save_model_freq = 270      # save model frequency (in num timesteps)
 
 ## Note : print/log frequencies should be > than max_ep_len
 ################ SAC hyperparameters ################
 
 pick_len = 3
-update_size = pick_len * 90
+update_size = pick_len * 180
 start_steps = 270
 updates_per_step = 1
 max_size = 1000000
@@ -71,7 +71,7 @@ gamma = 0.99                # discount factor
 tau = 0.005                 # target network update rate
 autoentropy = True          # automatically udpates alpha for entropy
 alpha = 0.9
-init_alpha = 0.2
+init_alpha = 0.3
 hidden_size = 64           # size of hidden layers
 
 random_seed = 1       # set random seed if required (0 = no random seed)
@@ -79,7 +79,7 @@ random_seed = 1       # set random seed if required (0 = no random seed)
 
 '''Training/Evaluation Parameter'''
 env_name = "RL_UR16eManipulation_Full_Nocam"
-policy_name = "SAC_state_gauss0.2std_attempt2"
+policy_name = "SAC_state_gauss0.2std_attempt3"
 ne = 90               # number of environments
 head_less = True
 EVAL = False #if you want to evaluate the model
@@ -386,7 +386,8 @@ while total_timesteps <= max_training_timesteps:
             buf_envs[true_i].is_terminals.append(done[i].clone().detach().unsqueeze(0))
             buf_envs[true_i].new_states.append(obj_state[i][:, None].clone().detach())
             if done[i]:
-                score_history.append(reward[i].item())
+                for j in range(len(buf_envs[true_i].rewards)):
+                    score_history.append(buf_envs[true_i].rewards[j].item())
             i_episode += 1
             total_timesteps += 1
             time_step_update += 1
