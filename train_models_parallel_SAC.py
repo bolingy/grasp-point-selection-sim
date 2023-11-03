@@ -35,9 +35,17 @@ import random
 import warnings
 warnings.filterwarnings("ignore")
 
+DEBUG = False
+if DEBUG:
+    DEVICE_ID = 0
+    DEVICE = f'cuda:{DEVICE_ID}'
+else:
+    DEVICE_ID = 1
+    DEVICE = f'cuda:{DEVICE_ID}'
+
 # check cuda
-train_device = torch.device('cuda:0')
-sim_device = torch.device('cuda:0')
+train_device = torch.device(DEVICE)
+sim_device = torch.device(DEVICE)
 
 # if(torch.cuda.is_available()): 
 #     device = torch.device('cuda:0') 
@@ -52,27 +60,36 @@ has_continuous_action_space = True
 #max_ep_len = 2                     # max timesteps in one episode
 max_training_timesteps = int(1e5)   # break training loop if timeteps > max_training_timesteps
 
-print_freq = 270                  # print avg reward in the interval (in num timesteps)
-log_freq = 90 #max_ep_len * 10      # log avg reward in the interval (in num timesteps)
-save_model_freq = 270      # save model frequency (in num timesteps)
+if DEBUG:
+    print_freq = 1
+    log_freq = 1
+else:
+    print_freq = 15 #270                  # print avg reward in the interval (in num timesteps)
+    log_freq = 15 #90 #max_ep_len * 10      # log avg reward in the interval (in num timesteps)
+save_model_freq = 15 #270      # save model frequency (in num timesteps)
 
 ## Note : print/log frequencies should be > than max_ep_len
 ################ SAC hyperparameters ################
 
-pick_len = 3
-update_size = pick_len * 180
-start_steps = 270
-updates_per_step = 1
+pick_len = 1
+if DEBUG:
+    update_size = 6 #6 #4 #32 #32 #pick_len * 180
+    start_steps = 6 #6 #4 #32 #32 #270
+else:
+    update_size = 256 #pick_len * 180
+    start_steps = 256 #270
+updates_per_step = 20
 max_size = 1000000
-actor_lr = 1e-7
-critic_lr = 3e-7
-alpha_lr = 0.00003
-gamma = 0.99                # discount factor
+actor_lr = 3e-4 #1e-7
+critic_lr = 3e-4 #3e-7
+alpha_lr = 3e-4 #0.00003
+## NOTE: 1/(1-gamma) should be the length of the trajectory. Since T=1 right now, gamma=0.
+gamma = 0 #0.66 #0.99                # discount factor
 tau = 0.005                 # target network update rate
 autoentropy = True          # automatically udpates alpha for entropy
-alpha = 0.9
-init_alpha = 0.3
-hidden_size = 64           # size of hidden layers
+alpha = 1.0 #0.9
+init_alpha = 0.1 #1.0 #0.3
+hidden_size = 256 #64           # size of hidden layers
 
 random_seed = 1       # set random seed if required (0 = no random seed)
 
@@ -80,7 +97,10 @@ random_seed = 1       # set random seed if required (0 = no random seed)
 '''Training/Evaluation Parameter'''
 env_name = "RL_UR16eManipulation_Full_Nocam"
 policy_name = "SAC_state_gauss0.2std_attempt3"
-ne = 90               # number of environments
+if DEBUG:
+    ne = 12
+else:
+    ne = 90               # number of environments
 head_less = True
 EVAL = False #if you want to evaluate the model
 if EVAL:
@@ -121,10 +141,10 @@ env = isaacgymenvs.make(
 	seed=0,
 	task=env_name,
 	num_envs=ne,
-	sim_device='cuda:0', # cpu cuda:0
-	rl_device='cuda:0', # cpu cuda:0
+	sim_device=DEVICE, # cpu cuda:0
+	rl_device=DEVICE, # cpu cuda:0
 	multi_gpu=False,
-	graphics_device_id=0,
+	graphics_device_id=DEVICE_ID,
     headless=head_less
 )
 
@@ -183,7 +203,6 @@ checkpoint_path = model_name(directory, policy_name, load_policy_version, extens
 print("save checkpoint path : " + checkpoint_path)
 
 #####################################################
-
 
 ############# print all hyperparameters #############
 
@@ -297,32 +316,30 @@ time_step_update = 0
 while total_timesteps <= max_training_timesteps:
     if total_timesteps < start_steps:
         # randomly sample actions 
-        # action 1 is discrete (0-5), action 2 is continuous (0-1)
-        action_1 = torch.randint(0, 6, (state.shape[0], 1)).to(sim_device)
-        action_2 = torch.rand(state.shape[0], 1).to(sim_device)
-        action = torch.cat((action_1, action_2), dim = 1)
+        action = torch.rand(state.shape[0], 2).to(sim_device)
+        env_action = torch.cat((torch.ceil(action[:,0:1]*6-1), action[:,1:2]), dim=1)
     else:
-        action = sac_agent.select_action(obj_state, EVAL)
+        action, env_action = sac_agent.select_action(obj_state, EVAL)
+    assert action.shape[1] == 2 and len(action.shape) == 2
+    assert env_action.shape[1] == 2 and len(env_action.shape) == 2
     for i, true_i in enumerate(true_indicies):
         buf_envs[true_i].states.append(obj_state[i][:, None].clone().detach())
         buf_envs[true_i].actions.append(action[i].clone().detach())
         if true_i == 0:
             print("action of env 0 updated", action[i])
-    action = convert_actions(action, real_ys, real_dxs, sim_device=sim_device)
+    env_action = convert_actions(env_action, real_ys, real_dxs, sim_device=sim_device)
 
     if len(memory) > update_size and len(memory) != prev_mem_size and not EVAL:
         prev_mem_size = len(memory)
         # Number of updates per step in environment
         for i in range(updates_per_step):
             # Update parameters of all the networks
-            critic_1_loss, critic_2_loss, policy_loss, ent_loss, alpha = sac_agent.update_parameters(memory, update_size, updates)
+            info = sac_agent.update_parameters(memory, update_size, updates)
             updates += 1
-            wandb.log({'critic_1_loss': critic_1_loss, 'critic_2_loss': critic_2_loss, 'policy_loss': policy_loss, 'ent_loss': ent_loss, 'alpha': alpha})
-            print("Updated parameters of sac agent")
-            print("critic_1_loss: ", critic_1_loss, "critic_2_loss: ", critic_2_loss, "policy_loss: ", policy_loss, "ent_loss: ", ent_loss, "alpha: ", alpha)
+            wandb.log(info)
 
     # action = torch.cat((action, torch.zeros(true_indicies.shape[0], 1).to(sim_device)), dim=1)
-    create_env_action_via_true_indicies(true_indicies, action, actions, ne, sim_device)
+    create_env_action_via_true_indicies(true_indicies, env_action, actions, ne, sim_device)
     state, scrap, reward, done, true_indicies = step_primitives(actions, env) #env.reset() by kickstarting w random action
     
     if EVAL and true_indicies[0] == 0 and res_net:
@@ -377,12 +394,12 @@ while total_timesteps <= max_training_timesteps:
         # print("state.shape", state.shape)
         real_ys, real_dxs = get_real_ys_dxs(state)
         state = rearrange_state(state)
-    obj_state = normalize_state(obj_state)
+    obj_state = normalize_state(obj_state)  
 
     for i, true_i in enumerate(true_indicies):
         if len(buf_envs[true_i].rewards) != len(buf_envs[true_i].states):
             buf_envs[true_i].rewards.append(reward[i].clone().detach().unsqueeze(0))
-            buf_envs[true_i]. scraps.append(scrap[i].clone().detach().unsqueeze(0))
+            buf_envs[true_i].scraps.append(scrap[i].clone().detach().unsqueeze(0))
             buf_envs[true_i].is_terminals.append(done[i].clone().detach().unsqueeze(0))
             buf_envs[true_i].new_states.append(obj_state[i][:, None].clone().detach())
             if done[i]:
@@ -404,7 +421,6 @@ while total_timesteps <= max_training_timesteps:
             else:
                 print("Scrapped env {}".format(true_i))
                 buf_envs[true_i].clear()
-
 
     # printing average reward
     if i_episode % print_freq == 0 and i_episode != 0 and print_running_episodes != 0:
@@ -436,4 +452,6 @@ while total_timesteps <= max_training_timesteps:
         sac_agent.save_checkpoint(env_name, policy_name, suffix=str(i_episode))
         print("Model Saved - Elapsed Time  : ", datetime.now().replace(microsecond=0) - start_time)
         print("--------------------------------------------------------------------------------------------")
-        
+        memory.save_buffer(env_name, suffix=str(i_episode))
+        print("Memory Saved")
+        print("--------------------------------------------------------------------------------------------")

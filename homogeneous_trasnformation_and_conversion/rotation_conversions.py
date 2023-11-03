@@ -2,12 +2,15 @@ import torch
 import torch.nn.functional as F
 import numpy as np
 
-device = "cuda:0"
 def transformation_matrix(rotation_matrix: torch.Tensor, translation_vector: torch.Tensor) -> torch.Tensor:
+    # device is gpu if at least one is on gpu
+    device = rotation_matrix.device
+    if translation_vector.device.type != 'cpu':
+        device = translation_vector.device
     T = torch.empty((4,4))
     T[:3, :3] = rotation_matrix
     T[:3, 3] = translation_vector
-    T[3, :] = torch.tensor([0, 0, 0, 1]).to(device)
+    T[3, :] = torch.tensor([0, 0, 0, 1])
     return T.to(device)
 
 def axisangle2quat(vec: torch.Tensor, eps=1e-6) -> torch.Tensor:
@@ -41,7 +44,7 @@ def axisangle2quat(vec: torch.Tensor, eps=1e-6) -> torch.Tensor:
 
     # Reshape and return output
     quat = quat.reshape(list(input_shape) + [4, ])
-    return quat.to(device)
+    return quat.to(vec.device)
 
 def _sqrt_positive_part(x: torch.Tensor) -> torch.Tensor:
     """
@@ -57,13 +60,13 @@ def euler_angles_to_quaternion(euler_angles: torch.Tensor, convention: str, degr
     rot_matrix = euler_angles_to_matrix(euler_angles, convention=convention, degrees=degrees)
     quaternion = matrix_to_quaternion(rot_matrix)
 
-    return torch.tensor([quaternion[1], quaternion[2], quaternion[3], quaternion[0]]).to(device)
+    return torch.tensor([quaternion[1], quaternion[2], quaternion[3], quaternion[0]]).to(euler_angles.device)
 
 def quaternion_to_euler_angles(quaternion: torch.Tensor, convention: str, degrees: bool) -> torch.Tensor:
     rot_matrix = quaternion_to_matrix(quaternion)
     euler_angles = matrix_to_euler_angles(rot_matrix, convention=convention)
 
-    return torch.tensor(euler_angles).to(device)
+    return torch.tensor(euler_angles).to(quaternion.device)
 
 def matrix_to_quaternion(matrix: torch.Tensor) -> torch.Tensor:
     """

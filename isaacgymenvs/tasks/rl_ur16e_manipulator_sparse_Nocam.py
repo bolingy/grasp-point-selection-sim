@@ -1106,11 +1106,12 @@ class RL_UR16eManipulation(VecTask):
 
             torch_success_tensor = self.success[envs_finished_prim].clone().detach()
             # add diff to success tensor
-            scaled_diff = torch.tensor(1e-5).to(self.device)
-            scaled_diff_tensor = diff_target_area_tensor.to(self.device) * scaled_diff
-            # print("diff target area tensor", diff_target_area_tensor)
-            scaled_diff_tensor = torch.clamp(scaled_diff_tensor, -0.2, 0.2)
-            torch_success_tensor = torch_success_tensor + scaled_diff_tensor
+            ## Patrick: Only use sparse reward for now.
+            # scaled_diff = torch.tensor(1e-5).to(self.device)
+            # scaled_diff_tensor = diff_target_area_tensor.to(self.device) * scaled_diff
+            # # print("diff target area tensor", diff_target_area_tensor)
+            # scaled_diff_tensor = torch.clamp(scaled_diff_tensor, -0.2, 0.2)
+            # torch_success_tensor = torch_success_tensor + scaled_diff_tensor
             # reset if success
             self.success[envs_finished_prim] = torch.tensor(0).float().to(self.device)
             
@@ -1902,7 +1903,8 @@ class RL_UR16eManipulation(VecTask):
                             env_complete_reset = torch.cat(
                                 (env_complete_reset, torch.tensor([env_count])), axis=0)
                             print("Object out of bin 1")
-                            self.success[env_count] = 1
+                            ## Patrick: only use 0/0/1 sparse reward for now instead of 0/1/2
+                            self.success[env_count] = 0 #1
 
                     _all_object_position_error = torch.abs(
                         _all_object_position_error)
@@ -2193,7 +2195,8 @@ class RL_UR16eManipulation(VecTask):
                                 self.force_list_save[env_count])
                             self.success[env_count] = False
                             if (score_gripper > torch.tensor(0.1) and oscillation == False):
-                                self.success[env_count] = 2
+                                ## Patrick: only use 0/0/1 sparse reward for now instead of 0/1/2
+                                self.success[env_count] = 1 #2
                             penetration = False
                             if (score_gripper == torch.tensor(0)):
                                 penetration = True

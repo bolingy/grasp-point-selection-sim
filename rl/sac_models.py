@@ -33,7 +33,6 @@ class QNetwork(nn.Module):
 
     def forward(self, state, action):
         xu = torch.cat([state, action], 1)
-        
         x1 = F.relu(self.linear1(xu))
         x1 = F.relu(self.linear2(x1))
         x1 = self.linear3(x1)
@@ -513,16 +512,14 @@ class ResNet(nn.Module):
         return x
 
 class ActorTimestepStatePolicy(nn.Module):
-    def __init__(self, state_dim, hidden_dim=64, disc_output_dim=6, cont_output_dim=1):
+    def __init__(self, state_dim, hidden_dim=64, output_dim=4):
         super(ActorTimestepStatePolicy, self).__init__()
         # Define the layers
         self.fc1 = nn.Linear(state_dim, hidden_dim)
         self.tanh1 = nn.Tanh()
         self.fc2 = nn.Linear(hidden_dim, hidden_dim)
         self.tanh2 = nn.Tanh()
-        self.fc3 = nn.Linear(hidden_dim, disc_output_dim + cont_output_dim)
-        self.softmax = nn.Softmax(dim=-1)
-        self.sigmoid = nn.Sigmoid()
+        self.fc3 = nn.Linear(hidden_dim, output_dim)
 
         self.action_scale = torch.tensor(0.5)
         self.action_bias = torch.tensor(0.5)
@@ -534,45 +531,74 @@ class ActorTimestepStatePolicy(nn.Module):
         x = self.fc2(x)
         x = self.tanh2(x)
         x = self.fc3(x)
-        action_1 = self.softmax(x[:, :6])
-        action_2 = self.sigmoid(x[:, 6:])
-        result = torch.cat((action_1, action_2), dim = 1)
-        return result
+        return x
 
-    
     def sample(self, state):
+        N = state.shape[0]
+        assert state.shape == (N, 10)
         action = self.forward(state)
-        action_probs = action[:, :6]
-        # print("action_probs: ", action_probs.shape)
-        dist_1 = Categorical(action_probs)
-        action_1 = dist_1.sample()
-        action_mean_1 = torch.argmax(action_probs, dim = 1)
+        assert action.shape == (N, 4)
+        
+        ## Action 1
+        action_1_mean_unnorm = action[:, 0]
+        action_1_mean = torch.tanh(action_1_mean_unnorm) * self.action_scale + self.action_bias
+        assert action_1_mean_unnorm.shape == (N,)
+        assert action_1_mean.shape == (N,)
 
-        action_mean = action[:, -2]
-        action_log_std = action[:, -1]
-        action_std = action_log_std.exp()
-        # num_continuous_action = action_mean.shape[0]
-        dist_2 = Normal(action_mean, action_std)
-        x_t = dist_2.rsample()
+        action_1_log_std = action[:, 1]
+        action_1_std = action_1_log_std.exp()
+        action_1_dist = Normal(action_1_mean_unnorm, action_1_std)
+        x_t = action_1_dist.rsample()
+        y_t = torch.tanh(x_t)
+        action_1 = y_t * self.action_scale + self.action_bias
+        assert action_1.shape == (N,)
+
+        action_1_logprob = action_1_dist.log_prob(x_t)
+        # Enforcing Action Bound
+        action_1_logprob -= torch.log(self.action_scale * (1 - y_t.pow(2)) + epsilon)
+        assert action_1_logprob.shape == (N,)
+
+        ## Action 2
+        action_2_mean_unnorm = action[:, -2]
+        action_2_mean = torch.tanh(action_2_mean_unnorm) * self.action_scale + self.action_bias
+        assert action_2_mean_unnorm.shape == (N,)
+        assert action_2_mean.shape == (N,)
+
+        action_2_log_std = action[:, -1]
+        action_2_std = action_2_log_std.exp()
+        action_2_dist = Normal(action_2_mean_unnorm, action_2_std)
+        x_t = action_2_dist.rsample()
         y_t = torch.tanh(x_t)
         action_2 = y_t * self.action_scale + self.action_bias
-        action_logprob_2 = dist_2.log_prob(x_t)
+        assert action_2.shape == (N,)
+
+        action_2_logprob = action_2_dist.log_prob(x_t)
         # Enforcing Action Bound
-        action_logprob_2 -= torch.log(self.action_scale * (1 - y_t.pow(2)) + epsilon)
-        action_logprob_2 = action_logprob_2.unsqueeze(dim=-1)
+        action_2_logprob -= torch.log(self.action_scale * (1 - y_t.pow(2)) + epsilon)
+        assert action_2_logprob.shape == (N,)
 
-        action_logprob_2 = action_logprob_2.sum(1, keepdim=True)
-        action_mean_2 = torch.tanh(action_mean) * self.action_scale + self.action_bias
+        ## Get Action and Env Action
+        action = torch.cat((action_1.unsqueeze(dim=-1), action_2.unsqueeze(dim=-1)), dim=1)
+        assert action.shape == (N, 2)
 
-        # print("action_1: ", action_1.shape)
-        # print("action_2: ", action_2.shape)
-        action = torch.cat((action_1.unsqueeze(dim=-1), action_2.unsqueeze(dim=-1)), dim=-1)
-        action_logprob_1 = dist_1.log_prob(action[:, 0])
-        action_logprob = action_logprob_1 + action_logprob_2
+        env_action = torch.cat((torch.ceil(action[:,0:1]*6-1), action[:,1:2]), dim=1)
+        assert env_action.shape == (N, 2)
+
+        action_logprob = action_1_logprob + action_2_logprob
+        action_logprob = action_logprob.unsqueeze(dim=-1)
+        assert action_logprob.shape == (N, 1)
         
-        mean_action = torch.cat((action_mean_1.unsqueeze(dim=-1), action_mean_2.unsqueeze(dim=-1)), dim=-1)
+        mean_action = torch.cat((action_1_mean.unsqueeze(dim=-1), action_2_mean.unsqueeze(dim=-1)), dim=-1)
+        assert mean_action.shape == (N, 2)
 
-        return action.detach(), action_logprob.detach(), mean_action.detach()
+        info = {
+            'action_1_logprob_mean': action_1_logprob.mean(dim=0).item(),
+            'action_1_logprob_std': action_1_logprob.std(dim=0).item(),
+            'action_2_logprob_mean': action_2_logprob.mean(dim=0).item(),
+            'action_2_logprob_std': action_2_logprob.std(dim=0).item(),
+        }
+
+        return action, action_logprob, mean_action, env_action, info
     
     def to(self, device):
         return super(ActorTimestepStatePolicy, self).to(device)

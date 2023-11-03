@@ -96,7 +96,7 @@ class SAC(object):
                 # self.log_alpha = torch.zeros(1, requires_grad=True, device=self.device)
                 self.alpha_optim = Adam([self.log_alpha], lr=alpha_lr)
 
-            self.policy = ActorTimestepStatePolicy(num_inputs, hidden_dim=64, disc_output_dim=6, cont_output_dim=1).to(self.device)
+            self.policy = ActorTimestepStatePolicy(num_inputs, hidden_dim=hidden_size, output_dim=4).to(self.device)
             # self.policy = ActorTimestepPolicy(ResidualBlock, [3, 4, 6, 3]).to(self.device)
             self.policy_optim = Adam(self.policy.parameters(), lr=actor_lr)
         else:
@@ -108,12 +108,14 @@ class SAC(object):
     def select_action(self, state, evaluate=False):
         # state = torch.FloatTensor(state).unsqueeze(0)
         if evaluate is False:
-            action, _, _ = self.policy.sample(state)
+            action, _, _, env_action, _ = self.policy.sample(state)
         else:
-            _, _, action = self.policy.sample(state)
-        return action.detach()
+            assert False, "env_action corresponds to sampled action, not mean action"
+            _, _, action, env_action, _ = self.policy.sample(state)
+        return action, env_action
 
     def update_parameters(self, memory, batch_size, updates):
+        info = {}
         # Sample a batch from memory
         state_batch, action_batch, reward_batch, next_state_batch, mask_batch = memory.sample(batch_size=batch_size)
         # print("next_state_batch", next_state_batch.shape)
@@ -125,7 +127,7 @@ class SAC(object):
         reward_batch = reward_batch.unsqueeze(1)
         mask_batch = mask_batch.unsqueeze(1)
         with torch.no_grad():
-            next_state_action, next_state_log_pi, _ = self.policy.sample(next_state_batch)
+            next_state_action, next_state_log_pi, _, _, _ = self.policy.sample(next_state_batch)
             qf1_next_target, qf2_next_target = self.critic_target(next_state_batch, next_state_action)
             min_qf_next_target = torch.min(qf1_next_target, qf2_next_target) - self.alpha * next_state_log_pi
             next_q_value = reward_batch + mask_batch * self.gamma * (min_qf_next_target)
@@ -138,7 +140,9 @@ class SAC(object):
         qf_loss.backward()
         self.critic_optim.step()
 
-        pi, log_pi, _ = self.policy.sample(state_batch)
+        pi, log_pi, _, _, pi_info = self.policy.sample(state_batch)
+        for (k, v) in pi_info.items():
+            info['policy_' + k] = v
 
         qf1_pi, qf2_pi = self.critic(state_batch, pi)
         min_qf_pi = torch.min(qf1_pi, qf2_pi)
@@ -166,7 +170,19 @@ class SAC(object):
         if updates % self.target_update_interval == 0:
             soft_update(self.critic_target, self.critic, self.tau)
 
-        return qf1_loss.item(), qf2_loss.item(), policy_loss.item(), alpha_loss.item(), alpha_tlogs.item()
+        info.update({
+            'critic_1_loss': qf1_loss.item(), 
+            'critic_2_loss': qf2_loss.item(), 
+            'policy_loss': policy_loss.item(), 
+            'policy_log_prob_mean': log_pi.mean(dim=0).item(),
+            'policy_log_prob_std': log_pi.std(dim=0).item(),
+            'min_qf_pi_mean': min_qf_pi.mean(dim=0).item(),
+            'min_qf_pi_std': min_qf_pi.std(dim=0).item(),
+            'ent_loss': alpha_loss.item(), 
+            'alpha': alpha_tlogs.item(),
+            'alpha_loss': alpha_loss.item(),
+        })
+        return info
 
     # Save model parameters
     def save_checkpoint(self, env_name, policy_name, suffix="", ckpt_path=None):
