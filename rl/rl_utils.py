@@ -3,9 +3,6 @@ import glob
 import time
 from datetime import datetime
 
-import isaacgym
-import isaacgymenvs
-
 import torch
 import torch.nn as nn
 from torch.distributions import MultivariateNormal
