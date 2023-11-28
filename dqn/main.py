@@ -19,6 +19,7 @@ wandb.login()
 parser = argparse.ArgumentParser()
 parser.add_argument('--dvc', type=str, default='cuda', help='running device: cuda or cpu')
 parser.add_argument('--EnvIdex', type=int, default=0, help='CP-v1, LLd-v2')
+parser.add_argument('--num_envs', type=int, default=1, help='number of envs')
 parser.add_argument('--write', type=str2bool, default=False, help='Use SummaryWriter to record the training')
 parser.add_argument('--render', type=str2bool, default=False, help='Render or Not')
 parser.add_argument('--res_net', type=str2bool, default=False, help='Use resnet or not')
@@ -27,10 +28,10 @@ parser.add_argument('--ModelIdex', type=int, default=250*1000, help='which model
 
 parser.add_argument('--seed', type=int, default=0, help='random seed')
 parser.add_argument('--Max_train_steps', type=int, default=int(1e6), help='Max training steps')
-parser.add_argument('--save_interval', type=int, default=int(5e4), help='Model saving interval, in steps.')
-parser.add_argument('--eval_interval', type=int, default=int(1e3), help='Model evaluating interval, in steps.')
-parser.add_argument('--random_steps', type=int, default=int(3e3), help='steps for random policy to explore')
-parser.add_argument('--update_every', type=int, default=50, help='training frequency')
+parser.add_argument('--save_interval', type=int, default=int(10), help='Model saving interval, in steps.')
+parser.add_argument('--eval_interval', type=int, default=int(10), help='Model evaluating interval, in steps.')
+parser.add_argument('--random_steps', type=int, default=int(40), help='steps for random policy to explore')
+parser.add_argument('--update_every', type=int, default=10, help='training frequency')
 
 parser.add_argument('--gamma', type=float, default=0.99, help='Discounted Factor')
 parser.add_argument('--net_width', type=int, default=200, help='Hidden net width')
@@ -56,7 +57,7 @@ def main():
     # opt.max_e_steps = env._max_episode_steps
 
     env_name = "RL_UR16eManipulation_Full_Nocam"
-    ne = 1
+    ne = opt.num_envs
     head_less = not opt.render
     DEVICE = "cuda:0"
     DEVICE_ID = 0
@@ -100,7 +101,8 @@ def main():
     #Build model and replay buffer
     if not os.path.exists('model'): os.mkdir('model')
     agent = DQN_agent(**vars(opt))
-    if opt.Loadmodel: agent.load(algo_name, "L", opt.ModelIdex)
+    if opt.Loadmodel: agent.load("DDQN_2023-11-20_09-52-45", "L", opt.ModelIdex)
+    buf_envs = [RolloutBuffer() for _ in range(ne)]
     
     # env.reset()
     actions = torch.tensor(ne * [[0.11, 0., 0.28, 0.22]]).to(DEVICE)
@@ -126,6 +128,8 @@ def main():
         print_running_reward = 0
         print_running_ep = 0
         total_steps = 0
+        update_steps = 0
+        eval_steps = 0 
         while total_steps < opt.Max_train_steps:
             # s, info = env.reset(seed=env_seed) # Do not use opt.seed directly, or it can overfit to opt.seed
             # env_seed += 1
@@ -137,19 +141,33 @@ def main():
                 #e-greedy exploration
                 if total_steps < opt.random_steps and not opt.eval: 
                     # a = action_space.sample()
-                    a = torch.randint(0, 6, (1,)).to(DEVICE)
-                    a = torch.cat((a, torch.tensor([1.0]).to(DEVICE)), dim=0).unsqueeze(0)
+                    a = torch.randint(0, 6, (true_indicies.shape[0], 1)).to(DEVICE)
+                    assert a.shape == (true_indicies.shape[0], 1)
+                    a = torch.concat((a, torch.ones(true_indicies.shape[0], 1).to(DEVICE)), dim = 1).to(DEVICE)
+                    assert a.shape == (true_indicies.shape[0], 2)
                 else: 
+                    assert s.shape == (true_indicies.shape[0], 10)
                     if opt.eval:
                         a = agent.select_action(s, deterministic=True)
                     else:
                         a = agent.select_action(s, deterministic=False)
-                    a = torch.tensor([a, 1.0]).to(DEVICE).unsqueeze(0)
-                print("action: ", a)
+                    assert a.shape == (true_indicies.shape[0], 1)
+                    a = torch.concat((a, torch.ones(true_indicies.shape[0], 1).to(DEVICE)), dim = 1).to(DEVICE)
+                    assert a.shape == (true_indicies.shape[0], 2)
+                for i, true_i in enumerate(true_indicies):
+                    buf_envs[true_i].states.append(s[i].unsqueeze(0).clone().detach())
+                    buf_envs[true_i].actions.append(a[i].clone().detach())
+                    if true_i == 0:
+                        print("action of env 0 updated", a[i])
                 env_action = convert_actions(a, real_ys, real_dxs, sim_device=DEVICE)
                 # s_next, r, dw, tr, info = env.step(a) # dw: dead&win; tr: truncated
-                next_state, _, r, dw, true_indicies = step_primitives(env_action, env)
-                print_running_reward += r
+                assert env_action.shape == (true_indicies.shape[0], 4)
+                assert actions.shape == (ne, 4)
+                create_env_action_via_true_indicies(true_indicies, env_action, actions, ne, DEVICE)
+                assert actions.shape == (ne, 4)
+                next_state, _, r, dw, true_indicies = step_primitives(actions, env)
+                for i in range(true_indicies.shape[0]):
+                    print_running_reward += r[i]
                 if opt.res_net:
                     real_ys, real_dxs = get_real_ys_dxs(next_state)
                     state = rearrange_state_timestep(next_state)
@@ -164,24 +182,38 @@ def main():
                 # done = (dw or tr)
                 done = dw
 
-                if opt.EnvIdex == 1:
-                    if r <= -100: r = -10  # good for LunarLander
-                agent.replay_buffer.add(s, a.squeeze(0)[0], r, s_next, dw)
+                for i, true_i in enumerate(true_indicies):
+                    if len(buf_envs[true_i].rewards) != len(buf_envs[true_i].states):
+                        buf_envs[true_i].rewards.append(r[i].clone().detach().unsqueeze(0))
+                        # buf_envs[true_i].scraps.append(scrap[i].clone().detach().unsqueeze(0))
+                        buf_envs[true_i].is_terminals.append(done[i].clone().detach().unsqueeze(0))
+                        buf_envs[true_i].new_states.append(s_next[i].unsqueeze(0).clone().detach())
+                    if(len(buf_envs[true_i].is_terminals) != 0 and buf_envs[true_i].is_terminals[-1] == True):
+                        for i in range(len(buf_envs[true_i].states)):
+                            agent.replay_buffer.add(buf_envs[true_i].states[i], buf_envs[true_i].actions[i], buf_envs[true_i].rewards[i], buf_envs[true_i].new_states[i], buf_envs[true_i].is_terminals[i])
+                        buf_envs[true_i].clear()
+                    total_steps += 1
+                    update_steps += 1
+                    eval_steps += 1
+                    print_running_ep += 1
                 s = s_next
                 state = next_state
 
                 '''update if its time'''
                 # train 50 times every 50 steps rather than 1 training per step. Better!
-                if total_steps >= opt.random_steps and total_steps % opt.update_every == 0:
+                if total_steps >= opt.random_steps and update_steps >= opt.update_every:
                     for j in range(opt.update_every): agent.train()
+                    update_steps -= opt.update_every
 
                 '''record & log'''
                 '''TOOD: add wandb log to record the training'''
-                if total_steps % opt.eval_interval == 0:
+                if eval_steps >= opt.eval_interval:
                     if opt.write:
+                        print("total_steps: ", total_steps, " print_running_reward: ", print_running_reward, " avg_score: ", print_running_reward/print_running_ep)
                         wandb.log({'score': print_running_reward, 'steps': total_steps, 'avg_score': print_running_reward/print_running_ep})
                         print_running_reward = 0
                         print_running_ep = 0
+                    eval_steps -= opt.eval_interval 
 
 
                 # if total_steps % opt.eval_interval == 0:
@@ -192,11 +224,10 @@ def main():
                 #         writer.add_scalar('noise', agent.exp_noise, global_step=total_steps)
                 #     print('EnvName:',env_name[opt.EnvIdex],'seed:',opt.seed,'steps: {}k'.format(int(total_steps/1000)),'score:', int(score))
                 #     wandb.log({'score': score, 'noise': agent.exp_noise, 'steps': total_steps})
-                total_steps += 1
-                print_running_ep += 1
+
 
                 '''save model'''
-                if total_steps % opt.save_interval == 0:
+                if total_steps >= opt.save_interval == 0:
                     name = algo_name + '_' + datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
                     agent.save(name ,env_name[opt.EnvIdex],total_steps)
     env.close()

@@ -40,14 +40,20 @@ class DQN_agent(object):
 
 	def select_action(self, state, deterministic):#only used when interact with the env
 		with torch.no_grad():
-			state = torch.FloatTensor(state.reshape(1, -1).cpu()).to(self.dvc)
+			# state = torch.FloatTensor(state.reshape(1, -1).cpu()).to(self.dvc)
+			N = state.shape[0]
+			assert state.shape == (N, self.state_dim)
 			if deterministic:
-				a = self.q_net(state).argmax().item()
+				a = self.q_net(state).argmax(dim=1)
 			else:
 				if np.random.rand() < self.exp_noise:
 					a = np.random.randint(0,self.action_dim)
 				else:
-					a = self.q_net(state).argmax().item()
+					a = self.q_net(state).argmax(dim=1)
+			if type(a) == int:
+				a = torch.tensor(a, dtype=torch.long, device=self.dvc).unsqueeze(-1)
+			a = a.unsqueeze(-1)
+			assert a.shape == (N, 1)
 		return a
 
 
@@ -108,11 +114,19 @@ class ReplayBuffer(object):
 		self.dw = torch.zeros((max_size, 1),dtype=torch.bool,device=self.dvc)
 
 	def add(self, s, a, r, s_next, dw):
-		self.s[self.ptr] = s.to(self.dvc)
-		self.a[self.ptr] = a
-		self.r[self.ptr] = r
-		self.s_next[self.ptr] = s_next.to(self.dvc)
-		self.dw[self.ptr] = dw
+		# self.s[self.ptr] = s.to(self.dvc)
+		# self.a[self.ptr] = a
+		# self.r[self.ptr] = r
+		# self.s_next[self.ptr] = s_next.to(self.dvc)
+		# self.dw[self.ptr] = dw
+		for i in range(s.shape[0]):
+			self.s[self.ptr] = s[i].to(self.dvc)
+			self.a[self.ptr] = a[i]
+			self.r[self.ptr] = r[i]
+			self.s_next[self.ptr] = s_next[i].to(self.dvc)
+			self.dw[self.ptr] = dw[i]
+			self.ptr = (self.ptr + 1) % self.max_size
+			self.size = min(self.size + 1, self.max_size)
 
 		self.ptr = (self.ptr + 1) % self.max_size
 		self.size = min(self.size + 1, self.max_size)
