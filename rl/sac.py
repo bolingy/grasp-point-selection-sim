@@ -96,7 +96,7 @@ class SAC(object):
                 # self.log_alpha = torch.zeros(1, requires_grad=True, device=self.device)
                 self.alpha_optim = Adam([self.log_alpha], lr=alpha_lr)
 
-            self.policy = ActorTimestepStatePolicy(num_inputs, hidden_dim=hidden_size, output_dim=4).to(self.device)
+            self.policy = ActorTimestepStatePolicy(num_inputs, hidden_dim=hidden_size, output_dim=4).to(self.devicwe)
             # self.policy = ActorTimestepPolicy(ResidualBlock, [3, 4, 6, 3]).to(self.device)
             self.policy_optim = Adam(self.policy.parameters(), lr=actor_lr)
         else:

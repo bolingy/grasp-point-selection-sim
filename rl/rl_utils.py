@@ -245,7 +245,7 @@ def convert_actions(action, real_y, real_dx, sim_device='cuda:0'):
 	result_dx = (- real_dx.gather(1, (action[:, 0].long().unsqueeze(1)) // 2)) - 0.95
 	sign = torch.ones(action.shape[0]).to(sim_device)
 	sign[action[:, 0] % 2 == 1] = -1
-	action[:, 1] = action[:, 1] * 0.11 * sign
+	action[:, 1] = action[:, 1] * 0.15 * sign
 	result_y = (result_y - 40) / 260 * (-0.35) + 0.12
 	result = torch.cat((result_y, z, result_dx, action[:, 1].unsqueeze(1)), dim=1)
 	# print("result: ", result)

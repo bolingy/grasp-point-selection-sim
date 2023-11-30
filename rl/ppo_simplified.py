@@ -97,7 +97,7 @@ class ActorCritic(nn.Module):
                             nn.Softmax(dim=-1)
                         )
 
-        self.actor = nn.DataParallel(self.actor, device_ids=[1,2,3], output_device=self.device)
+        self.actor = nn.DataParallel(self.actor, device_ids=[0], output_device=self.device)
 
         
         # critic
@@ -111,7 +111,7 @@ class ActorCritic(nn.Module):
                             nn.Tanh(),
                             nn.Linear(64, 1)
                         )
-        self.critic = nn.DataParallel(self.critic, device_ids=[1,2,3],  output_device=self.device)
+        self.critic = nn.DataParallel(self.critic, device_ids=[0],  output_device=self.device)
         
         
     def set_action_std(self, new_action_std):
