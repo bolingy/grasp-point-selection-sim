@@ -13,7 +13,85 @@ def build_net(layer_shape, activation, output_activation):
 		layers += [nn.Linear(layer_shape[j], layer_shape[j+1]), act()]
 	return nn.Sequential(*layers)
 
+class ActorTimestepNet(nn.Module):
+    def __init__(self, block, layers, num_classes = 10):
+        super(ActorTimestepNet, self).__init__()
+        self.inplanes = 64
+        self.conv1 = nn.Sequential(
+                        nn.Conv2d(2, 64, kernel_size = 7, stride = 2, padding = 3),
+                        nn.BatchNorm2d(64),
+                        nn.ReLU())
+        self.maxpool = nn.MaxPool2d(kernel_size = 3, stride = 2, padding = 1)
+        self.layer0 = self._make_layer(block, 64, layers[0], stride = 3)
+        self.avgpool = nn.AvgPool2d(8, stride=2)
+        self.fc = nn.Linear(2548, num_classes)
+        self.sigmoid = nn.Sigmoid()
+        self.softmax = nn.Softmax(dim = 1)
+        
+    def _make_layer(self, block, planes, blocks, stride=1):
+        downsample = None
+        if stride != 1 or self.inplanes != planes:
+            
+            downsample = nn.Sequential(
+                nn.Conv2d(self.inplanes, planes, kernel_size=1, stride=stride),
+                nn.BatchNorm2d(planes),
+            )
+        layers = []
+        layers.append(block(self.inplanes, planes, stride, downsample))
+        self.inplanes = planes
+        for i in range(1, blocks):
+            layers.append(block(self.inplanes, planes))
 
+        return nn.Sequential(*layers)
+    
+    
+    def forward(self, x):
+        # print("x: ", x.shape)
+        # last channel is the timestep
+        timestep = x[:, -1]
+        # x only first 2 channels
+        x = x[:, :-1]
+        # print("x: ", x.shape)
+
+        # flatten timestep and make it 500 x 1
+        timestep = timestep.view(timestep.shape[0], -1)
+        timestep = timestep[:, :500]
+        # print("timestep: ", timestep.shape)
+        x = self.conv1(x)
+        x = self.maxpool(x)
+        x = self.layer0(x)
+        x = self.avgpool(x)
+        x = x.view(x.size(0), -1)
+        # concatenate timestep to x
+        x = torch.cat((x, timestep), dim = 1)
+        x = self.fc(x)
+        x = self.softmax(x)
+        return x
+
+class ResidualBlock(nn.Module):
+    def __init__(self, in_channels, out_channels, stride = 1, downsample = None):
+        super(ResidualBlock, self).__init__()
+        self.conv1 = nn.Sequential(
+                        nn.Conv2d(in_channels, out_channels, kernel_size = 3, stride = stride, padding = 1),
+                        nn.BatchNorm2d(out_channels),
+                        nn.ReLU())
+        self.conv2 = nn.Sequential(
+                        nn.Conv2d(out_channels, out_channels, kernel_size = 3, stride = 1, padding = 1),
+                        nn.BatchNorm2d(out_channels))
+        self.downsample = downsample
+        self.relu = nn.ReLU()
+        self.out_channels = out_channels
+        
+    def forward(self, x):
+        residual = x
+        out = self.conv1(x)
+        out = self.conv2(out)
+        if self.downsample:
+            residual = self.downsample(x)
+        out += residual
+        out = self.relu(out)
+        return out
+    
 class Q_Net(nn.Module):
 	def __init__(self, state_dim, action_dim, hid_shape):
 		super(Q_Net, self).__init__()
@@ -29,9 +107,11 @@ class DQN_agent(object):
 		# Init hyperparameters for agent, just like "self.gamma = opt.gamma, self.lambd = opt.lambd, ..."
 		self.__dict__.update(kwargs)
 		self.tau = 0.005
-		self.replay_buffer = ReplayBuffer(self.state_dim, self.dvc, max_size=int(1e6))
-
-		self.q_net = Q_Net(self.state_dim, self.action_dim, (self.net_width,self.net_width)).to(self.dvc)
+		self.replay_buffer = ReplayBuffer(self.state_dim, self.dvc, self.res_net, max_size=int(1e2))
+		if self.res_net:
+			self.q_net = ActorTimestepNet(block = ResidualBlock, layers = [3, 4, 6, 3], num_classes=6).to(self.dvc)
+		else:
+			self.q_net = Q_Net(self.state_dim, self.action_dim, (self.net_width,self.net_width)).to(self.dvc)
 		self.q_net_optimizer = torch.optim.Adam(self.q_net.parameters(), lr=self.lr)
 		self.q_target = copy.deepcopy(self.q_net)
 		# Freeze target networks with respect to optimizers (only update via polyak averaging)
@@ -42,7 +122,10 @@ class DQN_agent(object):
 		with torch.no_grad():
 			# state = torch.FloatTensor(state.reshape(1, -1).cpu()).to(self.dvc)
 			N = state.shape[0]
-			assert state.shape == (N, self.state_dim)
+			if self.res_net:
+				assert state.shape == (N, 3, 180, 260)
+			else:
+				assert state.shape == (N, self.state_dim)
 			if deterministic:
 				a = self.q_net(state).argmax(dim=1)
 			else:
@@ -60,7 +143,10 @@ class DQN_agent(object):
 
 	def train(self):
 		s, a, r, s_next, dw = self.replay_buffer.sample(self.batch_size)
-		assert s.shape == s_next.shape == (self.batch_size, self.state_dim)
+		if self.res_net:
+			assert s.shape == s_next.shape == (self.batch_size, 3, 180, 260)
+		else:
+			assert s.shape == s_next.shape == (self.batch_size, self.state_dim)
 		assert a.shape == r.shape == dw.shape == (self.batch_size, 1)
 
 		'''Compute the target Q value'''
@@ -102,16 +188,21 @@ class DQN_agent(object):
 
 
 class ReplayBuffer(object):
-	def __init__(self, state_dim, dvc, max_size=int(1e6)):
+	def __init__(self, state_dim, dvc, res_net, max_size=int(1e6)):
 		self.max_size = max_size
 		self.dvc = dvc
 		self.ptr = 0
 		self.size = 0
-
-		self.s = torch.zeros((max_size, state_dim),dtype=torch.float,device=self.dvc)
+		if res_net:
+			self.s = torch.zeros((max_size, 3, 180, 260),dtype=torch.float,device=self.dvc)
+		else:
+			self.s = torch.zeros((max_size, state_dim),dtype=torch.float,device=self.dvc)
 		self.a = torch.zeros((max_size, 1),dtype=torch.long,device=self.dvc)
 		self.r = torch.zeros((max_size, 1),dtype=torch.float,device=self.dvc)
-		self.s_next = torch.zeros((max_size, state_dim),dtype=torch.float,device=self.dvc)
+		if res_net:
+			self.s_next = torch.zeros((max_size, 3, 180, 260),dtype=torch.float,device=self.dvc)
+		else:
+			self.s_next = torch.zeros((max_size, state_dim),dtype=torch.float,device=self.dvc)
 		self.dw = torch.zeros((max_size, 1),dtype=torch.bool,device=self.dvc)
 
 	def add(self, s, a, r, s_next, dw):

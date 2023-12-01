@@ -56,7 +56,7 @@ def main():
     # opt.action_dim = env.action_space.n
     # opt.max_e_steps = env._max_episode_steps
 
-    env_name = "RL_UR16eManipulation_Full_Nocam"
+    env_name = "RL_UR16eManipulation_Full"
     ne = opt.num_envs
     head_less = not opt.render
     DEVICE = "cuda:0"
@@ -101,7 +101,7 @@ def main():
     #Build model and replay buffer
     if not os.path.exists('model'): os.mkdir('model')
     agent = DQN_agent(**vars(opt))
-    if opt.Loadmodel: agent.load("DDQN_2023-11-29_18-12-07", "L", opt.ModelIdex)
+    if opt.Loadmodel: agent.load("DDQN_2023-12-01_06-25-48", "L", opt.ModelIdex)
     buf_envs = [RolloutBuffer() for _ in range(ne)]
     
     # env.reset()
@@ -110,13 +110,13 @@ def main():
     state, _, r, dw, true_indicies = returns_to_device(state, scrap, reward, done, true_indicies, DEVICE)
     if opt.res_net:
         real_ys, real_dxs = get_real_ys_dxs(state)
-        state = rearrange_state_timestep(state)
+        s = rearrange_state_timestep(state)
     else:
         s = state[:, -10:]
         state = state[:, :-10]
         real_ys, real_dxs = get_real_ys_dxs(state)
         state = rearrange_state(state)
-    s = normalize_state(s).to(DEVICE)
+        s = normalize_state(s).to(DEVICE)
 
 
     # if opt.render:
@@ -147,7 +147,11 @@ def main():
                     a = torch.concat((a, torch.ones(true_indicies.shape[0], 1).to(DEVICE)), dim = 1).to(DEVICE)
                     assert a.shape == (true_indicies.shape[0], 2)
                 else: 
-                    assert s.shape == (true_indicies.shape[0], 10)
+                    if opt.res_net:
+                        assert s.shape == (true_indicies.shape[0], 3, 180, 260), "Expected shape {}, got {}".format((true_indicies.shape[0], 3, 180, 260), s.shape)
+                    else:
+                        assert s.shape == (true_indicies.shape[0], 10)
+
                     if opt.eval:
                         a = agent.select_action(s, deterministic=True)
                     else:
@@ -171,13 +175,14 @@ def main():
                     print_running_reward += r[i]
                 if opt.res_net:
                     real_ys, real_dxs = get_real_ys_dxs(next_state)
-                    state = rearrange_state_timestep(next_state)
+                    next_state = rearrange_state_timestep(next_state)
+                    s_next = next_state
                 else:
                     s_next = next_state[:, -10:]
                     next_state = next_state[:, :-10]
                     real_ys, real_dxs = get_real_ys_dxs(next_state)
                     next_state = rearrange_state(next_state)
-                s_next = normalize_state(s_next)  
+                    s_next = normalize_state(s_next)  
 
                 
                 # done = (dw or tr)
