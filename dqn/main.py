@@ -35,7 +35,7 @@ parser.add_argument('--update_every', type=int, default=10, help='training frequ
 
 parser.add_argument('--gamma', type=float, default=0.99, help='Discounted Factor')
 parser.add_argument('--net_width', type=int, default=200, help='Hidden net width')
-parser.add_argument('--lr', type=float, default=1e-4, help='Learning rate')
+parser.add_argument('--lr', type=float, default=1e-7, help='Learning rate')
 parser.add_argument('--batch_size', type=int, default=512, help='length of sliced trajectory')
 parser.add_argument('--exp_noise', type=float, default=0.2, help='explore noise')
 parser.add_argument('--noise_decay', type=float, default=0.99, help='decay rate of explore noise')
@@ -101,7 +101,7 @@ def main():
     #Build model and replay buffer
     if not os.path.exists('model'): os.mkdir('model')
     agent = DQN_agent(**vars(opt))
-    if opt.Loadmodel: agent.load("DDQN_2023-11-20_09-52-45", "L", opt.ModelIdex)
+    if opt.Loadmodel: agent.load("DDQN_2023-11-29_18-12-07", "L", opt.ModelIdex)
     buf_envs = [RolloutBuffer() for _ in range(ne)]
     
     # env.reset()
@@ -130,14 +130,15 @@ def main():
         total_steps = 0
         update_steps = 0
         eval_steps = 0 
+        save_steps = 0
         while total_steps < opt.Max_train_steps:
             # s, info = env.reset(seed=env_seed) # Do not use opt.seed directly, or it can overfit to opt.seed
             # env_seed += 1
             
-            done = False
+            # done = False
 
-            '''Interact & trian'''
-            while not done:
+            # '''Interact & trian'''
+            # while not done:
                 #e-greedy exploration
                 if total_steps < opt.random_steps and not opt.eval: 
                     # a = action_space.sample()
@@ -151,7 +152,7 @@ def main():
                         a = agent.select_action(s, deterministic=True)
                     else:
                         a = agent.select_action(s, deterministic=False)
-                    assert a.shape == (true_indicies.shape[0], 1)
+                    assert a.shape == (true_indicies.shape[0], 1), "Expected shape {}, got {}".format((true_indicies.shape[0], 1), a.shape)
                     a = torch.concat((a, torch.ones(true_indicies.shape[0], 1).to(DEVICE)), dim = 1).to(DEVICE)
                     assert a.shape == (true_indicies.shape[0], 2)
                 for i, true_i in enumerate(true_indicies):
@@ -191,22 +192,23 @@ def main():
                     if(len(buf_envs[true_i].is_terminals) != 0 and buf_envs[true_i].is_terminals[-1] == True):
                         for i in range(len(buf_envs[true_i].states)):
                             agent.replay_buffer.add(buf_envs[true_i].states[i], buf_envs[true_i].actions[i], buf_envs[true_i].rewards[i], buf_envs[true_i].new_states[i], buf_envs[true_i].is_terminals[i])
+                        print_running_ep += 1
+                        total_steps += 1
+                        update_steps += 1
+                        eval_steps += 1
+                        save_steps += 1
                         buf_envs[true_i].clear()
-                    total_steps += 1
-                    update_steps += 1
-                    eval_steps += 1
-                    print_running_ep += 1
+
                 s = s_next
                 state = next_state
 
                 '''update if its time'''
                 # train 50 times every 50 steps rather than 1 training per step. Better!
-                if total_steps >= opt.random_steps and update_steps >= opt.update_every:
+                if total_steps >= opt.random_steps and update_steps >= opt.update_every and not opt.eval:
                     for j in range(opt.update_every): agent.train()
                     update_steps -= opt.update_every
 
                 '''record & log'''
-                '''TOOD: add wandb log to record the training'''
                 if eval_steps >= opt.eval_interval:
                     if opt.write:
                         print("total_steps: ", total_steps, " print_running_reward: ", print_running_reward, " avg_score: ", print_running_reward/print_running_ep)
@@ -227,9 +229,11 @@ def main():
 
 
                 '''save model'''
-                if total_steps >= opt.save_interval == 0:
+                if save_steps >= opt.save_interval and not opt.eval:
                     name = algo_name + '_' + datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+                    print('Saving model to', name)
                     agent.save(name ,env_name[opt.EnvIdex],total_steps)
+                    save_steps -= opt.save_interval
     env.close()
     # eval_env.close()
 

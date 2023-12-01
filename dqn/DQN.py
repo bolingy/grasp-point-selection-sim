@@ -47,13 +47,14 @@ class DQN_agent(object):
 				a = self.q_net(state).argmax(dim=1)
 			else:
 				if np.random.rand() < self.exp_noise:
-					a = np.random.randint(0,self.action_dim)
+					# size of N
+					a = torch.randint(self.action_dim, (N,), device=self.dvc)
 				else:
 					a = self.q_net(state).argmax(dim=1)
 			if type(a) == int:
 				a = torch.tensor(a, dtype=torch.long, device=self.dvc).unsqueeze(-1)
 			a = a.unsqueeze(-1)
-			assert a.shape == (N, 1)
+			assert a.shape == (N, 1), "Expected shape {}, got {}, a = {}".format((N, 1), a.shape, a)
 		return a
 
 
