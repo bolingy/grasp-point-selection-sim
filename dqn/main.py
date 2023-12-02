@@ -18,7 +18,7 @@ wandb.login()
 '''Hyperparameter Setting'''
 parser = argparse.ArgumentParser()
 parser.add_argument('--dvc', type=str, default='cuda', help='running device: cuda or cpu')
-parser.add_argument('--EnvIdex', type=int, default=0, help='CP-v1, LLd-v2')
+parser.add_argument('--EnvIdex', type=int, default=0, help='Full_Nocam or Full')
 parser.add_argument('--num_envs', type=int, default=1, help='number of envs')
 parser.add_argument('--write', type=str2bool, default=False, help='Use SummaryWriter to record the training')
 parser.add_argument('--render', type=str2bool, default=False, help='Render or Not')
@@ -48,15 +48,14 @@ print(opt)
 
 
 def main():
-    # EnvName = ['CartPole-v1','LunarLander-v2']
-    # BriefEnvName = ['CPV1', 'LLdV2']
-    # env = gym.make(EnvName[opt.EnvIdex], render_mode = "human" if opt.render else None)
-    # eval_env = gym.make(EnvName[opt.EnvIdex])
-    # opt.state_dim = env.observation_space.shape[0]
-    # opt.action_dim = env.action_space.n
-    # opt.max_e_steps = env._max_episode_steps
-
-    env_name = "RL_UR16eManipulation_Full"
+    if opt.EnvIdex == 0 and opt.res_net:
+        print("RL_UR16eManipulation_Full_Nocam (EnvIdex 0) does not support resnet")
+        return
+    elif opt.EnvIdex == 1 and not opt.res_net:
+        print("RL_UR16eManipulation_Full (EnvIdex 1) only supports resnet")
+        return
+    env_name_lst = ['RL_UR16eManipulation_Full_Nocam', 'RL_UR16eManipulation_Full']
+    env_name = env_name_lst[opt.EnvIdex]
     ne = opt.num_envs
     head_less = not opt.render
     DEVICE = "cuda:0"
@@ -210,7 +209,7 @@ def main():
                 '''update if its time'''
                 # train 50 times every 50 steps rather than 1 training per step. Better!
                 if total_steps >= opt.random_steps and update_steps >= opt.update_every and not opt.eval:
-                    for j in range(opt.update_every): agent.train()
+                    for j in range(1): agent.train()
                     update_steps -= opt.update_every
 
                 '''record & log'''
