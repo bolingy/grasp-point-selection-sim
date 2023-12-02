@@ -235,7 +235,7 @@ def main():
                 '''save model'''
                 if save_steps >= opt.save_interval and not opt.eval:
                     name = algo_name + '_' + datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-                    print('Saving model to', name)
+                    print('Saving model {} at {} steps'.format(name, total_steps)) 
                     agent.save(name ,env_name[opt.EnvIdex],total_steps)
                     save_steps -= opt.save_interval
     env.close()
