@@ -107,7 +107,7 @@ class DQN_agent(object):
 		# Init hyperparameters for agent, just like "self.gamma = opt.gamma, self.lambd = opt.lambd, ..."
 		self.__dict__.update(kwargs)
 		self.tau = 0.005
-		self.replay_buffer = ReplayBuffer(self.state_dim, self.dvc, self.res_net, max_size=int(1e2))
+		self.replay_buffer = ReplayBuffer(self.state_dim, self.dvc, self.res_net, max_size=int(1e4))
 		if self.res_net:
 			self.q_net = ActorTimestepNet(block = ResidualBlock, layers = [3, 4, 6, 3], num_classes=6).to(self.dvc)
 		else:
