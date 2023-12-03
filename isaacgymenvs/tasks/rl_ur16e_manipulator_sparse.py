@@ -319,7 +319,7 @@ class RL_UR16eManipulation(VecTask):
         asset_options.use_mesh_materials = True
 
         self.object_models = []
-        objects_file = open('misc/object_list_domain_randomization.txt', 'r')
+        objects_file = open('/home/henri/grasp-point-selection-sim-parallelization/misc/object_list_domain_randomization.txt', 'r')
         objects = objects_file.readlines()
 
         self.object_count_unique = 0
@@ -1885,7 +1885,8 @@ class RL_UR16eManipulation(VecTask):
                             env_complete_reset = torch.cat(
                                 (env_complete_reset, torch.tensor([env_count])), axis=0)
                             print("Object out of bin 1")
-                            self.success[env_count] = 1
+                            ## Patrick: only use 0/0/1 sparse reward for now instead of 0/1/2
+                            self.success[env_count] = 0 #1
 
                     _all_object_position_error = torch.abs(
                         _all_object_position_error)
@@ -2176,7 +2177,8 @@ class RL_UR16eManipulation(VecTask):
                                 self.force_list_save[env_count])
                             self.success[env_count] = False
                             if (score_gripper > torch.tensor(0.1) and oscillation == False):
-                                self.success[env_count] = 2
+                                ## Patrick: only use 0/0/1 sparse reward for now instead of 0/1/2
+                                self.success[env_count] = 1 #2
                             penetration = False
                             if (score_gripper == torch.tensor(0)):
                                 penetration = True
