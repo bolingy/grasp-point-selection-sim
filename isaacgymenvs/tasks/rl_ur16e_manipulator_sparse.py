@@ -319,7 +319,7 @@ class RL_UR16eManipulation(VecTask):
         asset_options.use_mesh_materials = True
 
         self.object_models = []
-        objects_file = open('/home/henri/grasp-point-selection-sim-parallelization/misc/object_list_domain_randomization.txt', 'r')
+        objects_file = open('../misc/object_list_domain_randomization.txt', 'r')
         objects = objects_file.readlines()
 
         self.object_count_unique = 0
@@ -794,7 +794,7 @@ class RL_UR16eManipulation(VecTask):
             offset_objects = [offset_object2, offset_object3, offset_object1]
             # add gaussian noise to the first 2 elements of the 3 offsets
             mean = 0
-            std_dev = 0.02
+            std_dev = 0.00
             offset_objects = [np.concatenate([offset[:2] + np.random.normal(mean, std_dev, 2), offset[2:]]) for offset in offset_objects]
             # print("noisy offset object", noisy_offset_objects)
 
