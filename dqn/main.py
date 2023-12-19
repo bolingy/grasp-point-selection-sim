@@ -1,4 +1,9 @@
 from utils import evaluate_policy, str2bool
+import sys
+import os
+current = os.path.dirname(os.path.realpath(__file__))
+parent = os.path.dirname(current)
+sys.path.append(parent)
 import isaacgym
 import isaacgymenvs
 from datetime import datetime
