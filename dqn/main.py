@@ -29,6 +29,7 @@ parser.add_argument('--write', type=str2bool, default=False, help='Use SummaryWr
 parser.add_argument('--render', type=str2bool, default=False, help='Render or Not')
 parser.add_argument('--res_net', type=str2bool, default=False, help='Use resnet or not')
 parser.add_argument('--Loadmodel', type=str2bool, default=False, help='Load pretrained model or Not')
+parser.add_argument('--ModelName', type=str, default='DDQN_2023-12-06_03-56-03', help='Model name to load')
 parser.add_argument('--ModelIdex', type=int, default=250*1000, help='which model to load')
 
 parser.add_argument('--seed', type=int, default=0, help='random seed')
@@ -105,7 +106,7 @@ def main():
     #Build model and replay buffer
     if not os.path.exists('model'): os.mkdir('model')
     agent = DQN_agent(**vars(opt))
-    if opt.Loadmodel: agent.load("DDQN_2023-12-06_03-56-03", "L", opt.ModelIdex)
+    if opt.Loadmodel: agent.load(opt.ModelName, "L", opt.ModelIdex)
     buf_envs = [RolloutBuffer() for _ in range(ne)]
     
     # env.reset()
