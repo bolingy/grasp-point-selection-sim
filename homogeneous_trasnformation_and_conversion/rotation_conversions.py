@@ -66,7 +66,7 @@ def quaternion_to_euler_angles(quaternion: torch.Tensor, convention: str, degree
     rot_matrix = quaternion_to_matrix(quaternion)
     euler_angles = matrix_to_euler_angles(rot_matrix, convention=convention)
 
-    return torch.tensor(euler_angles).to(quaternion.device)
+    return euler_angles.clone().detach().to(quaternion.device)
 
 def matrix_to_quaternion(matrix: torch.Tensor) -> torch.Tensor:
     """
