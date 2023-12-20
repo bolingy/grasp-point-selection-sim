@@ -107,7 +107,7 @@ class DQN_agent(object):
 		# Init hyperparameters for agent, just like "self.gamma = opt.gamma, self.lambd = opt.lambd, ..."
 		self.__dict__.update(kwargs)
 		self.tau = 0.005
-		self.replay_buffer = ReplayBuffer(self.state_dim, self.dvc, self.res_net, max_size=int(1e4))
+		self.replay_buffer = ReplayBuffer(self.state_dim, torch.device("cpu"), self.res_net, max_size=int(4e4))
 		if self.res_net:
 			self.q_net = ActorTimestepNet(block = ResidualBlock, layers = [3, 4, 6, 3], num_classes=6).to(self.dvc)
 		else:
@@ -143,6 +143,11 @@ class DQN_agent(object):
 
 	def train(self):
 		s, a, r, s_next, dw = self.replay_buffer.sample(self.batch_size)
+		s = s.to(self.dvc)
+		a = a.to(self.dvc)
+		r = r.to(self.dvc)
+		s_next = s_next.to(self.dvc)
+		dw = dw.to(self.dvc)
 		if self.res_net:
 			assert s.shape == s_next.shape == (self.batch_size, 3, 180, 260)
 		else:

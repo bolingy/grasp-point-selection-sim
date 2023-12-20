@@ -105,7 +105,7 @@ def main():
     #Build model and replay buffer
     if not os.path.exists('model'): os.mkdir('model')
     agent = DQN_agent(**vars(opt))
-    if opt.Loadmodel: agent.load("DDQN_2023-12-01_06-25-48", "L", opt.ModelIdex)
+    if opt.Loadmodel: agent.load("DDQN_2023-12-06_03-56-03", "L", opt.ModelIdex)
     buf_envs = [RolloutBuffer() for _ in range(ne)]
     
     # env.reset()
@@ -214,7 +214,7 @@ def main():
                 '''update if its time'''
                 # train 50 times every 50 steps rather than 1 training per step. Better!
                 if total_steps >= opt.random_steps and update_steps >= opt.update_every and not opt.eval:
-                    for j in range(1): agent.train()
+                    for j in range(opt.update_every): agent.train()
                     update_steps -= opt.update_every
 
                 '''record & log'''

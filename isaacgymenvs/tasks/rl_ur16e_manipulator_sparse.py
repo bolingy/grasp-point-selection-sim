@@ -241,7 +241,7 @@ class RL_UR16eManipulation(VecTask):
         # make a target_dist for each env
         self.target_dist = self.target_dist.repeat(self.num_envs, 1, 1).to(self.device)
         self.prim = torch.zeros(self.num_envs).to(self.device)
-        self.num_primtive_actions = self.cfg["env"]["numPrimitiveActions"]
+        self.num_primitive_actions = self.cfg["env"]["numPrimitiveActions"]
         self.current_directory = os.getcwd()
         self.init_go_to_start = torch.ones(self.num_envs).to(self.device)
         self.return_pre_grasp = torch.zeros(self.num_envs).to(self.device)
@@ -896,8 +896,8 @@ class RL_UR16eManipulation(VecTask):
                         object_pose_env = torch.tensor(
                             [[counter/4, 1, 0.5, 0.0, 0.0, 0.0, 1.0]]).to(self.device)
                     else:
-                        object_pose_env = torch.tensor(self.object_pose_store[env_count.item(
-                        )][counter+1]).to(self.device)
+                        object_pose_env = self.object_pose_store[env_count.item(
+                        )][counter+1].clone().detach().to(self.device)
                         # quat = self.object_pose_store[env_count.item(
                         # )][counter+1][3:7]
                         # object_pose_env = torch.cat([object_pose_env[:3], quat])
@@ -1253,7 +1253,7 @@ class RL_UR16eManipulation(VecTask):
             self.gym.start_access_image_tensors(self.sim)
             # Updated in self.rgb_camera_tensors and self.depth_camera_tensors and self.mask_camera_tensors
             self.gym.end_access_image_tensors(self.sim)
-        render_cameras()
+        rendered_this_step = False
         self.gym.refresh_dof_state_tensor(self.sim)
         '''
         Commands to the arm for eef control
@@ -1268,14 +1268,11 @@ class RL_UR16eManipulation(VecTask):
         env_list_reset_default_arm_pose = torch.tensor([])
         
         for env_count in range(self.num_envs):
-            torch_mask_tensor = self.mask_camera_tensors[env_count]
             # print("self.device", self.device)
             # print("torch uniq for torch mask tensor", torch.unique(torch_mask_tensor))
             # print('torch_mask_tensor', torch_mask_tensor.get_device())
             # print("torch available", torch.cuda.is_available())
             # print('num device', torch.cuda.device_count())
-            segmask = torch_mask_tensor.to(self.device)
-            segmask_check = segmask
             self.cmd_limit = to_torch(
                 [0.1, 0.1, 0.1, 0.5, 0.5, 0.5], device=self.device).unsqueeze(0)
 
@@ -1294,10 +1291,6 @@ class RL_UR16eManipulation(VecTask):
             Spawning objects until they acquire stable pose and also doesnt falls down
             '''
             if ((self.frame_count[env_count] == self.cooldown_frames) and (self.object_pose_check_list[env_count] == torch.tensor(0))) and (self.run_dexnet[env_count] == torch.tensor(1)):
-                torch_mask_tensor = self.mask_camera_tensors[env_count]
-                segmask = torch_mask_tensor.to(self.device)
-                # segmask_check = segmask[180:660, 410:1050]
-                segmask_object_count = segmask[280:460, 510:770]
 
                 objects_spawned = len(self.selected_object_env[env_count])+1
                 total_objects = len(self.selected_object_env[env_count])+1
@@ -1353,6 +1346,9 @@ class RL_UR16eManipulation(VecTask):
                         #         max_x = object_pose_x
                         #         self.object_target_id[env_count] = torch.tensor( 
                         #             self.selected_object_env[env_count][i]).to(self.device).type(torch.int)
+                    if not rendered_this_step:
+                        render_cameras()
+                        rendered_this_step = True
                     torch_rgb_tensor = self.rgb_camera_tensors[env_count]
                     # print("torch uniq rgb", torch.unique(torch_rgb_tensor))
                     rgb_image = torch_rgb_tensor.to(self.device)
@@ -1367,6 +1363,9 @@ class RL_UR16eManipulation(VecTask):
                     torch_depth_tensor = self.depth_camera_tensors[env_count]
                     depth_image = torch_depth_tensor.to(self.device)
                     depth_image = -depth_image
+
+                    torch_mask_tensor = self.mask_camera_tensors[env_count]
+                    segmask = torch_mask_tensor.to(self.device)
 
                     segmask_dexnet = segmask.clone().detach()
                     # self.segmask_save[env_count] = segmask[180:660, 410:1050].clone(
@@ -1529,7 +1528,7 @@ class RL_UR16eManipulation(VecTask):
                     # print(
                     #     "objects not spawned properly inside the bin for env ", env_count)
                     env_complete_reset = torch.cat(
-                        (env_complete_reset, torch.tensor([env_count])), axis=0)
+                        (env_complete_reset, torch.tensor([env_count])), axis=0) # FINAL RESET
                 try:
                     if ((env_count in self.grasp_angle_env) and (torch.count_nonzero(self.xyz_point[env_count]) < 1)):
                         # error due to illegal 3d coordinate
@@ -1709,7 +1708,6 @@ class RL_UR16eManipulation(VecTask):
                         curr_eef_quat = self.states["eef_quat"][env_count].unsqueeze(0)
                         move_dist = self.target_dist[env_count][act[curr_prim]]
                         u_arm_temp[0:6], action_str = self.primitives[env_count].move_w_ori(action_str, curr_eef_pos, curr_eef_quat, move_dist)
-
                         if self.true_target_dist <= 0.05:
                             self.temp_action = action_str
 
@@ -1727,7 +1725,7 @@ class RL_UR16eManipulation(VecTask):
     
                                 # print("#############RESET ARM")
                                 self.primitive_count[env_count] += 1
-                                if self.primitive_count[env_count] >= (self.num_primtive_actions + 1):
+                                if self.primitive_count[env_count] >= (self.num_primitive_actions + 1):
                                 ######## False if min dist
                                 # if False:
                                     self.RL_flag[env_count] = 0
@@ -1776,7 +1774,7 @@ class RL_UR16eManipulation(VecTask):
                                     [object_disp_env[int(object_id.item())], object_current_pose.unsqueeze(0)], dim=0)
                             self.object_disp_save[env_count] = object_disp_env
                 else:
-
+                ###### not RL_Flag
                     # force sensor update
                     self.gym.refresh_force_sensor_tensor(self.sim)
 
@@ -1974,6 +1972,9 @@ class RL_UR16eManipulation(VecTask):
                             object_pose_error = torch.tensor(0)
 
                         # Compute the segmask and depth map of the camera at the gripper
+                        if not rendered_this_step:
+                            render_cameras()
+                            rendered_this_step = True
                         torch_mask_tensor = self.eef_mask_camera_tensors[env_count]
                         segmask_gripper = torch_mask_tensor.to(self.device)
                         segmask_gripper = segmask_gripper.clone().detach()
@@ -2108,6 +2109,10 @@ class RL_UR16eManipulation(VecTask):
                     if (self.frame_count[env_count] > torch.tensor(self.cooldown_frames) and self.frame_count_contact_object[env_count] == torch.tensor(0)):
                         if ((torch.max(torch.abs(self.action_env[0][:3]))) <= 0.005 and (torch.max(torch.abs(self.action_env[0][3:6]))) <= 0.005):
                             self.action_contrib[env_count] -= 1
+                            if not rendered_this_step:
+                                render_cameras()
+                                rendered_this_step = True
+
                             torch_rgb_tensor = self.eef_rgb_camera_tensors[env_count]
                             rgb_image = torch_rgb_tensor.to(self.device)
                             rgb_image_copy_gripper = torch.reshape(
@@ -2150,6 +2155,9 @@ class RL_UR16eManipulation(VecTask):
                             '''
                             Gripper camera
                             '''
+                            if not rendered_this_step:
+                                render_cameras()
+                                rendered_this_step = True
                             torch_rgb_tensor = self.eef_rgb_camera_tensors[env_count]
                             rgb_image = torch_rgb_tensor.to(self.device)
                             rgb_image_copy_gripper = torch.reshape(
@@ -2182,28 +2190,6 @@ class RL_UR16eManipulation(VecTask):
                             penetration = False
                             if (score_gripper == torch.tensor(0)):
                                 penetration = True
-                            # saving the grasp point ad its properties if it was a successfull grasp
-                            # json_save = {
-                            #     "force_array": self.force_list_save[env_count].tolist(),
-                            #     "grasp point": self.grasp_point[env_count].tolist(),
-                            #     "grasp_angle": self.grasp_angle[env_count].tolist(),
-                            #     "suction_deformation_score": self.suction_deformation_score[env_count].item(),
-                            #     "oscillation": oscillation,
-                            #     "gripper_score": score_gripper.item(),
-                            #     "success": self.success[env_count].item(),
-                            #     "object_id": self.object_target_id[env_count].item(),
-                            #     "penetration": penetration,
-                            #     "unreachable": False
-                            # }
-                            # print("success: ", self.success[env_count].item())
-                            # new_dir_name = str(
-                            #     env_count)+"_"+str(self.track_save[env_count].type(torch.int).item())
-                            # save_dir_json = cur_path+"/../../System_Identification_Data/Parallelization-Data/" + \
-                            #     str(env_count)+"/json_data_"+new_dir_name+"_" + \
-                            #     str(self.config_env_count[env_count].type(
-                            #         torch.int).item())+".json"
-                            # with open(save_dir_json, 'w') as json_file:
-                            #     json.dump(json_save, json_file)
                             self.track_save[env_count] = self.track_save[env_count] + \
                                 torch.tensor(1)
 

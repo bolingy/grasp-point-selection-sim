@@ -164,3 +164,7 @@ isaacgymenvs/tasks/__pycache__/ant.cpython-37.pyc
 .vscode/launch.json
 .vscode/tasks.json
 *.pyc
+
+dqn/runs/
+isaacgym/
+paramsearch.out
