@@ -795,7 +795,7 @@ class RL_UR16eManipulation(VecTask):
             offset_objects = [offset_object2, offset_object3, offset_object1]
             # add gaussian noise to the first 2 elements of the 3 offsets
             mean = 0
-            std_dev = 0.00
+            std_dev = 0.02
             offset_objects = [np.concatenate([offset[:2] + np.random.normal(mean, std_dev, 2), offset[2:]]) for offset in offset_objects]
             # print("noisy offset object", noisy_offset_objects)
 
@@ -818,10 +818,10 @@ class RL_UR16eManipulation(VecTask):
                 ##############################################
                 
                 # print("object count", object_count)
-                if object_count == 5 and not self.obj_randomization:
-                    offset_object = offset_objects[1]
-                elif not self.obj_randomization: 
-                    offset_object = offset_objects[object_count-1]
+                # if object_count == 5 and not self.obj_randomization:
+                #     offset_object = offset_objects[1]
+                # elif not self.obj_randomization: 
+                #     offset_object = offset_objects[object_count-1]
                 ##############################################
                 # set position and orientation
                 quat = euler_angles_to_quaternion(

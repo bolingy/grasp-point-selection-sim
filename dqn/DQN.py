@@ -3,7 +3,7 @@ import torch.nn as nn
 import numpy as np
 import torch
 import copy
-
+from rl.rl_utils import *
 
 def build_net(layer_shape, activation, output_activation):
 	'''build net with for loop'''
@@ -107,11 +107,13 @@ class DQN_agent(object):
 		# Init hyperparameters for agent, just like "self.gamma = opt.gamma, self.lambd = opt.lambd, ..."
 		self.__dict__.update(kwargs)
 		self.tau = 0.005
-		self.replay_buffer = ReplayBuffer(self.state_dim, torch.device("cpu"), self.res_net, max_size=int(4e4))
+		self.replay_buffer = ReplayBuffer(self.state_dim, torch.device("cpu"), self.res_net, max_size=int(self.buffer_size), data_augmentation=self.data_augmentation)
 		if self.res_net:
-			self.q_net = ActorTimestepNet(block = ResidualBlock, layers = [3, 4, 6, 3], num_classes=6).to(self.dvc)
+			self.q_net = ActorTimestepNet(block = ResidualBlock, layers = [3, 4, 6, 3], num_classes=6).to(self.train_device)
+			# self.q_net = nn.DataParallel(self.q_net, device_ids=[0], output_device=self.train_device)
 		else:
-			self.q_net = Q_Net(self.state_dim, self.action_dim, (self.net_width,self.net_width)).to(self.dvc)
+			self.q_net = Q_Net(self.state_dim, self.action_dim, (self.net_width,self.net_width)).to(self.train_device)
+			# self.q_net = nn.DataParallel(self.q_net, device_ids=[0], output_device=self.train_device)
 		self.q_net_optimizer = torch.optim.Adam(self.q_net.parameters(), lr=self.lr)
 		self.q_target = copy.deepcopy(self.q_net)
 		# Freeze target networks with respect to optimizers (only update via polyak averaging)
@@ -120,7 +122,7 @@ class DQN_agent(object):
 
 	def select_action(self, state, deterministic):#only used when interact with the env
 		with torch.no_grad():
-			# state = torch.FloatTensor(state.reshape(1, -1).cpu()).to(self.dvc)
+			# state = torch.FloatTensor(state.reshape(1, -1).cpu()).to(self.train_device)
 			N = state.shape[0]
 			if self.res_net:
 				assert state.shape == (N, 3, 180, 260)
@@ -131,11 +133,11 @@ class DQN_agent(object):
 			else:
 				if np.random.rand() < self.exp_noise:
 					# size of N
-					a = torch.randint(self.action_dim, (N,), device=self.dvc)
+					a = torch.randint(self.action_dim, (N,), device=self.train_device)
 				else:
 					a = self.q_net(state).argmax(dim=1)
 			if type(a) == int:
-				a = torch.tensor(a, dtype=torch.long, device=self.dvc).unsqueeze(-1)
+				a = torch.tensor(a, dtype=torch.long, device=self.train_device).unsqueeze(-1)
 			a = a.unsqueeze(-1)
 			assert a.shape == (N, 1), "Expected shape {}, got {}, a = {}".format((N, 1), a.shape, a)
 		return a
@@ -143,11 +145,11 @@ class DQN_agent(object):
 
 	def train(self):
 		s, a, r, s_next, dw = self.replay_buffer.sample(self.batch_size)
-		s = s.to(self.dvc)
-		a = a.to(self.dvc)
-		r = r.to(self.dvc)
-		s_next = s_next.to(self.dvc)
-		dw = dw.to(self.dvc)
+		s = s.to(self.train_device)
+		a = a.to(self.train_device)
+		r = r.to(self.train_device)
+		s_next = s_next.to(self.train_device)
+		dw = dw.to(self.train_device)
 		if self.res_net:
 			assert s.shape == s_next.shape == (self.batch_size, 3, 180, 260)
 		else:
@@ -193,34 +195,35 @@ class DQN_agent(object):
 
 
 class ReplayBuffer(object):
-	def __init__(self, state_dim, dvc, res_net, max_size=int(1e6)):
+	def __init__(self, state_dim, dvc, res_net, max_size=int(1e6), data_augmentation=False):
 		self.max_size = max_size
-		self.dvc = dvc
+		self.train_device = dvc
 		self.ptr = 0
 		self.size = 0
 		if res_net:
-			self.s = torch.zeros((max_size, 3, 180, 260),dtype=torch.float,device=self.dvc)
+			self.s = torch.zeros((max_size, 3, 180, 260),dtype=torch.float,device=self.train_device)
 		else:
-			self.s = torch.zeros((max_size, state_dim),dtype=torch.float,device=self.dvc)
-		self.a = torch.zeros((max_size, 1),dtype=torch.long,device=self.dvc)
-		self.r = torch.zeros((max_size, 1),dtype=torch.float,device=self.dvc)
+			self.s = torch.zeros((max_size, state_dim),dtype=torch.float,device=self.train_device)
+		self.a = torch.zeros((max_size, 1),dtype=torch.long,device=self.train_device)
+		self.r = torch.zeros((max_size, 1),dtype=torch.float,device=self.train_device)
 		if res_net:
-			self.s_next = torch.zeros((max_size, 3, 180, 260),dtype=torch.float,device=self.dvc)
+			self.s_next = torch.zeros((max_size, 3, 180, 260),dtype=torch.float,device=self.train_device)
 		else:
-			self.s_next = torch.zeros((max_size, state_dim),dtype=torch.float,device=self.dvc)
-		self.dw = torch.zeros((max_size, 1),dtype=torch.bool,device=self.dvc)
+			self.s_next = torch.zeros((max_size, state_dim),dtype=torch.float,device=self.train_device)
+		self.dw = torch.zeros((max_size, 1),dtype=torch.bool,device=self.train_device)
+		self.data_augmentation = data_augmentation
 
 	def add(self, s, a, r, s_next, dw):
-		# self.s[self.ptr] = s.to(self.dvc)
+		# self.s[self.ptr] = s.to(self.train_device)
 		# self.a[self.ptr] = a
 		# self.r[self.ptr] = r
-		# self.s_next[self.ptr] = s_next.to(self.dvc)
+		# self.s_next[self.ptr] = s_next.to(self.train_device)
 		# self.dw[self.ptr] = dw
 		for i in range(s.shape[0]):
-			self.s[self.ptr] = s[i].to(self.dvc)
+			self.s[self.ptr] = s[i].to(self.train_device)
 			self.a[self.ptr] = a[i]
 			self.r[self.ptr] = r[i]
-			self.s_next[self.ptr] = s_next[i].to(self.dvc)
+			self.s_next[self.ptr] = s_next[i].to(self.train_device)
 			self.dw[self.ptr] = dw[i]
 			self.ptr = (self.ptr + 1) % self.max_size
 			self.size = min(self.size + 1, self.max_size)
@@ -229,7 +232,9 @@ class ReplayBuffer(object):
 		self.size = min(self.size + 1, self.max_size)
 
 	def sample(self, batch_size):
-		ind = torch.randint(0, self.size, device=self.dvc, size=(batch_size,))
+		ind = torch.randint(0, self.size, device=self.train_device, size=(batch_size,))
+		if self.data_augmentation:
+			self.s[ind] = data_augmentation(self.s[ind])
 		return self.s[ind], self.a[ind], self.r[ind], self.s_next[ind], self.dw[ind]
 
 

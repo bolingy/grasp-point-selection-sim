@@ -15,6 +15,7 @@ import gym
 # import roboschool
 #import pybullet_envs
 import matplotlib.pyplot as plt
+from rl.data_augmentation import *
 
 
 def rearrange_state(state, b=2, h=180, w=260):
@@ -36,6 +37,9 @@ def rearrange_state_timestep(state, b=2, h=180, w=260):
 	timestep = timestep.unsqueeze(1).unsqueeze(2).unsqueeze(3).repeat(1, 1, h, w)
 	# print("timestep: ", timestep.shape)
 	state = torch.cat((state, timestep), dim=1)
+
+	# normalize the depth image given max and min value of -1 and -1.56
+	state[:, 0] = (state[:, 0] + 1.56) / (1.56 - 1)
 	# print("state: ", state.shape)
 	return state
 
@@ -250,3 +254,48 @@ def convert_actions(action, real_y, real_dx, sim_device='cuda:0'):
 	result = torch.cat((result_y, z, result_dx, action[:, 1].unsqueeze(1)), dim=1)
 	# print("result: ", result)
 	return result
+
+def data_augmentation(state):
+	# separate into depth and seg mask
+	depth = state[:, 0]
+	seg = state[:, 1]
+	print("depth: ", depth.shape)
+	print("seg: ", seg.shape)
+	batch_size = depth.shape[0]
+	assert depth.shape == seg.shape == (batch_size, 180, 260)
+
+	# process depth image
+	# assign random 0 spots on the depth image
+	# with probability 0.2, assign 0 to depth image
+	noise = torch.rand((batch_size, 180, 260))
+	noise[noise < 0.2] = 0
+	depth[noise == 0] = 0
+
+	# process seg mask
+	# assign random values except for 0 and 255
+	unique_ids = torch.unique(seg)
+	unique_ids = unique_ids[unique_ids != 0]
+	unique_ids = unique_ids[unique_ids != 255]
+	for i in range(unique_ids.shape[0]):
+		seg[seg == unique_ids[i]] = torch.randint(1, 255, (1,))
+	
+	# generate 0-3 random number to decide what to do
+	# 0: do nothing
+	# 1: random crop
+	# 2: random cutout
+	# 3: random flip
+	rand = torch.randint(0, 2, (batch_size,))
+	if torch.where(rand == 1)[0].shape[0] > 0:
+		# random crop
+		depth, seg = depth.cpu().numpy(), seg.cpu().numpy()
+		depth, seg = random_crop(depth, seg, 138, 200)
+		depth, seg = random_cutout(depth, seg, 10, 60)		
+		depth, seg = random_flip(depth, seg)
+		depth = torch.from_numpy(depth)
+		seg = torch.from_numpy(seg)
+		return torch.stack((depth, seg, state[:, 2]), dim=1)
+	else:
+		return torch.stack((depth, seg, state[:, 2]), dim=1)
+
+
+	

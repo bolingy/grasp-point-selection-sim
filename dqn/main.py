@@ -22,7 +22,10 @@ wandb.login()
 
 '''Hyperparameter Setting'''
 parser = argparse.ArgumentParser()
-parser.add_argument('--dvc', type=str, default='cuda', help='running device: cuda or cpu')
+parser.add_argument("--set_visible_cuda_devices", type=str, default="0", help = "Select GPU DEVICES (CUDA) for training")
+parser.add_argument("--sim_device", type=str, default="cuda:0", help = "Select GPU DEVICE ID (CUDA) for simulation")
+parser.add_argument("--sim_device_id", type=int, default=0, help = "Select GPU DEVICE ID (CUDA) for simulation")
+parser.add_argument('--train_device', type=str, default='cuda', help='running device: cuda or cpu')
 parser.add_argument('--EnvIdex', type=int, default=0, help='Full_Nocam or Full')
 parser.add_argument('--num_envs', type=int, default=1, help='number of envs')
 parser.add_argument('--write', type=str2bool, default=False, help='Use SummaryWriter to record the training')
@@ -33,6 +36,7 @@ parser.add_argument('--ModelName', type=str, default='DDQN_2023-12-06_03-56-03',
 parser.add_argument('--ModelIdex', type=int, default=250*1000, help='which model to load')
 
 parser.add_argument('--seed', type=int, default=0, help='random seed')
+parser.add_argument('--data_augmentation', type=str2bool, default=False, help='data augmentation')
 parser.add_argument('--Max_train_steps', type=int, default=int(1e6), help='Max training steps')
 parser.add_argument('--save_interval', type=int, default=int(10), help='Model saving interval, in steps.')
 parser.add_argument('--eval_interval', type=int, default=int(10), help='Model evaluating interval, in steps.')
@@ -43,13 +47,18 @@ parser.add_argument('--gamma', type=float, default=0.99, help='Discounted Factor
 parser.add_argument('--net_width', type=int, default=200, help='Hidden net width')
 parser.add_argument('--lr', type=float, default=1e-7, help='Learning rate')
 parser.add_argument('--batch_size', type=int, default=512, help='length of sliced trajectory')
+parser.add_argument('--buffer_size', type=float, default=int(1e3), help='size of replay buffer')
 parser.add_argument('--exp_noise', type=float, default=0.2, help='explore noise')
 parser.add_argument('--noise_decay', type=float, default=0.99, help='decay rate of explore noise')
 parser.add_argument('--DDQN', type=str2bool, default=True, help='True:DDQN; False:DQN')
 parser.add_argument('--eval', type=str2bool, default=False, help='True:deterministic; False:non-deterministic')
 
 opt = parser.parse_args()
-opt.dvc = torch.device(opt.dvc) # from str to torch.device
+if opt.set_visible_cuda_devices:
+    print("GPU DEVICES (CUDA) SELECTED: % s" % opt.set_visible_cuda_devices)
+os.environ["CUDA_VISIBLE_DEVICES"] = opt.set_visible_cuda_devices
+
+opt.train_device = torch.device(opt.train_device) # from str to torch.device
 print(opt)
 
 
@@ -64,8 +73,8 @@ def main():
     env_name = env_name_lst[opt.EnvIdex]
     ne = opt.num_envs
     head_less = not opt.render
-    DEVICE = "cuda:0"
-    DEVICE_ID = 0
+    DEVICE = opt.sim_device
+    DEVICE_ID = opt.sim_device_id
     env = isaacgymenvs.make(
         seed=0,
         task=env_name,
@@ -88,6 +97,7 @@ def main():
     env_seed = opt.seed
     torch.manual_seed(opt.seed)
     torch.cuda.manual_seed(opt.seed)
+    np.random.seed(opt.seed)
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
     print("Random Seed: {}".format(opt.seed))
@@ -106,7 +116,8 @@ def main():
     #Build model and replay buffer
     if not os.path.exists('model'): os.mkdir('model')
     agent = DQN_agent(**vars(opt))
-    if opt.Loadmodel: agent.load(opt.ModelName, "L", opt.ModelIdex)
+    if opt.Loadmodel: 
+        agent.load(opt.ModelName, "L", opt.ModelIdex)
     buf_envs = [RolloutBuffer() for _ in range(ne)]
     
     # env.reset()
