@@ -4,7 +4,7 @@ import torch
 from rl.rl_utils import *
 import matplotlib.pyplot as plt
 
-ne = 2
+ne = 10
 res_net = True
 envs = isaacgymenvs.make(
 	seed=0,
@@ -31,14 +31,14 @@ total_act = 0
 while True:
 	# obs, reward, done, info = envs.step(action)
 	# print(obs['obs'][:, 614400:])
-	imgs, reward, done, indicies = step_primitives(action, envs)
+	imgs, _, reward, done, indicies = step_primitives(action, envs)
 	total_act += indicies.shape[0]
 	#print('indicies: ', indicies.shape[0])
 	print('reward: ', reward)
 	#print(('--------------------------------------------------'))
 	if total_act % 10 == 0:
 		print('current done', total_act)
-	if total_act >= 100:
+	if total_act >= 40:
 		break
 
 	# show imgs from each env in indicies
@@ -53,10 +53,13 @@ while True:
 		seg = seg.reshape(-1, img_y, img_x)
 		depth = depth[0].cpu().numpy()
 		seg = seg[0].cpu().numpy()
-		plt.imshow(depth)
-		plt.show()
-		plt.imshow(seg)
-		plt.show()
+		# save depth and segmask as npy
+		# np.save('depth.npy', depth)
+		# np.save('seg.npy', seg)
+		# plt.imshow(depth)
+		# plt.show()
+		# plt.imshow(seg)
+		# plt.show()
 	elif (indicies[0] == 0) and res_net == False:
 		state_env_0 = imgs[0]
 		print("state env 0", state_env_0)
@@ -80,6 +83,6 @@ while True:
 		else:
 			print("target is x-middle")
 
-end = time.time()
-print('total actions', total_act)
-print(f"Time taken to run the code was {end-start} seconds")
+# end = time.time()
+# print('total actions', total_act)
+# print(f"Time taken to run the code was {end-start} seconds")
