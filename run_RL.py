@@ -14,7 +14,7 @@ envs = isaacgymenvs.make(
 	rl_device="cuda:0",
 	multi_gpu=False,
 	graphics_device_id=0, 
-	headless=False
+	headless=True
 )
 # Observation space is eef_pos, eef_quat, q_gripper/q
 print("Observation space is", envs.observation_space)
@@ -83,6 +83,6 @@ while True:
 		else:
 			print("target is x-middle")
 
-# end = time.time()
-# print('total actions', total_act)
-# print(f"Time taken to run the code was {end-start} seconds")
+end = time.time()
+print('total actions', total_act)
+print(f"Time taken to run the code was {end-start} seconds")
