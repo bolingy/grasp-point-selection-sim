@@ -113,7 +113,7 @@ class RL_UR16eManipulation(VecTask):
         self.ur16e_base = "base_link"
         self.suction_gripper = "epick_end_effector"
 
-        self.force_threshold = 0.15
+        self.force_threshold = 0.8 # 0.15
         self.object_coordiante_camera = torch.tensor([0, 0, 0])
         
 
@@ -2129,7 +2129,8 @@ class RL_UR16eManipulation(VecTask):
                                     self.xyz_point[env_count][0] += temp_xyz_point[0]
                                     self.grasp_angle[env_count] = temp_grasp
 
-                        if (self.force_pre_physics > torch.max(torch.tensor([self.force_threshold, self.force_SI[env_count]])) and self.action_contrib[env_count] == 0 and self.force_encounter[env_count] == 0):
+                        # if (self.force_pre_physics > torch.max(torch.tensor([self.force_threshold, self.force_SI[env_count]])) and self.action_contrib[env_count] == 0 and self.force_encounter[env_count] == 0):
+                        if (self.force_pre_physics > torch.max(torch.tensor([self.force_threshold])) and self.action_contrib[env_count] == 0 and self.force_encounter[env_count] == 0):
                             self.force_encounter[env_count] = 1
                             self.retract_flag_env[env_count] = 1
                             object_pose_at_contact = self._root_state[env_count, self._object_model_id[int(self.object_target_id[env_count].item())-1], :][:7].type(
