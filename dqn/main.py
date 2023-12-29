@@ -98,6 +98,7 @@ def main():
     torch.manual_seed(opt.seed)
     torch.cuda.manual_seed(opt.seed)
     np.random.seed(opt.seed)
+    random.seed(opt.seed)
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
     print("Random Seed: {}".format(opt.seed))
