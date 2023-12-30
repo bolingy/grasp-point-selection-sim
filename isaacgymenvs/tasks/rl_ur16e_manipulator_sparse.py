@@ -38,6 +38,13 @@ class RL_UR16eManipulation(VecTask):
 
     def __init__(self, cfg, rl_device, sim_device, graphics_device_id, headless, virtual_screen_capture, force_render):
         self.cfg = cfg
+        seed = 0
+        random.seed(seed)
+        np.random.seed(seed)
+        torch.manual_seed(seed)
+        os.environ['PYTHONHASHSEED'] = str(seed)
+        torch.cuda.manual_seed(seed)
+        torch.cuda.manual_seed_all(seed)
 
         self.temp_flag = 1
 
@@ -113,7 +120,7 @@ class RL_UR16eManipulation(VecTask):
         self.ur16e_base = "base_link"
         self.suction_gripper = "epick_end_effector"
 
-        self.force_threshold = 0.8 # 0.15
+        self.force_threshold = 0.15 # 0.15
         self.object_coordiante_camera = torch.tensor([0, 0, 0])
         
 
@@ -183,6 +190,7 @@ class RL_UR16eManipulation(VecTask):
         self.force_contact_flag = torch.zeros(self.num_envs).to(self.device)
 
         self.suction_deformation_score = {}
+        self.calculated_score = torch.zeros(self.num_envs).to(self.device)
         self.xyz_point = {}
         self.grasp_angle = {}
         self.force_SI = {}
@@ -779,12 +787,18 @@ class RL_UR16eManipulation(VecTask):
             random_number = self.random_number_with_probabilities(probabilities)
             random_number += 1
             object_list_env = {}
-            # Sample objects from object set
+            # Sample obstacle objects from object set
             object_set = range(1, self.object_count_unique+1)
             if self.obj_randomization:
-                selected_object = random.sample(object_set, random_number)
+                object_set = range(1, 3)
+                selected_object = random.sample(object_set, random_number - 1)
+                # Sample target object from object set
+                object_set = range(3, self.object_count_unique+1)
+                if self.obj_randomization:
+                    selected_object.append(random.sample(object_set, 1)[0])
             else:
-                selected_object = [1, 5, 3]
+                selected_object = [1, 3, 2]
+
             # store the sampled weight for each obj
             list_objects_domain_randomizer = torch.tensor([])
             # Fixed obj pose for fixed scene
@@ -792,7 +806,7 @@ class RL_UR16eManipulation(VecTask):
             offset_object2 = np.array([0.6, 0., 1.45, 0.0, 0.0, 0.0])
             offset_object3 = np.array([0.62, -0.1, 1.45, 0.0, 0.0, 0.0])
             
-            offset_objects = [offset_object2, offset_object3, offset_object1]
+            offset_objects = [offset_object1, offset_object2, offset_object3]
             # add gaussian noise to the first 2 elements of the 3 offsets
             mean = 0
             std_dev = 0.02
@@ -818,10 +832,12 @@ class RL_UR16eManipulation(VecTask):
                 ##############################################
                 
                 # print("object count", object_count)
-                # if object_count == 5 and not self.obj_randomization:
-                #     offset_object = offset_objects[1]
-                # elif not self.obj_randomization: 
-                #     offset_object = offset_objects[object_count-1]
+                if object_count == 1 and not self.obj_randomization:
+                    offset_object = offset_objects[1]
+                elif object_count == 2 and not self.obj_randomization:
+                    offset_object = offset_objects[0]
+                elif object_count == 3 and not self.obj_randomization:
+                    offset_object = offset_objects[2]
                 ##############################################
                 # set position and orientation
                 quat = euler_angles_to_quaternion(
@@ -865,6 +881,7 @@ class RL_UR16eManipulation(VecTask):
             self.torch_target_area_tensor[env_id] = 0
             self.retract_flag_env[env_id] = 0
             self.force_encounter[env_id] = 0
+            self.calculated_score[env_id] = 0
             self.suction_score_store_env[env_id] = torch.tensor(0.0)
             self.retract_start_pose[env_id] = None
             self.offset_object_pose_retract[env_id] = None
@@ -947,7 +964,7 @@ class RL_UR16eManipulation(VecTask):
                 self.init_go_to_start[env_id] = torch.tensor(1)
                 self.return_pre_grasp[env_id] = torch.tensor(0)
                 self.primitive_count[env_id.item()] = torch.tensor(1)
-                
+                self.calculated_score[env_id] = 0
                 # self.finished_prim[env_id] = torch.tensor(0)
 
             self.object_movement_enabled = 0
@@ -1333,14 +1350,15 @@ class RL_UR16eManipulation(VecTask):
                     # print("!!!!!!!!!!!!!!!Running Dexnet 3.0")
                     if (self.RL_flag[env_count] == torch.tensor(1)):
                         # Random object select
-                        # random_object_select = self.selected_object_env[env_count][0]
-                        # print("random_object_select", random_object_select)
-                        # random_object_select = random.sample(
-                        #     self.selected_object_env[env_count].tolist(), 1)
+                        random_object_select = random.sample(
+                            self.selected_object_env[env_count][self.selected_object_env[env_count] >= 10].tolist(), 1)
+                        # print("self.selected_object_env[env_count]", self.selected_object_env[env_count])
+                        self.object_target_id[env_count] = torch.tensor(
+                            random_object_select).to(self.device).type(torch.int)
 
                         # Select the first object in the list of selected objects
-                        self.object_target_id[env_count] = torch.tensor( 
-                           21).to(self.device).type(torch.int)
+                        # self.object_target_id[env_count] = torch.tensor( 
+                        #    19).to(self.device).type(torch.int)
                         
                         # Select the object with the largest x-coordinate
                         # max_x = 0.0
@@ -1977,147 +1995,147 @@ class RL_UR16eManipulation(VecTask):
                         except:
                             object_pose_error = torch.tensor(0)
                         
-                        if self.frame_count[env_count] % 30 == 0:
-                            # Compute the segmask and depth map of the camera at the gripper
-                            if not self.rendered_this_step:
-                                self.render_cameras()
-                                self.rendered_this_step = True
-                            torch_mask_tensor = self.eef_mask_camera_tensors[env_count]
-                            segmask_gripper = torch_mask_tensor.to(self.device)
-                            segmask_gripper = segmask_gripper.clone().detach()
+                        # Compute the segmask and depth map of the camera at the gripper
+                        if not self.rendered_this_step:
+                            self.render_cameras()
+                            self.rendered_this_step = True
+                        torch_mask_tensor = self.eef_mask_camera_tensors[env_count]
+                        segmask_gripper = torch_mask_tensor.to(self.device)
+                        segmask_gripper = segmask_gripper.clone().detach()
 
-                            torch_depth_tensor = self.eef_depth_camera_tensors[env_count]
-                            depth_image = torch_depth_tensor.to(self.device)
-                            depth_image = -depth_image
-                            depth_numpy_gripper = depth_image.clone().detach()
+                        torch_depth_tensor = self.eef_depth_camera_tensors[env_count]
+                        depth_image = torch_depth_tensor.to(self.device)
+                        depth_image = -depth_image
+                        depth_numpy_gripper = depth_image.clone().detach()
 
-                            # center pixel of the griper camera
-                            mask_point_cam = segmask_gripper[int(
+                        # center pixel of the griper camera
+                        mask_point_cam = segmask_gripper[int(
+                            self.height_gripper/2), int(self.width_gripper/2)]
+                        if (mask_point_cam == self.object_target_id[env_count]):
+                            depth_point_cam = depth_numpy_gripper[int(
                                 self.height_gripper/2), int(self.width_gripper/2)]
-                            if (mask_point_cam == self.object_target_id[env_count]):
-                                depth_point_cam = depth_numpy_gripper[int(
-                                    self.height_gripper/2), int(self.width_gripper/2)]
-                            else:
-                                depth_point_cam = torch.tensor(10.)
+                        else:
+                            depth_point_cam = torch.tensor(10.)
 
-                            if (object_pose_error >= 0.0003):
-                                self.object_movement_enabled = 1
-                            # Calculate the contact existance of the suction gripper and the target object
-                            try:
-                                contact_exist = self.suction_score_object_gripper.calculate_contact(
-                                    depth_numpy_gripper, segmask_gripper, None, None, self.object_target_id[env_count])
-                            except:
-                                contact_exist = torch.tensor(0)
-                            if (contact_exist == torch.tensor(1) and self.action_contrib[env_count] == 0):
-                                angle_error = quaternion_to_euler_angles(self._eef_state[env_count][3:7], "XYZ", degrees=False) - torch.tensor(
-                                    [0, -self.grasp_angle[env_count][1], self.grasp_angle[env_count][0]]).to(self.device)
-                                # print("angle error: ", angle_error)
-                                if (torch.max(torch.abs(angle_error)) > torch.deg2rad(torch.tensor(10))):
-                                    # encountered the arm insertion constraint
-                                    env_list_reset_arm_pose = torch.cat(
-                                        (env_list_reset_arm_pose, torch.tensor([env_count])), axis=0)
-                                    env_list_reset_objects = torch.cat(
-                                        (env_list_reset_objects, torch.tensor([env_count])), axis=0)
-                                    print(env_count, "reset because of arm angle errror")
-                                    oscillation = False
-                                    self.success[env_count] = False
-                                    self.track_save[env_count] = self.track_save[env_count] + \
-                                        torch.tensor(1)
-                                self.force_contact_flag[env_count] = torch.tensor(
-                                    1).type(torch.bool)
-
-                            '''
-                            detecting contacts with other objects before contact to the target object
-                            '''
-                            _all_object_pose_error = torch.tensor(0.0)
-                            try:
-                                # estimating movement of other objects
-                                for object_id in self.selected_object_env[env_count]:
-                                    if (object_id != self.object_target_id[env_count]):
-                                        _all_object_pose_error += torch.abs(torch.norm(
-                                            _all_objects_current_pose[int(object_id.item())][:3] - self.all_objects_last_pose[env_count][int(object_id.item())][:3]))
-                            except Exception as error:
-                                _all_object_pose_error = torch.tensor(0.0)
-
-                            # reset if object has moved even before having contact with the target object
-                            if ((_all_object_pose_error > torch.tensor(0.0075)) and contact_exist == torch.tensor(0)):
+                        if (object_pose_error >= 0.0003):
+                            self.object_movement_enabled = 1
+                        # Calculate the contact existance of the suction gripper and the target object
+                        try:
+                            contact_exist = self.suction_score_object_gripper.calculate_contact(
+                                depth_numpy_gripper, segmask_gripper, None, None, self.object_target_id[env_count])
+                        except:
+                            contact_exist = torch.tensor(0)
+                        if (contact_exist == torch.tensor(1) and self.action_contrib[env_count] == 0):
+                            angle_error = quaternion_to_euler_angles(self._eef_state[env_count][3:7], "XYZ", degrees=False) - torch.tensor(
+                                [0, -self.grasp_angle[env_count][1], self.grasp_angle[env_count][0]]).to(self.device)
+                            # print("angle error: ", angle_error)
+                            if (torch.max(torch.abs(angle_error)) > torch.deg2rad(torch.tensor(10))):
+                                # encountered the arm insertion constraint
                                 env_list_reset_arm_pose = torch.cat(
                                     (env_list_reset_arm_pose, torch.tensor([env_count])), axis=0)
                                 env_list_reset_objects = torch.cat(
                                     (env_list_reset_objects, torch.tensor([env_count])), axis=0)
-                                print(env_count, _all_object_pose_error,
-                                    "reset because of object re placement check")
+                                print(env_count, "reset because of arm angle errror")
                                 oscillation = False
                                 self.success[env_count] = False
-                                # json_save = {
-                                #     "force_array": [],
-                                #     "grasp point": self.grasp_point[env_count].tolist(),
-                                #     "grasp_angle": self.grasp_angle[env_count].tolist(),
-                                #     "suction_deformation_score": self.suction_deformation_score[env_count].item(),
-                                #     "oscillation": oscillation,
-                                #     "gripper_score": 0,
-                                #     "success": self.success[env_count].item(),
-                                #     "object_id": self.object_target_id[env_count].item(),
-                                #     "penetration": False,
-                                #     "unreachable": True
-                                # }
-                                # print("success: ", self.success[env_count].item())
-                                # new_dir_name = str(
-                                #     env_count)+"_"+str(self.track_save[env_count].type(torch.int).item())
-                                # save_dir_json = cur_path+"/../../System_Identification_Data/Parallelization-Data/" + \
-                                #     str(env_count)+"/json_data_"+new_dir_name+"_" + \
-                                #     str(self.config_env_count[env_count].type(
-                                #         torch.int).item())+".json"
-                                # with open(save_dir_json, 'w') as json_file:
-                                #     json.dump(json_save, json_file)
                                 self.track_save[env_count] = self.track_save[env_count] + \
                                     torch.tensor(1)
+                            self.force_contact_flag[env_count] = torch.tensor(
+                                1).type(torch.bool)
 
-                            # If the object is moving then increase the speed else go to the default value of 0.1
-                            if ((depth_point_cam < torch.tensor(0.03)) and (self.action_contrib[env_count] == torch.tensor(0)) and (object_pose_error <= torch.tensor(0.001)) and (contact_exist == torch.tensor(1))):
-                                self.speed[env_count] += torch.tensor(0.01)
-                                self.speed[env_count] = torch.min(
-                                    torch.tensor(1.), self.speed[env_count])
-                                self.cmd_limit = to_torch(
-                                    [0.25, 0.25, 0.25, 0.75, 0.75, 0.75], device=self.device).unsqueeze(0)
-                            else:
-                                self.speed[env_count] = torch.tensor(0.1)
-                                self.cmd_limit = to_torch(
-                                    [0.1, 0.1, 0.1, 0.5, 0.5, 0.5], device=self.device).unsqueeze(0)
-
-                            self.last_object_pose[env_count] = current_object_pose
+                        '''
+                        detecting contacts with other objects before contact to the target object
+                        '''
+                        _all_object_pose_error = torch.tensor(0.0)
+                        try:
+                            # estimating movement of other objects
                             for object_id in self.selected_object_env[env_count]:
-                                self.all_objects_last_pose[env_count][int(
-                                    object_id.item())] = _all_objects_current_pose[int(object_id.item())]
+                                if (object_id != self.object_target_id[env_count]):
+                                    _all_object_pose_error += torch.abs(torch.norm(
+                                        _all_objects_current_pose[int(object_id.item())][:3] - self.all_objects_last_pose[env_count][int(object_id.item())][:3]))
+                        except Exception as error:
+                            _all_object_pose_error = torch.tensor(0.0)
+
+                        # reset if object has moved even before having contact with the target object
+                        if ((_all_object_pose_error > torch.tensor(0.0075)) and contact_exist == torch.tensor(0)):
+                            env_list_reset_arm_pose = torch.cat(
+                                (env_list_reset_arm_pose, torch.tensor([env_count])), axis=0)
+                            env_list_reset_objects = torch.cat(
+                                (env_list_reset_objects, torch.tensor([env_count])), axis=0)
+                            print(env_count, _all_object_pose_error,
+                                "reset because of object re placement check")
+                            oscillation = False
+                            self.success[env_count] = False
+                            # json_save = {
+                            #     "force_array": [],
+                            #     "grasp point": self.grasp_point[env_count].tolist(),
+                            #     "grasp_angle": self.grasp_angle[env_count].tolist(),
+                            #     "suction_deformation_score": self.suction_deformation_score[env_count].item(),
+                            #     "oscillation": oscillation,
+                            #     "gripper_score": 0,
+                            #     "success": self.success[env_count].item(),
+                            #     "object_id": self.object_target_id[env_count].item(),
+                            #     "penetration": False,
+                            #     "unreachable": True
+                            # }
+                            # print("success: ", self.success[env_count].item())
+                            # new_dir_name = str(
+                            #     env_count)+"_"+str(self.track_save[env_count].type(torch.int).item())
+                            # save_dir_json = cur_path+"/../../System_Identification_Data/Parallelization-Data/" + \
+                            #     str(env_count)+"/json_data_"+new_dir_name+"_" + \
+                            #     str(self.config_env_count[env_count].type(
+                            #         torch.int).item())+".json"
+                            # with open(save_dir_json, 'w') as json_file:
+                            #     json.dump(json_save, json_file)
+                            self.track_save[env_count] = self.track_save[env_count] + \
+                                torch.tensor(1)
+
+                        # If the object is moving then increase the speed else go to the default value of 0.1
+                        if ((depth_point_cam < torch.tensor(0.03)) and (self.action_contrib[env_count] == torch.tensor(0)) and (object_pose_error <= torch.tensor(0.001)) and (contact_exist == torch.tensor(1))):
+                            self.speed[env_count] += torch.tensor(0.01)
+                            self.speed[env_count] = torch.min(
+                                torch.tensor(1.), self.speed[env_count])
+                            self.cmd_limit = to_torch(
+                                [0.25, 0.25, 0.25, 0.75, 0.75, 0.75], device=self.device).unsqueeze(0)
+                        else:
+                            self.speed[env_count] = torch.tensor(0.1)
+                            self.cmd_limit = to_torch(
+                                [0.1, 0.1, 0.1, 0.5, 0.5, 0.5], device=self.device).unsqueeze(0)
+
+                        self.last_object_pose[env_count] = current_object_pose
+                        for object_id in self.selected_object_env[env_count]:
+                            self.all_objects_last_pose[env_count][int(
+                                object_id.item())] = _all_objects_current_pose[int(object_id.item())]
 
                     # If arm cross the force required to grasp the object
                     if (self.frame_count[env_count] > torch.tensor(self.cooldown_frames) and self.frame_count_contact_object[env_count] == torch.tensor(0)):
                         if ((torch.max(torch.abs(self.action_env[0][:3]))) <= 0.005 and (torch.max(torch.abs(self.action_env[0][3:6]))) <= 0.005):
                             self.action_contrib[env_count] -= 1
                             if (self.force_encounter[env_count] == 0):
-                                if not self.rendered_this_step:
-                                    self.render_cameras()
-                                    self.rendered_this_step = True
+                                if self.calculated_score[env_count] == 0:
+                                    if not self.rendered_this_step:
+                                        self.render_cameras()
+                                        self.rendered_this_step = True
 
-                                torch_rgb_tensor = self.eef_rgb_camera_tensors[env_count]
-                                rgb_image = torch_rgb_tensor.to(self.device)
-                                rgb_image_copy_gripper = torch.reshape(
-                                    rgb_image, (rgb_image.shape[0], -1, 4))[..., :3]
-                                rgb_image_copy_gripper = rgb_image_copy_gripper.clone().detach()
+                                    torch_rgb_tensor = self.eef_rgb_camera_tensors[env_count]
+                                    rgb_image = torch_rgb_tensor.to(self.device)
+                                    rgb_image_copy_gripper = torch.reshape(
+                                        rgb_image, (rgb_image.shape[0], -1, 4))[..., :3]
+                                    rgb_image_copy_gripper = rgb_image_copy_gripper.clone().detach()
 
-                                torch_mask_tensor = self.eef_mask_camera_tensors[env_count]
-                                segmask_gripper = torch_mask_tensor.to(self.device)
-                                segmask_gripper = segmask_gripper.clone().detach()
+                                    torch_mask_tensor = self.eef_mask_camera_tensors[env_count]
+                                    segmask_gripper = torch_mask_tensor.to(self.device)
+                                    segmask_gripper = segmask_gripper.clone().detach()
 
-                                torch_depth_tensor = self.eef_depth_camera_tensors[env_count]
-                                depth_image = torch_depth_tensor.to(self.device)
-                                depth_image = -depth_image
-                                depth_numpy_gripper = depth_image.clone().detach()
-
-                                self.suction_deformation_score[env_count], temp_xyz_point, temp_grasp = self.suction_score_object_gripper.calculator(
-                                    depth_numpy_gripper, segmask_gripper, rgb_image_copy_gripper, None, self.object_target_id[env_count])
-                                self.suction_score_store_env[env_count] = self.suction_deformation_score_temp
-
+                                    torch_depth_tensor = self.eef_depth_camera_tensors[env_count]
+                                    depth_image = torch_depth_tensor.to(self.device)
+                                    depth_image = -depth_image
+                                    depth_numpy_gripper = depth_image.clone().detach()
+                                    
+                                    self.suction_deformation_score[env_count], temp_xyz_point, temp_grasp = self.suction_score_object_gripper.calculator(
+                                        depth_numpy_gripper, segmask_gripper, rgb_image_copy_gripper, None, self.object_target_id[env_count])
+                                    self.suction_score_store_env[env_count] = self.suction_deformation_score_temp
+                                    self.calculated_score[env_count] = 1
                                 if (self.suction_deformation_score[env_count] > self.force_threshold):
                                     self.force_SI[env_count] = self.force_object.regression(
                                         self.suction_deformation_score[env_count])
@@ -2129,8 +2147,8 @@ class RL_UR16eManipulation(VecTask):
                                     self.xyz_point[env_count][0] += temp_xyz_point[0]
                                     self.grasp_angle[env_count] = temp_grasp
 
-                        # if (self.force_pre_physics > torch.max(torch.tensor([self.force_threshold, self.force_SI[env_count]])) and self.action_contrib[env_count] == 0 and self.force_encounter[env_count] == 0):
-                        if (self.force_pre_physics > torch.max(torch.tensor([self.force_threshold])) and self.action_contrib[env_count] == 0 and self.force_encounter[env_count] == 0):
+                        if (self.force_pre_physics > torch.max(torch.tensor([self.force_threshold, self.force_SI[env_count]])) and self.action_contrib[env_count] == 0 and self.force_encounter[env_count] == 0):
+                        # if (self.force_pre_physics > torch.max(torch.tensor([self.force_threshold])) and self.action_contrib[env_count] == 0 and self.force_encounter[env_count] == 0):
                             self.force_encounter[env_count] = 1
                             self.retract_flag_env[env_count] = 1
                             object_pose_at_contact = self._root_state[env_count, self._object_model_id[int(self.object_target_id[env_count].item())-1], :][:7].type(

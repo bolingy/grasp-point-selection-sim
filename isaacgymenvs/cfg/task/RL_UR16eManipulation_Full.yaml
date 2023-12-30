@@ -7,10 +7,10 @@ physics_engine: ${..physics_engine}
 env:
   numEnvs: ${resolve_default:8192,${...num_envs}}
   envSpacing: 1.5
-  episodeLength: 1200
+  episodeLength: 1000
   enableDebugVis: False
 
-  objRandomization: False
+  objRandomization: True
   retract: True
 
   clipObservations: 255.0
@@ -39,7 +39,7 @@ env:
     assetFileNameur16e: "urdf/ur16e_description/robots/ur16e_panda_gripper.urdf"
 
   # set to True if you use camera sensors in the environment
-  enableCameraSensors: False
+  enableCameraSensors: True
 
 sim:
   dt: 0.01667 # 1/60
