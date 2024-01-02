@@ -64,6 +64,7 @@ class RL_UR16eManipulation(VecTask):
         # actions include: delta EEF if OSC (6) or joint torques (7) + bool gripper (1)
 
         self.obj_randomization = self.cfg["env"]["objRandomization"]
+        self.num_obstacles = self.cfg["env"]["numObstacles"]
 
         self.retract = self.cfg["env"]["retract"]
 
@@ -790,10 +791,10 @@ class RL_UR16eManipulation(VecTask):
             # Sample obstacle objects from object set
             object_set = range(1, self.object_count_unique+1)
             if self.obj_randomization:
-                object_set = range(1, 3)
+                object_set = range(1, self.num_obstacles+1)
                 selected_object = random.sample(object_set, random_number - 1)
                 # Sample target object from object set
-                object_set = range(3, self.object_count_unique+1)
+                object_set = range(self.num_obstacles+1, self.object_count_unique+1)
                 if self.obj_randomization:
                     selected_object.append(random.sample(object_set, 1)[0])
             else:
@@ -809,12 +810,12 @@ class RL_UR16eManipulation(VecTask):
             offset_objects = [offset_object1, offset_object2, offset_object3]
             # add gaussian noise to the first 2 elements of the 3 offsets
             mean = 0
-            std_dev = 0.02
+            std_dev = 0.0
             offset_objects = [np.concatenate([offset[:2] + np.random.normal(mean, std_dev, 2), offset[2:]]) for offset in offset_objects]
             # print("noisy offset object", noisy_offset_objects)
 
             # apply sampled object pose and weight
-            for object_count in selected_object:
+            for idx, object_count in enumerate(selected_object):
                 domain_randomizer = random_number = random.choice(
                     [1, 2, 3, 4, 5])
                 if self.obj_randomization:
@@ -830,14 +831,12 @@ class RL_UR16eManipulation(VecTask):
                     domain_randomizer = random_number = random.choice(
                     [1, 2, 3, 4, 5])
                 ##############################################
-                
-                # print("object count", object_count)
-                # if object_count == 1 and not self.obj_randomization:
-                #     offset_object = offset_objects[1]
-                # elif object_count == 2 and not self.obj_randomization:
-                #     offset_object = offset_objects[0]
-                # elif object_count == 3 and not self.obj_randomization:
-                #     offset_object = offset_objects[2]
+                if idx == 1 and not self.obj_randomization:
+                    offset_object = offset_objects[1]
+                elif idx == 2 and not self.obj_randomization:
+                    offset_object = offset_objects[0]
+                elif idx == 3 and not self.obj_randomization:
+                    offset_object = offset_objects[2]
                 ##############################################
                 # set position and orientation
                 quat = euler_angles_to_quaternion(
@@ -1351,8 +1350,9 @@ class RL_UR16eManipulation(VecTask):
                     if (self.RL_flag[env_count] == torch.tensor(1)):
                         # Random object select
                         random_object_select = random.sample(
-                            self.selected_object_env[env_count][self.selected_object_env[env_count] > 10].tolist(), 1)
+                            self.selected_object_env[env_count][self.selected_object_env[env_count] > self.num_obstacles * 5].tolist(), 1)
                         # print("self.selected_object_env[env_count]", self.selected_object_env[env_count])
+                        # print("random_object_select", random_object_select)
                         self.object_target_id[env_count] = torch.tensor(
                             random_object_select).to(self.device).type(torch.int)
 

@@ -1,4 +1,7 @@
 orange_cylinder
 green_cylinder
+centrum_box
+calcium_bottle
+kyolic_bottle
 pizza_cutter
 small_health_bottle
