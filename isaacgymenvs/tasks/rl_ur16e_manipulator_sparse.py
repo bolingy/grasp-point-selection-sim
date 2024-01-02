@@ -828,16 +828,16 @@ class RL_UR16eManipulation(VecTask):
                     offset_object = np.array([np.random.uniform(0.57, 0.7, 1).reshape(
                         1,)[0], np.random.uniform(-0.15, 0.10, 1).reshape(1,)[0], 1.55, 0, 0, 0])
                     domain_randomizer = random_number = random.choice(
-                    [1])
+                    [1, 2, 3, 4, 5])
                 ##############################################
                 
                 # print("object count", object_count)
-                if object_count == 1 and not self.obj_randomization:
-                    offset_object = offset_objects[1]
-                elif object_count == 2 and not self.obj_randomization:
-                    offset_object = offset_objects[0]
-                elif object_count == 3 and not self.obj_randomization:
-                    offset_object = offset_objects[2]
+                # if object_count == 1 and not self.obj_randomization:
+                #     offset_object = offset_objects[1]
+                # elif object_count == 2 and not self.obj_randomization:
+                #     offset_object = offset_objects[0]
+                # elif object_count == 3 and not self.obj_randomization:
+                #     offset_object = offset_objects[2]
                 ##############################################
                 # set position and orientation
                 quat = euler_angles_to_quaternion(
@@ -1351,7 +1351,7 @@ class RL_UR16eManipulation(VecTask):
                     if (self.RL_flag[env_count] == torch.tensor(1)):
                         # Random object select
                         random_object_select = random.sample(
-                            self.selected_object_env[env_count][self.selected_object_env[env_count] >= 10].tolist(), 1)
+                            self.selected_object_env[env_count][self.selected_object_env[env_count] > 10].tolist(), 1)
                         # print("self.selected_object_env[env_count]", self.selected_object_env[env_count])
                         self.object_target_id[env_count] = torch.tensor(
                             random_object_select).to(self.device).type(torch.int)
