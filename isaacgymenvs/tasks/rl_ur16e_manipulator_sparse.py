@@ -329,7 +329,10 @@ class RL_UR16eManipulation(VecTask):
         asset_options.use_mesh_materials = True
 
         self.object_models = []
-        objects_file = open('../misc/object_list_domain_randomization.txt', 'r')
+        if self.obj_randomization:
+            objects_file = open('../misc/object_list_domain_randomization.txt', 'r')
+        else:
+            objects_file = open('../misc/object_list_domain_fixed.txt', 'r')
         objects = objects_file.readlines()
 
         self.object_count_unique = 0
@@ -798,14 +801,14 @@ class RL_UR16eManipulation(VecTask):
                 if self.obj_randomization:
                     selected_object.append(random.sample(object_set, 1)[0])
             else:
-                selected_object = [1, 3, 2]
+                selected_object = [1, 2, 3]
 
             # store the sampled weight for each obj
             list_objects_domain_randomizer = torch.tensor([])
             # Fixed obj pose for fixed scene
-            offset_object1 = np.array([0.55, -0.1, 1.45, 0.0, 0.0, 0.0])
-            offset_object2 = np.array([0.6, 0., 1.45, 0.0, 0.0, 0.0])
-            offset_object3 = np.array([0.62, -0.1, 1.45, 0.0, 0.0, 0.0])
+            offset_object1 = np.array([0.55, -0.13, 1.4, 0.0, 0.0, 0.0])
+            offset_object2 = np.array([0.65, 0.05, 1.4, 0.0, 0.0, 0.0])
+            offset_object3 = np.array([0.65, -0.13, 1.4, 0.0, 0.0, 0.0])
             
             offset_objects = [offset_object1, offset_object2, offset_object3]
             # add gaussian noise to the first 2 elements of the 3 offsets
@@ -831,11 +834,11 @@ class RL_UR16eManipulation(VecTask):
                     domain_randomizer = random_number = random.choice(
                     [1, 2, 3, 4, 5])
                 ##############################################
-                if idx == 1 and not self.obj_randomization:
+                if idx == 3:
                     offset_object = offset_objects[1]
-                elif idx == 2 and not self.obj_randomization:
+                elif idx == 1:
                     offset_object = offset_objects[0]
-                elif idx == 3 and not self.obj_randomization:
+                elif idx == 2:
                     offset_object = offset_objects[2]
                 ##############################################
                 # set position and orientation
