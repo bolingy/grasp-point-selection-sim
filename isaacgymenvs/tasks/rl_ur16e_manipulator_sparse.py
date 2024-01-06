@@ -1130,6 +1130,21 @@ class RL_UR16eManipulation(VecTask):
 
             torch_segmask_tensor = torch.where(torch_segmask_tensor == label, torch.tensor(255).to(self.device), torch_segmask_tensor)
 
+            # find the 2 unique values  excluding 0, 255 in segmask tensor which represents the non-target objects in each env
+            unique_values = torch.unique(torch_segmask_tensor, dim=-1)
+            unique_values = torch.stack([torch.unique(row, sorted=False)[1:-1] for row in unique_values])
+            # scramble such that values in each row are different, perhaps make it left to right later
+            for i in range(unique_values.shape[0]):
+                unique_values[i] = unique_values[i][torch.randperm(unique_values[i].shape[0])]
+
+            label_mapping = torch.arange(1, unique_values.shape[1]+1).to(self.device)
+            
+            # replace the unique values with the label mapping in segmask tensor
+            for i in range(unique_values.shape[0]):
+                for j in range(unique_values.shape[1]):
+                    mask = torch_segmask_tensor[i] == unique_values[i, j]
+                    torch_segmask_tensor[i] = torch.where(mask, label_mapping[j], torch_segmask_tensor[i])
+
             torch_primcount_tensor = self.primitive_count[envs_finished_prim].clone().detach()
 
             
@@ -1930,7 +1945,7 @@ class RL_UR16eManipulation(VecTask):
                     self.distance = torch.tensor([1, 1, 1])
                     # Giving the error between pre grasp pose and the current end effector pose
                     if (self.action_contrib[env_count] >= torch.tensor(1)):
-                        pose_factor, ori_factor = 2.0, 1.0
+                        pose_factor, ori_factor = 1.0, 0.3
                         self.action_env = torch.tensor([[pose_factor*T_ee_pose_to_pre_grasp_pose[0][3], pose_factor*T_ee_pose_to_pre_grasp_pose[1][3],
                                                         pose_factor *
                                                         T_ee_pose_to_pre_grasp_pose[2][3], ori_factor *
@@ -2469,6 +2484,7 @@ class RL_UR16eManipulation(VecTask):
         reset_buf_indicies = torch.where(self.reset_buf == 1)[0].to("cpu")
         if reset_buf_indicies.shape[0] > 0:
             print("Timeout reset env: ", reset_buf_indicies)
+            input("wait ")
         env_complete_reset = torch.cat((reset_buf_indicies, env_complete_reset), axis=0)
         # print("env_complete_reset: ", env_complete_reset)
 
@@ -2492,6 +2508,7 @@ class RL_UR16eManipulation(VecTask):
 
             pos = torch.cat([pos1, pos2])
             self.deploy_actions(env_ids, pos)
+            self.actions[env_ids] = torch.tensor([0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0]).type(torch.float).to(self.device)
 
         elif (len(env_list_reset_arm_pose) != 0):
             env_list_reset_arm_pose = torch.unique(env_list_reset_arm_pose)
