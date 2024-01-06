@@ -274,7 +274,7 @@ class RL_UR16eManipulation(VecTask):
         # Refresh tensors
         self._refresh()
         # Primitives
-        primitives = Primitives(self.num_envs, self.states['eef_pos'], device=self.device)
+        primitives = Primitives(self.states['eef_pos'], device=self.device)
         # make an array of deep copies of Primitives for each env
         self.primitives = np.array([deepcopy(primitives) for _ in range(self.num_envs)])
         
@@ -885,6 +885,7 @@ class RL_UR16eManipulation(VecTask):
             self.go_to_start[env_id] = torch.tensor(1)
             self.init_go_to_start[env_id] = torch.tensor(1)
             self.return_pre_grasp[env_id] = torch.tensor(0)
+            self.prim[env_id] = torch.tensor(0)
             self.primitive_count[env_id.item()] = torch.tensor(1)
             self.min_distance[env_id] = torch.tensor(100)
             self.torch_target_area_tensor[env_id] = 0
@@ -971,6 +972,7 @@ class RL_UR16eManipulation(VecTask):
                 self.go_to_start[env_id] = torch.tensor(1)
                 self.init_go_to_start[env_id] = torch.tensor(1)
                 self.return_pre_grasp[env_id] = torch.tensor(0)
+                self.prim[env_id] = torch.tensor(0)
                 self.primitive_count[env_id.item()] = torch.tensor(1)
                 # self.finished_prim[env_id] = torch.tensor(0)
 
@@ -1130,6 +1132,21 @@ class RL_UR16eManipulation(VecTask):
 
             torch_segmask_tensor = torch.where(torch_segmask_tensor == label, torch.tensor(255).to(self.device), torch_segmask_tensor)
 
+            # find the 2 unique values  excluding 0, 255 in segmask tensor which represents the non-target objects in each env
+            unique_values = torch.unique(torch_segmask_tensor, dim=-1)
+            unique_values = torch.stack([torch.unique(row, sorted=False)[1:-1] for row in unique_values])
+            # scramble such that values in each row are different, perhaps make it left to right later
+            for i in range(unique_values.shape[0]):
+                unique_values[i] = unique_values[i][torch.randperm(unique_values[i].shape[0])]
+
+            label_mapping = torch.arange(1, unique_values.shape[1]+1).to(self.device)
+            
+            # replace the unique values with the label mapping in segmask tensor
+            for j in range(unique_values.shape[1]):
+                expanded_unique_values = unique_values[:, j, None].expand_as(torch_segmask_tensor)
+                mask = torch_segmask_tensor == expanded_unique_values
+                torch_segmask_tensor = torch.where(mask, label_mapping[j], torch_segmask_tensor)
+
             torch_primcount_tensor = self.primitive_count[envs_finished_prim].clone().detach()
 
             
@@ -1269,7 +1286,7 @@ class RL_UR16eManipulation(VecTask):
 
     def pre_physics_step(self, actions):
         actions[:, 0] = torch.clamp(actions[:, 0], -0.11, 0.11)
-        actions[:, 1] = torch.clamp(actions[:, 1], -0.04, 0.1)
+        actions[:, 1] = torch.clamp(actions[:, 1], -0.03, 0.1)
         actions[:, 2] = torch.clamp(actions[:, 2], 0.0, 0.28)
         actions[:, 3] = torch.clamp(actions[:, 3], -0.22, 0.22)
 

@@ -2,16 +2,15 @@ from isaacgym import gymapi
 import torch
 import numpy as np
 
-DEFAULT_OSC_DIST = 0.2
+DEFAULT_OSC_DIST = 0.4
 DEFAULT_MIN_DIST_MUL = 0.1
 class Primitives():
-    def __init__(self, num_envs, init_pose, device):
+    def __init__(self, init_pose, device):
         self.device = device
         self.target_pose = init_pose
         self.current_pose = init_pose
         self.prev_pose = torch.tensor([[0., 0., 0.]], device=device)
         self.min_distance_to_goal = torch.full_like(init_pose, DEFAULT_OSC_DIST * DEFAULT_MIN_DIST_MUL)
-        self.num_envs = num_envs
         self.moves = {
                     "in": torch.tensor([[DEFAULT_OSC_DIST, 0, 0]], device=device),
                     "right": torch.tensor([[0, -DEFAULT_OSC_DIST, 0]], device=device),

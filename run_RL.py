@@ -42,7 +42,22 @@ while True:
 		break
 
 	# show imgs from each env in indicies
-	# for i in range(indicies.shape[0]):
+	for i in range(indicies.shape[0]):
+		img_x = 260
+		img_y = 180
+		img = imgs[i, :img_x*img_y*2]
+		depth = img[:img_x*img_y]
+		seg = img[img_x*img_y:]
+		depth = depth.reshape(img_y, img_x)
+		seg = seg.reshape(img_y, img_x)
+		depth = depth.cpu().numpy()
+		seg = seg.cpu().numpy()
+		# plt.imshow(depth)
+		# plt.show()
+		# plt.imshow(seg)
+		# plt.show()
+
+
 	if (indicies[0] == 0) and res_net == True:
 		img_x = 260
 		img_y = 180

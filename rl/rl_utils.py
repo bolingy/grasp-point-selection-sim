@@ -261,8 +261,6 @@ def data_augmentation(state):
 	# separate into depth and seg mask
 	depth = state[:, 0]
 	seg = state[:, 1]
-	print("depth: ", depth.shape)
-	print("seg: ", seg.shape)
 	batch_size = depth.shape[0]
 	assert depth.shape == seg.shape == (batch_size, 180, 260)
 
