@@ -2,6 +2,7 @@ import torch.nn.functional as F
 import torch.nn as nn
 import numpy as np
 import torch
+import torchvision.transforms as transforms
 import copy
 from rl.rl_utils import *
 
@@ -12,6 +13,25 @@ def build_net(layer_shape, activation, output_activation):
 		act = activation if j < len(layer_shape)-2 else output_activation
 		layers += [nn.Linear(layer_shape[j], layer_shape[j+1]), act()]
 	return nn.Sequential(*layers)
+
+def gauss_noise_tensor(sigma_range):
+    def gauss_noise_tensor_f(img, sigma_range):
+        assert isinstance(img, torch.Tensor)
+        dtype = img.dtype
+        if not img.is_floating_point():
+            img = img.to(torch.float32)
+
+        if sigma_range[0] == sigma_range[1]:
+            sigma = sigma_range[0]
+        else:
+            sigma = torch.rand(1) * (sigma_range[1] - sigma_range[0]) + sigma_range[0]
+        out = img + sigma * torch.randn_like(img)
+
+        if out.dtype != dtype:
+            out = out.to(dtype)
+
+        return out
+    return lambda img: gauss_noise_tensor_f(img, sigma_range)
 
 class ActorTimestepNet(nn.Module):
     def __init__(self, block, layers, num_classes = 10):
@@ -107,7 +127,7 @@ class DQN_agent(object):
 		# Init hyperparameters for agent, just like "self.gamma = opt.gamma, self.lambd = opt.lambd, ..."
 		self.__dict__.update(kwargs)
 		self.tau = 0.005
-		self.replay_buffer = ReplayBuffer(self.state_dim, torch.device("cpu"), self.res_net, max_size=int(self.buffer_size), data_augmentation=self.data_augmentation)
+		self.replay_buffer = ReplayBuffer(self.state_dim, torch.device("cpu"), self.res_net, max_size=int(self.buffer_size), data_augmentation_prob=self.data_augmentation_prob)
 		if self.res_net:
 			self.q_net = ActorTimestepNet(block = ResidualBlock, layers = [3, 4, 6, 3], num_classes=6).to(self.train_device)
 			# self.q_net = nn.DataParallel(self.q_net, device_ids=[0], output_device=self.train_device)
@@ -195,7 +215,7 @@ class DQN_agent(object):
 
 
 class ReplayBuffer(object):
-	def __init__(self, state_dim, dvc, res_net, max_size=int(1e6), data_augmentation=False):
+	def __init__(self, state_dim, dvc, res_net, max_size=int(1e6), data_augmentation_prob=0.):
 		self.max_size = max_size
 		self.train_device = dvc
 		self.ptr = 0
@@ -211,7 +231,25 @@ class ReplayBuffer(object):
 		else:
 			self.s_next = torch.zeros((max_size, state_dim),dtype=torch.float,device=self.train_device)
 		self.dw = torch.zeros((max_size, 1),dtype=torch.bool,device=self.train_device)
-		self.data_augmentation = data_augmentation
+		self.data_augmentation_prob = data_augmentation_prob
+		self.augmentation = transforms.Compose([
+			# Rotation
+			transforms.Pad((150, 210), padding_mode='edge'),
+			transforms.RandomRotation(10, transforms.InterpolationMode.NEAREST),
+			transforms.CenterCrop((180, 260)),
+			
+			# Random Crop
+			transforms.RandomCrop((180, 260), padding=(15, 21), padding_mode='edge'),
+			
+			# Random Resized Crop
+			transforms.RandomResizedCrop((180, 260), scale=(0.9, 1.0)),
+			
+			# Gaussian Blur
+			transforms.GaussianBlur((21, 21), sigma=(0.1, 2.0)),
+			
+			# Salt and Pepper
+			gauss_noise_tensor((0, 0.05)),
+		])
 
 	def add(self, s, a, r, s_next, dw):
 		# self.s[self.ptr] = s.to(self.train_device)
@@ -228,14 +266,18 @@ class ReplayBuffer(object):
 			self.ptr = (self.ptr + 1) % self.max_size
 			self.size = min(self.size + 1, self.max_size)
 
-		self.ptr = (self.ptr + 1) % self.max_size
-		self.size = min(self.size + 1, self.max_size)
-
 	def sample(self, batch_size):
 		ind = torch.randint(0, self.size, device=self.train_device, size=(batch_size,))
-		if self.data_augmentation:
-			self.s[ind] = data_augmentation(self.s[ind])
-		return self.s[ind], self.a[ind], self.r[ind], self.s_next[ind], self.dw[ind]
+		s = self.s[ind]
+		s_next = self.s_next[ind]
+		if self.data_augmentation_prob > np.random.rand():
+			# TODO(Henri): process idxs of seg mask
+			s_s_next = torch.cat((s, s_next), axis=0)
+			assert s_s_next.shape == (s.shape[0]*2, 3, 180, 260)
+			s_s_next = self.augmentation(s_s_next)
+			s, s_next = s_s_next[:s.shape[0]], s_s_next[s.shape[0]:]
+			
+		return s, self.a[ind], self.r[ind], s_next, self.dw[ind]
 
 
 
