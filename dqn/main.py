@@ -36,7 +36,7 @@ parser.add_argument('--ModelName', type=str, default='DDQN_2023-12-06_03-56-03',
 parser.add_argument('--ModelIdex', type=int, default=250*1000, help='which model to load')
 
 parser.add_argument('--seed', type=int, default=0, help='random seed')
-parser.add_argument('--data_augmentation', type=str2bool, default=False, help='data augmentation')
+parser.add_argument('--data_augmentation_prob', type=float, default=0., help='data augmentation')
 parser.add_argument('--Max_train_steps', type=int, default=int(1e6), help='Max training steps')
 parser.add_argument('--save_interval', type=int, default=int(10), help='Model saving interval, in steps.')
 parser.add_argument('--eval_interval', type=int, default=int(10), help='Model evaluating interval, in steps.')

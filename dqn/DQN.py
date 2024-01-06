@@ -127,7 +127,7 @@ class DQN_agent(object):
 		# Init hyperparameters for agent, just like "self.gamma = opt.gamma, self.lambd = opt.lambd, ..."
 		self.__dict__.update(kwargs)
 		self.tau = 0.005
-		self.replay_buffer = ReplayBuffer(self.state_dim, torch.device("cpu"), self.res_net, max_size=int(self.buffer_size), data_augmentation=self.data_augmentation)
+		self.replay_buffer = ReplayBuffer(self.state_dim, torch.device("cpu"), self.res_net, max_size=int(self.buffer_size), data_augmentation_prob=self.data_augmentation_prob)
 		if self.res_net:
 			self.q_net = ActorTimestepNet(block = ResidualBlock, layers = [3, 4, 6, 3], num_classes=6).to(self.train_device)
 			# self.q_net = nn.DataParallel(self.q_net, device_ids=[0], output_device=self.train_device)
@@ -215,7 +215,7 @@ class DQN_agent(object):
 
 
 class ReplayBuffer(object):
-	def __init__(self, state_dim, dvc, res_net, max_size=int(1e6), data_augmentation=False):
+	def __init__(self, state_dim, dvc, res_net, max_size=int(1e6), data_augmentation_prob=0.):
 		self.max_size = max_size
 		self.train_device = dvc
 		self.ptr = 0
@@ -231,7 +231,7 @@ class ReplayBuffer(object):
 		else:
 			self.s_next = torch.zeros((max_size, state_dim),dtype=torch.float,device=self.train_device)
 		self.dw = torch.zeros((max_size, 1),dtype=torch.bool,device=self.train_device)
-		self.data_augmentation = data_augmentation
+		self.data_augmentation_prob = data_augmentation_prob
 		self.augmentation = transforms.Compose([
 			# Rotation
 			transforms.Pad((150, 210), padding_mode='edge'),
@@ -270,7 +270,7 @@ class ReplayBuffer(object):
 		ind = torch.randint(0, self.size, device=self.train_device, size=(batch_size,))
 		s = self.s[ind]
 		s_next = self.s_next[ind]
-		if self.data_augmentation:
+		if self.data_augmentation_prob > np.random.rand():
 			# TODO(Henri): process idxs of seg mask
 			s_s_next = torch.cat((s, s_next), axis=0)
 			assert s_s_next.shape == (s.shape[0]*2, 3, 180, 260)
