@@ -40,8 +40,10 @@ def rearrange_state_timestep(state, b=2, h=180, w=260):
 
 	# normalize the depth image given max and min value of -1 and -1.56
 	state[:, 0] = (state[:, 0] + 1.56) / (1.56 - 1)
-	# print("state: ", state.shape)
+	# print("state: ", state.shape
+
 	return state
+
 
 # def step_primitives(action, envs):
 # 	while True:

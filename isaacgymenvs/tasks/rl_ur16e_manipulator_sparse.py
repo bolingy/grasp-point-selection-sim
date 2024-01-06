@@ -5,7 +5,8 @@ import os
 import torch
 import yaml
 import json
-
+import wandb
+import cv2
 from isaacgym import gymtorch
 from isaacgym import gymapi
 from isaacgym.torch_utils import *
@@ -47,6 +48,7 @@ class RL_UR16eManipulation(VecTask):
         torch.cuda.manual_seed_all(seed)
 
         self.temp_flag = 1
+        self.run = None
 
         self.max_episode_length = self.cfg["env"]["episodeLength"]
 
@@ -175,6 +177,12 @@ class RL_UR16eManipulation(VecTask):
         self.speed = torch.ones(self.num_envs).to(self.device)*0.1
         print("No. of environments: ", self.num_envs)
 
+        self.log_video = self.cfg["env"]["captureVideo"]
+        self.save_video = torch.zeros(self.num_envs).to(self.device)
+        self.rgb_frames = np.zeros((self.num_envs, 1000, 3, 180, 260))
+        self.eef_rgb_frames = np.zeros((self.num_envs, 1000, 3, 180, 260))
+        self.frame_count_video = torch.zeros(self.num_envs).type(torch.int).to(self.device)
+        
         # Parameter storage and Trackers for each environments
         self.suction_deformation_score_temp = torch.Tensor()
         self.xyz_point_temp = torch.Tensor([])
@@ -191,7 +199,6 @@ class RL_UR16eManipulation(VecTask):
         self.force_contact_flag = torch.zeros(self.num_envs).to(self.device)
 
         self.suction_deformation_score = {}
-        self.calculated_score = torch.zeros(self.num_envs).to(self.device)
         self.xyz_point = {}
         self.grasp_angle = {}
         self.force_SI = {}
@@ -806,9 +813,9 @@ class RL_UR16eManipulation(VecTask):
             # store the sampled weight for each obj
             list_objects_domain_randomizer = torch.tensor([])
             # Fixed obj pose for fixed scene
-            offset_object1 = np.array([0.55, -0.13, 1.4, 0.0, 0.0, 0.0])
-            offset_object2 = np.array([0.65, 0.05, 1.4, 0.0, 0.0, 0.0])
-            offset_object3 = np.array([0.65, -0.13, 1.4, 0.0, 0.0, 0.0])
+            offset_object1 = np.array([0.55, -0.1, 1.4, 0.0, 0.0, 0.0])
+            offset_object2 = np.array([0.6, 0., 1.4, 0.0, 0.0, 0.0])
+            offset_object3 = np.array([0.62, -0.1, 1.4, 0.0, 0.0, 0.0])
             
             offset_objects = [offset_object1, offset_object2, offset_object3]
             # add gaussian noise to the first 2 elements of the 3 offsets
@@ -832,9 +839,9 @@ class RL_UR16eManipulation(VecTask):
                     offset_object = np.array([np.random.uniform(0.57, 0.7, 1).reshape(
                         1,)[0], np.random.uniform(-0.15, 0.10, 1).reshape(1,)[0], 1.55, 0, 0, 0])
                     domain_randomizer = random_number = random.choice(
-                    [1, 2, 3, 4, 5])
+                    [1])
                 ##############################################
-                if idx == 3:
+                if idx == 0:
                     offset_object = offset_objects[1]
                 elif idx == 1:
                     offset_object = offset_objects[0]
@@ -883,7 +890,6 @@ class RL_UR16eManipulation(VecTask):
             self.torch_target_area_tensor[env_id] = 0
             self.retract_flag_env[env_id] = 0
             self.force_encounter[env_id] = 0
-            self.calculated_score[env_id] = 0
             self.suction_score_store_env[env_id] = torch.tensor(0.0)
             self.retract_start_pose[env_id] = None
             self.offset_object_pose_retract[env_id] = None
@@ -966,7 +972,6 @@ class RL_UR16eManipulation(VecTask):
                 self.init_go_to_start[env_id] = torch.tensor(1)
                 self.return_pre_grasp[env_id] = torch.tensor(0)
                 self.primitive_count[env_id.item()] = torch.tensor(1)
-                self.calculated_score[env_id] = 0
                 # self.finished_prim[env_id] = torch.tensor(0)
 
             self.object_movement_enabled = 0
@@ -1264,7 +1269,7 @@ class RL_UR16eManipulation(VecTask):
 
     def pre_physics_step(self, actions):
         actions[:, 0] = torch.clamp(actions[:, 0], -0.11, 0.11)
-        actions[:, 1] = torch.clamp(actions[:, 1], -0.02, 0.1)
+        actions[:, 1] = torch.clamp(actions[:, 1], -0.04, 0.1)
         actions[:, 2] = torch.clamp(actions[:, 2], 0.0, 0.28)
         actions[:, 3] = torch.clamp(actions[:, 3], -0.22, 0.22)
 
@@ -2115,30 +2120,28 @@ class RL_UR16eManipulation(VecTask):
                         if ((torch.max(torch.abs(self.action_env[0][:3]))) <= 0.005 and (torch.max(torch.abs(self.action_env[0][3:6]))) <= 0.005):
                             self.action_contrib[env_count] -= 1
                             if (self.force_encounter[env_count] == 0):
-                                if self.calculated_score[env_count] == 0:
-                                    if not self.rendered_this_step:
-                                        self.render_cameras()
-                                        self.rendered_this_step = True
+                                if not self.rendered_this_step:
+                                    self.render_cameras()
+                                    self.rendered_this_step = True
 
-                                    torch_rgb_tensor = self.eef_rgb_camera_tensors[env_count]
-                                    rgb_image = torch_rgb_tensor.to(self.device)
-                                    rgb_image_copy_gripper = torch.reshape(
-                                        rgb_image, (rgb_image.shape[0], -1, 4))[..., :3]
-                                    rgb_image_copy_gripper = rgb_image_copy_gripper.clone().detach()
+                                torch_rgb_tensor = self.eef_rgb_camera_tensors[env_count]
+                                rgb_image = torch_rgb_tensor.to(self.device)
+                                rgb_image_copy_gripper = torch.reshape(
+                                    rgb_image, (rgb_image.shape[0], -1, 4))[..., :3]
+                                rgb_image_copy_gripper = rgb_image_copy_gripper.clone().detach()
 
-                                    torch_mask_tensor = self.eef_mask_camera_tensors[env_count]
-                                    segmask_gripper = torch_mask_tensor.to(self.device)
-                                    segmask_gripper = segmask_gripper.clone().detach()
+                                torch_mask_tensor = self.eef_mask_camera_tensors[env_count]
+                                segmask_gripper = torch_mask_tensor.to(self.device)
+                                segmask_gripper = segmask_gripper.clone().detach()
 
-                                    torch_depth_tensor = self.eef_depth_camera_tensors[env_count]
-                                    depth_image = torch_depth_tensor.to(self.device)
-                                    depth_image = -depth_image
-                                    depth_numpy_gripper = depth_image.clone().detach()
-                                    
-                                    self.suction_deformation_score[env_count], temp_xyz_point, temp_grasp = self.suction_score_object_gripper.calculator(
-                                        depth_numpy_gripper, segmask_gripper, rgb_image_copy_gripper, None, self.object_target_id[env_count])
-                                    self.suction_score_store_env[env_count] = self.suction_deformation_score_temp
-                                    self.calculated_score[env_count] = 1
+                                torch_depth_tensor = self.eef_depth_camera_tensors[env_count]
+                                depth_image = torch_depth_tensor.to(self.device)
+                                depth_image = -depth_image
+                                depth_numpy_gripper = depth_image.clone().detach()
+                                
+                                self.suction_deformation_score[env_count], temp_xyz_point, temp_grasp = self.suction_score_object_gripper.calculator(
+                                    depth_numpy_gripper, segmask_gripper, rgb_image_copy_gripper, None, self.object_target_id[env_count])
+                                self.suction_score_store_env[env_count] = self.suction_deformation_score_temp
                                 if (self.suction_deformation_score[env_count] > self.force_threshold):
                                     self.force_SI[env_count] = self.force_object.regression(
                                         self.suction_deformation_score[env_count])
@@ -2417,7 +2420,48 @@ class RL_UR16eManipulation(VecTask):
             if (self.frame_count[env_count] <= torch.tensor(self.cooldown_frames)):
                 self.action_env = torch.tensor(
                     [[0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0]], dtype=torch.float).to(self.device)
-                
+            if (self.log_video and 
+                ((self.RL_flag[env_count] == 0 and self.action_contrib[env_count] < 2) or 
+                (self.RL_flag[env_count] == 1 and self.go_to_start[env_count] == 0)) and
+                self.frame_count[env_count] % 5 == 0):
+                if not self.rendered_this_step:
+                        self.render_cameras()
+                        self.rendered_this_step = True
+                torch_rgb_tensor = self.rgb_camera_tensors[env_count]
+                # print("torch uniq rgb", torch.unique(torch_rgb_tensor))
+                rgb_image = torch_rgb_tensor.to(self.device)
+                rgb_image_copy = torch.reshape(
+                    rgb_image, (rgb_image.shape[0], -1, 4))[..., :3]
+                rgb_image_copy = rgb_image_copy.permute(2, 0, 1)
+                frame = rgb_image_copy[:, 280:460, 510:770].clone().detach().cpu().numpy()
+
+                eef_torch_rgb_tensor = self.eef_rgb_camera_tensors[env_count]
+                eef_rgb_image = eef_torch_rgb_tensor.to(self.device)
+                eef_rgb_image_copy = torch.reshape(
+                    eef_rgb_image, (eef_rgb_image.shape[0], -1, 4))[..., :3]
+                eef_rgb_image_copy = eef_rgb_image_copy.permute(2, 0, 1)
+                # crop from 3, 1920, 1080 to 3, 1560, 1080 by cutting off 180 pixels on each side
+                eef_frame = eef_rgb_image_copy[:, :, 180:1740].clone().detach().cpu().numpy()
+                eef_frame = cv2.resize(eef_frame.transpose(1, 2, 0), (260, 180), interpolation=cv2.INTER_AREA)
+                eef_frame = eef_frame.transpose(2, 0, 1)
+
+                curr_frame_count = self.frame_count_video[env_count].item()
+                self.rgb_frames[env_count, curr_frame_count] = frame
+                self.eef_rgb_frames[env_count, curr_frame_count] = eef_frame
+                self.frame_count_video[env_count] += 1
+            if (self.log_video):
+                if (self.frame_count_video[env_count] >= 999 or self.finished_prim[env_count] == 1 or self.done[env_count] == 1) and self.frame_count_video[env_count] != 0:
+                    print("LOG VID")
+                    if self.success[env_count] == 1:
+                        self.run.log({"success video": [wandb.Video(self.rgb_frames[env_count], fps=15, format="mp4")]})
+                        self.run.log({"success eef video": [wandb.Video(self.eef_rgb_frames[env_count], fps=15, format="mp4")]})
+                    else:
+                        self.run.log({"failure video": [wandb.Video(self.rgb_frames[env_count], fps=15, format="mp4")]})
+                        self.run.log({"failure eef video": [wandb.Video(self.eef_rgb_frames[env_count], fps=15, format="mp4")]})
+                    self.frame_count_video[env_count] = 0
+                    self.rgb_frames[env_count] = torch.zeros((1000, 3, 180, 260))
+                    self.eef_rgb_frames[env_count] = torch.zeros((1000, 3, 180, 260))
+
             # Get action from policy
             self.actions = torch.cat([self.actions.to(self.device), self.action_env.to(self.device)])
             self.frame_count[env_count] += torch.tensor(1)

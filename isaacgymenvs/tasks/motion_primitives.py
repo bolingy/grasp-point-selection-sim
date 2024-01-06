@@ -2,7 +2,7 @@ from isaacgym import gymapi
 import torch
 import numpy as np
 
-DEFAULT_OSC_DIST = 0.4
+DEFAULT_OSC_DIST = 0.2
 DEFAULT_MIN_DIST_MUL = 0.1
 class Primitives():
     def __init__(self, num_envs, init_pose, device):
