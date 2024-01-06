@@ -28,7 +28,7 @@ parser.add_argument("--sim_device_id", type=int, default=0, help = "Select GPU D
 parser.add_argument('--train_device', type=str, default='cuda', help='running device: cuda or cpu')
 parser.add_argument('--EnvIdex', type=int, default=0, help='Full_Nocam or Full')
 parser.add_argument('--num_envs', type=int, default=1, help='number of envs')
-parser.add_argument('--write', type=str2bool, default=False, help='Use SummaryWriter to record the training')
+parser.add_argument('--write', type=str2bool, default=False, help='Use wandb to record the training')
 parser.add_argument('--render', type=str2bool, default=False, help='Render or Not')
 parser.add_argument('--res_net', type=str2bool, default=False, help='Use resnet or not')
 parser.add_argument('--Loadmodel', type=str2bool, default=False, help='Load pretrained model or Not')
@@ -106,13 +106,12 @@ def main():
     print('Algorithm:',algo_name,'  Env:', env_name,'  state_dim:',opt.state_dim,
           '  action_dim:',opt.action_dim,'  Random Seed:',opt.seed, '\n')
     if opt.write:
-        from torch.utils.tensorboard import SummaryWriter
         timenow = str(datetime.now())[0:-10]
         timenow = ' ' + timenow[0:13] + '_' + timenow[-2::]
         writepath = 'runs/{}_{}'.format(algo_name, env_name) + timenow
         if os.path.exists(writepath): shutil.rmtree(writepath)
-        writer = SummaryWriter(log_dir=writepath)
-        wandb.init(project="dqn", name=env_name, config=opt)
+        run = wandb.init(project="dqn", name=env_name, config=opt)
+        env.run = run
 
     #Build model and replay buffer
     if not os.path.exists('model'): os.mkdir('model')
