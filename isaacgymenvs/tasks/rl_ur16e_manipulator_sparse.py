@@ -1948,7 +1948,7 @@ class RL_UR16eManipulation(VecTask):
                     self.distance = torch.tensor([1, 1, 1])
                     # Giving the error between pre grasp pose and the current end effector pose
                     if (self.action_contrib[env_count] >= torch.tensor(1)):
-                        pose_factor, ori_factor = 1.0, 0.3
+                        pose_factor, ori_factor = 2.0, 1.0
                         self.action_env = torch.tensor([[pose_factor*T_ee_pose_to_pre_grasp_pose[0][3], pose_factor*T_ee_pose_to_pre_grasp_pose[1][3],
                                                         pose_factor *
                                                         T_ee_pose_to_pre_grasp_pose[2][3], ori_factor *

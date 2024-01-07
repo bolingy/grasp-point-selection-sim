@@ -175,7 +175,7 @@ class calcualte_suction_score():
         #     x_index = (max_id/2).to(torch.int)
         #     difference_xy_plane = torch.cat((difference_xy_plane[:x_index,:], difference_xy_plane[x_index+1:,:]), dim=0)
         #     thresh = torch.sum(torch.sum(difference_xy_plane, 1))
-        if(abs(thresh) > 0.008):
+        if(abs(thresh) > 0.025):
             if(grasps_and_predictions == None):
                 return torch.tensor(0), torch.tensor([0, 0, 0]), torch.tensor([centroid_angle[0], centroid_angle[1], centroid_angle[2]])
             else:
