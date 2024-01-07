@@ -24,8 +24,8 @@ def gauss_noise_tensor(sigma_range):
         if sigma_range[0] == sigma_range[1]:
             sigma = sigma_range[0]
         else:
-            sigma = torch.rand(1) * (sigma_range[1] - sigma_range[0]) + sigma_range[0]
-        out = img + sigma * torch.randn_like(img)
+            sigma = torch.rand(1).to(img.device) * (sigma_range[1] - sigma_range[0]) + sigma_range[0]
+        out = img + sigma * torch.randn_like(img).to(img.device)
 
         if out.dtype != dtype:
             out = out.to(dtype)
@@ -127,7 +127,7 @@ class DQN_agent(object):
 		# Init hyperparameters for agent, just like "self.gamma = opt.gamma, self.lambd = opt.lambd, ..."
 		self.__dict__.update(kwargs)
 		self.tau = 0.005
-		self.replay_buffer = ReplayBuffer(self.state_dim, torch.device("cpu"), self.res_net, max_size=int(self.buffer_size), data_augmentation_prob=self.data_augmentation_prob)
+		self.replay_buffer = ReplayBuffer(self.state_dim, torch.device("cpu"), self.train_device, self.res_net, max_size=int(self.buffer_size), data_augmentation_prob=self.data_augmentation_prob)
 		if self.res_net:
 			self.q_net = ActorTimestepNet(block = ResidualBlock, layers = [3, 4, 6, 3], num_classes=6).to(self.train_device)
 			# self.q_net = nn.DataParallel(self.q_net, device_ids=[0], output_device=self.train_device)
@@ -210,22 +210,23 @@ class DQN_agent(object):
 
 
 class ReplayBuffer(object):
-	def __init__(self, state_dim, dvc, res_net, max_size=int(1e6), data_augmentation_prob=0.):
+	def __init__(self, state_dim, dvc, train_dvc, res_net, max_size=int(1e6), data_augmentation_prob=0.):
 		self.max_size = max_size
-		self.train_device = dvc
+		self.buffer_device = dvc
+		self.train_device = train_dvc
 		self.ptr = 0
 		self.size = 0
 		if res_net:
-			self.s = torch.zeros((max_size, 3, 180, 260),dtype=torch.float,device=self.train_device)
+			self.s = torch.zeros((max_size, 3, 180, 260),dtype=torch.float,device=self.buffer_device)
 		else:
-			self.s = torch.zeros((max_size, state_dim),dtype=torch.float,device=self.train_device)
-		self.a = torch.zeros((max_size, 1),dtype=torch.long,device=self.train_device)
-		self.r = torch.zeros((max_size, 1),dtype=torch.float,device=self.train_device)
+			self.s = torch.zeros((max_size, state_dim),dtype=torch.float,device=self.buffer_device)
+		self.a = torch.zeros((max_size, 1),dtype=torch.long,device=self.buffer_device)
+		self.r = torch.zeros((max_size, 1),dtype=torch.float,device=self.buffer_device)
 		if res_net:
-			self.s_next = torch.zeros((max_size, 3, 180, 260),dtype=torch.float,device=self.train_device)
+			self.s_next = torch.zeros((max_size, 3, 180, 260),dtype=torch.float,device=self.buffer_device)
 		else:
-			self.s_next = torch.zeros((max_size, state_dim),dtype=torch.float,device=self.train_device)
-		self.dw = torch.zeros((max_size, 1),dtype=torch.bool,device=self.train_device)
+			self.s_next = torch.zeros((max_size, state_dim),dtype=torch.float,device=self.buffer_device)
+		self.dw = torch.zeros((max_size, 1),dtype=torch.bool,device=self.buffer_device)
 		self.data_augmentation_prob = data_augmentation_prob
 		self.augmentation = transforms.Compose([
 			# Rotation
@@ -247,22 +248,17 @@ class ReplayBuffer(object):
 		])
 
 	def add(self, s, a, r, s_next, dw):
-		# self.s[self.ptr] = s.to(self.train_device)
-		# self.a[self.ptr] = a
-		# self.r[self.ptr] = r
-		# self.s_next[self.ptr] = s_next.to(self.train_device)
-		# self.dw[self.ptr] = dw
 		for i in range(s.shape[0]):
-			self.s[self.ptr] = s[i].to(self.train_device)
+			self.s[self.ptr] = s[i].to(self.buffer_device)
 			self.a[self.ptr] = a[i]
 			self.r[self.ptr] = r[i]
-			self.s_next[self.ptr] = s_next[i].to(self.train_device)
+			self.s_next[self.ptr] = s_next[i].to(self.buffer_device)
 			self.dw[self.ptr] = dw[i]
 			self.ptr = (self.ptr + 1) % self.max_size
 			self.size = min(self.size + 1, self.max_size)
 
 	def sample(self, batch_size):
-		ind = torch.randint(0, self.size, device=self.train_device, size=(batch_size,))
+		ind = torch.randint(0, self.size, device=self.buffer_device, size=(batch_size,))
 		s = self.s[ind].to(self.train_device)
 		s_next = self.s_next[ind].to(self.train_device)
 		if self.data_augmentation_prob > np.random.rand():
