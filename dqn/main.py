@@ -10,6 +10,7 @@ from datetime import datetime
 from DQN import DQN_agent
 import gymnasium as gym
 import os, shutil
+os.environ["PYOPENGL_PLATFORM"] = "egl"
 import argparse
 import torch
 from gym.spaces import Discrete

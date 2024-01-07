@@ -1135,16 +1135,25 @@ class RL_UR16eManipulation(VecTask):
 
             # find the 2 unique values  excluding 0, 255 in segmask tensor which represents the non-target objects in each env
             unique_values = torch.unique(torch_segmask_tensor, dim=-1)
-            unique_values = torch.stack([torch.unique(row, sorted=False)[1:-1] for row in unique_values])
+            # unique_values = torch.stack([torch.unique(row, sorted=False)[1:-1] for row in unique_values])
+            unique_values_trimmed = torch.tensor([]).to(self.device)
+            for row in unique_values:
+                row = row[row != 0]
+                row = row[row != 255]
+                vals = torch.unique(row, sorted=False)
+                result = torch.ones(2).to(self.device) * -1
+                result[:vals.shape[0]] = vals
+                unique_values_trimmed = torch.cat((unique_values_trimmed, result.unsqueeze(0)))
+
             # scramble such that values in each row are different, perhaps make it left to right later
             for i in range(unique_values.shape[0]):
-                unique_values[i] = unique_values[i][torch.randperm(unique_values[i].shape[0])]
+                unique_values_trimmed[i] = unique_values_trimmed[i][torch.randperm(unique_values_trimmed[i].shape[0])]
 
-            label_mapping = torch.arange(1, unique_values.shape[1]+1).to(self.device)
+            label_mapping = torch.arange(1, unique_values_trimmed.shape[1]+1).to(self.device)
             
             # replace the unique values with the label mapping in segmask tensor
-            for j in range(unique_values.shape[1]):
-                expanded_unique_values = unique_values[:, j, None].expand_as(torch_segmask_tensor)
+            for j in range(unique_values_trimmed.shape[1]):
+                expanded_unique_values = unique_values_trimmed[:, j, None].expand_as(torch_segmask_tensor)
                 mask = torch_segmask_tensor == expanded_unique_values
                 torch_segmask_tensor = torch.where(mask, label_mapping[j], torch_segmask_tensor)
 
