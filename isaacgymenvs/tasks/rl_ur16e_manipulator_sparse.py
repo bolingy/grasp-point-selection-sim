@@ -178,10 +178,11 @@ class RL_UR16eManipulation(VecTask):
         print("No. of environments: ", self.num_envs)
 
         self.log_video = self.cfg["env"]["captureVideo"]
-        self.save_video = torch.zeros(self.num_envs).to(self.device)
-        self.rgb_frames = np.zeros((self.num_envs, 1000, 3, 180, 260))
-        self.eef_rgb_frames = np.zeros((self.num_envs, 1000, 3, 180, 260))
-        self.frame_count_video = torch.zeros(self.num_envs).type(torch.int).to(self.device)
+        if self.log_video:
+            self.save_video = torch.zeros(self.num_envs).to(self.device)
+            self.rgb_frames = np.zeros((self.num_envs, 1000, 3, 180, 260))
+            self.eef_rgb_frames = np.zeros((self.num_envs, 1000, 3, 180, 260))
+            self.frame_count_video = torch.zeros(self.num_envs).type(torch.int).to(self.device)
         
         # Parameter storage and Trackers for each environments
         self.suction_deformation_score_temp = torch.Tensor()

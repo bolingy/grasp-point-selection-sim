@@ -165,11 +165,6 @@ class DQN_agent(object):
 
 	def train(self):
 		s, a, r, s_next, dw = self.replay_buffer.sample(self.batch_size)
-		s = s.to(self.train_device)
-		a = a.to(self.train_device)
-		r = r.to(self.train_device)
-		s_next = s_next.to(self.train_device)
-		dw = dw.to(self.train_device)
 		if self.res_net:
 			assert s.shape == s_next.shape == (self.batch_size, 3, 180, 260)
 		else:
@@ -268,16 +263,17 @@ class ReplayBuffer(object):
 
 	def sample(self, batch_size):
 		ind = torch.randint(0, self.size, device=self.train_device, size=(batch_size,))
-		s = self.s[ind]
-		s_next = self.s_next[ind]
+		s = self.s[ind].to(self.train_device)
+		s_next = self.s_next[ind].to(self.train_device)
 		if self.data_augmentation_prob > np.random.rand():
-			# TODO(Henri): process idxs of seg mask
 			s_s_next = torch.cat((s, s_next), axis=0)
 			assert s_s_next.shape == (s.shape[0]*2, 3, 180, 260)
 			s_s_next = self.augmentation(s_s_next)
 			s, s_next = s_s_next[:s.shape[0]], s_s_next[s.shape[0]:]
-			
-		return s, self.a[ind], self.r[ind], s_next, self.dw[ind]
+		a = self.a[ind].to(self.train_device)
+		r = self.r[ind].to(self.train_device)
+		dw = self.dw[ind].to(self.train_device)
+		return s, a, r, s_next, dw
 
 
 
