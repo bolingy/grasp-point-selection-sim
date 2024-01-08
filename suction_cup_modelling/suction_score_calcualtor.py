@@ -100,6 +100,7 @@ class calcualte_suction_score():
         points = self.convert_rgb_depth_to_point_cloud()
         centroid_point = torch.FloatTensor([torch.median(points[:, 0]), torch.median(points[:, 1]), torch.median(points[:, 2])]).to(self.device)
         if(centroid_point.any() == float('nan')):
+            print("zero due to nan")
             return torch.tensor(0), torch.tensor([0, 0, 0]), torch.tensor([centroid_angle[0], centroid_angle[1], centroid_angle[2]])
         '''
         Given sample point convert to xyz point
@@ -109,6 +110,7 @@ class calcualte_suction_score():
         else:
             xyz_point = self.convert_uv_point_to_xyz_point(self.grasps_and_predictions[0].item()+410, self.grasps_and_predictions[1].item()+180)
         if(xyz_point[2] < 0):
+            print("zero due to depth")
             return torch.tensor(0), torch.tensor([0, 0, 0]), torch.tensor([centroid_angle[0], centroid_angle[1], centroid_angle[2]])
         
         '''
@@ -161,6 +163,7 @@ class calcualte_suction_score():
         
         for i in range(len(self.suction_coordinates)):
             if(self.segmask[V[i].type(torch.int)][U[i].type(torch.int)] == 0):
+                print("zero due to segmask")
                 if(grasps_and_predictions == None):
                     return torch.tensor(0), torch.tensor([0, 0, 0]), torch.tensor([centroid_angle[0], centroid_angle[1], centroid_angle[2]])
                 else:
@@ -175,7 +178,9 @@ class calcualte_suction_score():
         #     x_index = (max_id/2).to(torch.int)
         #     difference_xy_plane = torch.cat((difference_xy_plane[:x_index,:], difference_xy_plane[x_index+1:,:]), dim=0)
         #     thresh = torch.sum(torch.sum(difference_xy_plane, 1))
-        if(abs(thresh) > 0.025):
+        if(abs(thresh) > 0.05):
+            print("thresh", thresh)
+            print("zero due to thresh")
             if(grasps_and_predictions == None):
                 return torch.tensor(0), torch.tensor([0, 0, 0]), torch.tensor([centroid_angle[0], centroid_angle[1], centroid_angle[2]])
             else:

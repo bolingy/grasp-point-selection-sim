@@ -821,7 +821,7 @@ class RL_UR16eManipulation(VecTask):
             offset_objects = [offset_object1, offset_object2, offset_object3]
             # add gaussian noise to the first 2 elements of the 3 offsets
             mean = 0
-            std_dev = 0.0
+            std_dev = 0.02
             offset_objects = [np.concatenate([offset[:2] + np.random.normal(mean, std_dev, 2), offset[2:]]) for offset in offset_objects]
             # print("noisy offset object", noisy_offset_objects)
 
@@ -1936,9 +1936,9 @@ class RL_UR16eManipulation(VecTask):
                         e2 = quaternion_to_euler_angles(q2, "XYZ", False)
                         _all_object_rotation_error += torch.sum(e1-e2).to(self.device)
 
-                        if (_all_objects_current_pose[int(object_id.item())][2] < torch.tensor(1.3) or _all_objects_current_pose[int(object_id.item())][2] > torch.tensor(1.7)
+                        if (_all_objects_current_pose[int(object_id.item())][2] < torch.tensor(1.25) or _all_objects_current_pose[int(object_id.item())][2] > torch.tensor(1.7)
                         or _all_objects_current_pose[int(object_id.item())][0] < torch.tensor(0.0) or _all_objects_current_pose[int(object_id.item())][0] > torch.tensor(0.95)
-                        or _all_objects_current_pose[int(object_id.item())][1] < torch.tensor(-0.18) or _all_objects_current_pose[int(object_id.item())][1] > torch.tensor(0.10)):
+                        or _all_objects_current_pose[int(object_id.item())][1] < torch.tensor(-0.18) or _all_objects_current_pose[int(object_id.item())][1] > torch.tensor(0.15)):
                             env_complete_reset = torch.cat(
                                 (env_complete_reset, torch.tensor([env_count])), axis=0)
                             print("Object out of bin 1")
