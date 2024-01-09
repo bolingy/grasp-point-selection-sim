@@ -165,7 +165,7 @@ def get_real_ys_dxs(imgs, sim_device='cuda:0'):
 	# example real dx
 	# real_dx = {'1': 0.01, '2': 0.02, '3': 0.03} # where 1 is the object and its value is the dx of the object
 
-	obj_offset = 20
+	obj_offset = 15
 
 	# get the seg mask and depth image
 	img_x = 260
@@ -182,7 +182,8 @@ def get_real_ys_dxs(imgs, sim_device='cuda:0'):
 	# print("unique_ids: ", unique_ids)
 	# pick the left and right most points of each seg mask
 	real_y = torch.zeros((depth.shape[0], unique_ids, 2))	
-	real_dx = torch.zeros((depth.shape[0], unique_ids))
+	real_dx = torch.zeros((depth.shape[0], unique_ids, 2))
+	# plt.imshow(seg[0].cpu().numpy())
 
 	for i in range(depth.shape[0]):
 		unique_ids_env = torch.unique(seg[i])
@@ -202,8 +203,18 @@ def get_real_ys_dxs(imgs, sim_device='cuda:0'):
 			real_y[i, j, 0] = left_most - obj_offset
 			real_y[i, j, 1] = right_most + obj_offset
 
-			# get the depth of the center of the seg mask
-			real_dx[i, j] = depth[i, y[0], x[0]]
+			# get the depth of the seg mask
+			x_min = torch.min(x)
+			x_max = torch.max(x)
+			y_mean = torch.mean(y.float())
+			# print("x_min: ", x_min)
+			# print("x_max: ", x_max)
+			# print("y_mean: ", y_mean)
+			real_dx[i, j, 0] = depth[i, int(y_mean), x_min]
+			real_dx[i, j, 1] = depth[i, int(y_mean), x_max]
+
+	# 		plt.plot(x_min.item(), y_mean.item(), 'ro')
+	# 		plt.text(x_min.item(), y_mean.item(), "depth for mask " + str(unique_ids_env[j]) + ": " + str(real_dx[i, j, 0].item()))
 
 	# print("real_y: ", real_y)
 	# print("real_dx: ", real_dx)
@@ -218,17 +229,21 @@ def get_real_ys_dxs(imgs, sim_device='cuda:0'):
 	# Use the sorted indices to rearrange the original tensor
 	real_y = torch.gather(real_y, 1, sorted_indices.unsqueeze(-1).expand(-1, -1, real_y.size(-1)))
 	# sort real dx such that it matches the sorted real y
-	real_dx = torch.gather(real_dx, 1, sorted_indices)
+	real_dx = torch.gather(real_dx, 1, sorted_indices.unsqueeze(-1).expand(-1, -1, real_dx.size(-1)))
 
 	# rearrange to batch_size, 2 x num_seg_masks
 	real_y = real_y.reshape(-1, 2*unique_ids)
+	real_dx = real_dx.reshape(-1, 2*unique_ids)
 	# print("unique_ids: ", unique_ids)
 	# print("real_y: ", real_y)
 	# print("Real dx: ", real_dx)
-	# plt.imshow(seg[0].cpu())
+	# # plot real ys and label their indicies and dxs
+	# for i in range(0, 6):
+	# 	plt.plot(real_y[0, i], 0, 'ro')
+	# 	plt.text(real_y[0, i], 0, str(i))
 	# plt.show()
-	# plt.imshow(seg[1].cpu())
-	# plt.show()
+	# # plt.imshow(seg[1].cpu())
+	# # plt.show()
 	# plt.imshow(depth[0].cpu())
 	# plt.show()
 	# plt.imshow(depth[1].cpu())
@@ -248,7 +263,7 @@ def convert_actions(action, real_y, real_dx, sim_device='cuda:0'):
 	z = torch.ones((action.shape[0], 1)).to(sim_device) * -0.05
 	# select the real y in each batch using the indicies specified in action[:, 0]
 	result_y = real_y.gather(1, action[:, 0].long().unsqueeze(1))
-	result_dx = (- real_dx.gather(1, (action[:, 0].long().unsqueeze(1)) // 2)) - 0.95
+	result_dx = (- real_dx.gather(1, (action[:, 0].long().unsqueeze(1)))) - 1.0
 	sign = torch.ones(action.shape[0]).to(sim_device)
 	sign[action[:, 0] % 2 == 1] = -1
 	action[:, 1] = action[:, 1] * 0.15 * sign
