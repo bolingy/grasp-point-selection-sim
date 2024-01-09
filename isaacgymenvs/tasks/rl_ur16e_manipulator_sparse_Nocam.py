@@ -1048,6 +1048,9 @@ class RL_UR16eManipulation(VecTask):
         self.obs_buf = torch.zeros(93600).to(self.device)
         # print("self.finished_prim.sum() > 0", self.finished_prim.sum() > 0)
         if self.finished_prim.sum() > 0:
+            if not self.rendered_this_step:
+                self.render_cameras()
+                self.rendered_this_step = True
             torch_scrap_tensor = torch.tensor([]).to(self.device)
             torch_prim_tensor = self.finished_prim.clone().detach()
             envs_finished_prim = torch.nonzero(torch_prim_tensor).long().squeeze(1)
