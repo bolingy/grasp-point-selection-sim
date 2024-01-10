@@ -480,6 +480,7 @@ class RL_UR16eManipulation(VecTask):
             for counter in range(len(self.object_models)):
                 self._object_model_id.append(self.gym.create_actor(
                     env_ptr, object_model_asset[counter], object_model_start_pose[counter], self.object_models[counter], i, 0, counter+1))
+                self.gym.set_actor_scale(env_ptr, self._object_model_id[-1], np.random.uniform(0.75, 1.25, 1)[0])
 
             if self.aggregate_mode > 0:
                 self.gym.end_aggregate(env_ptr)
@@ -814,10 +815,10 @@ class RL_UR16eManipulation(VecTask):
             # store the sampled weight for each obj
             list_objects_domain_randomizer = torch.tensor([])
             # Fixed obj pose for fixed scene
-            if random.random() < 0.5:
-                offset_object1 = np.array([0.55, -0.13, 1.4, 0.0, 0.0, 0.0])
-                offset_object2 = np.array([0.51, 0.03, 1.4, 0.0, 0.0, 0.0])
-                offset_object3 = np.array([0.63, -0.03, 1.4, 0.0, 0.0, 0.0])
+            if random.random() < 1.0:
+                offset_object1 = np.array([0.55, -0.17, 1.4, 0.0, 0.0, 0.0])
+                offset_object2 = np.array([0.51, 0.0, 1.4, 0.0, 0.0, 0.0])
+                offset_object3 = np.array([0.63, -0.05, 1.4, 0.0, 0.0, 0.0])
             else:
                 offset_object1 = np.array([0.55, -0.1, 1.4, 0.0, 0.0, 0.0])
                 offset_object2 = np.array([0.6, 0., 1.4, 0.0, 0.0, 0.0])
@@ -836,8 +837,10 @@ class RL_UR16eManipulation(VecTask):
                     [1, 2, 3, 4, 5])
                 if self.obj_randomization:
                     # pose
+                    # offset_object = np.array([np.random.uniform(0.57, 0.7, 1).reshape(
+                    #     1,)[0], np.random.uniform(-0.15, 0.10, 1).reshape(1,)[0], 1.55, 0, 0, 0])
                     offset_object = np.array([np.random.uniform(0.57, 0.7, 1).reshape(
-                        1,)[0], np.random.uniform(-0.15, 0.10, 1).reshape(1,)[0], 1.55, 0, 0, 0])
+                        1,)[0], np.random.uniform(-0.15, 0.04, 1).reshape(1,)[0], 1.55, 0, 0, 0])
                     domain_randomizer = random_number = random.choice(
                     [1, 2, 3, 4, 5])
                 else:
@@ -846,7 +849,7 @@ class RL_UR16eManipulation(VecTask):
                         1,)[0], np.random.uniform(-0.15, 0.10, 1).reshape(1,)[0], 1.55, 0, 0, 0])
                     domain_randomizer = random_number = random.choice(
                     [1])
-                ##############################################
+                #############################################
                 if idx == 0:
                     offset_object = offset_objects[1]
                 elif idx == 1:
