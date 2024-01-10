@@ -815,7 +815,7 @@ class RL_UR16eManipulation(VecTask):
             # store the sampled weight for each obj
             list_objects_domain_randomizer = torch.tensor([])
             # Fixed obj pose for fixed scene
-            if random.random() < 1.0:
+            if random.random() < 0.5:
                 offset_object1 = np.array([0.55, -0.17, 1.4, 0.0, 0.0, 0.0])
                 offset_object2 = np.array([0.51, 0.0, 1.4, 0.0, 0.0, 0.0])
                 offset_object3 = np.array([0.63, -0.05, 1.4, 0.0, 0.0, 0.0])
