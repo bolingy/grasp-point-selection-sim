@@ -11,6 +11,7 @@ from DQN import DQN_agent
 import gymnasium as gym
 import os, shutil
 os.environ["PYOPENGL_PLATFORM"] = "egl"
+os.environ["IMAGEIO_FFMPEG_EXE"] = "/usr/bin/ffmpeg"
 import argparse
 import torch
 from gym.spaces import Discrete
@@ -53,6 +54,7 @@ parser.add_argument('--exp_noise', type=float, default=0.2, help='explore noise'
 parser.add_argument('--noise_decay', type=float, default=0.99, help='decay rate of explore noise')
 parser.add_argument('--DDQN', type=str2bool, default=True, help='True:DDQN; False:DQN')
 parser.add_argument('--eval', type=str2bool, default=False, help='True:deterministic; False:non-deterministic')
+parser.add_argument('--num_classes', type=int, default=6, help='Number of QNet output classes')
 
 opt = parser.parse_args()
 if opt.set_visible_cuda_devices:
@@ -160,6 +162,7 @@ def main():
                 if total_steps < opt.random_steps and not opt.eval: 
                     # a = action_space.sample()
                     a = torch.randint(0, 6, (true_indicies.shape[0], 1)).to(DEVICE)
+                    # a = torch.ones(true_indicies.shape[0], 1).to(DEVICE) * 1.0
                     assert a.shape == (true_indicies.shape[0], 1)
                     a = torch.concat((a, torch.ones(true_indicies.shape[0], 1).to(DEVICE)), dim = 1).to(DEVICE)
                     assert a.shape == (true_indicies.shape[0], 2)

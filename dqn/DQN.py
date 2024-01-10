@@ -129,7 +129,7 @@ class DQN_agent(object):
 		self.tau = 0.005
 		self.replay_buffer = ReplayBuffer(self.state_dim, torch.device("cpu"), self.train_device, self.res_net, max_size=int(self.buffer_size), data_augmentation_prob=self.data_augmentation_prob)
 		if self.res_net:
-			self.q_net = ActorTimestepNet(block = ResidualBlock, layers = [3, 4, 6, 3], num_classes=6).to(self.train_device)
+			self.q_net = ActorTimestepNet(block = ResidualBlock, layers = [3, 4, 6, 3], num_classes=self.num_classes).to(self.train_device)
 			# self.q_net = nn.DataParallel(self.q_net, device_ids=[0], output_device=self.train_device)
 		else:
 			self.q_net = Q_Net(self.state_dim, self.action_dim, (self.net_width,self.net_width)).to(self.train_device)
