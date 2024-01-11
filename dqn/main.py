@@ -150,11 +150,7 @@ def main():
         update_steps = 0
         eval_steps = 0 
         save_steps = 0
-<<<<<<< HEAD
-        action_log_env = torch.zeros(ne, 1).to(DEVICE)
-=======
         action_envs_log = torch.zeros(ne, 1).to(DEVICE)
->>>>>>> 22ce953c95f07f30781eccdfd4f4b54c967164a5
         while total_steps < opt.Max_train_steps:
             # s, info = env.reset(seed=env_seed) # Do not use opt.seed directly, or it can overfit to opt.seed
             # env_seed += 1
@@ -184,11 +180,7 @@ def main():
                     assert a.shape == (true_indicies.shape[0], 1), "Expected shape {}, got {}".format((true_indicies.shape[0], 1), a.shape)
                     a = torch.concat((a, torch.ones(true_indicies.shape[0], 1).to(DEVICE)), dim = 1).to(DEVICE)
                     assert a.shape == (true_indicies.shape[0], 2)
-<<<<<<< HEAD
-                action_log_env[true_indicies] = a[:, 0].unsqueeze(1).clone().detach()
-=======
                 action_envs_log[true_indicies] = a[:, 0].unsqueeze(1).clone().detach()
->>>>>>> 22ce953c95f07f30781eccdfd4f4b54c967164a5
                 for i, true_i in enumerate(true_indicies):
                     buf_envs[true_i].states.append(s[i].unsqueeze(0).clone().detach())
                     buf_envs[true_i].actions.append(a[i].clone().detach())
@@ -248,11 +240,7 @@ def main():
                     if opt.write:
                         print("total_steps: ", total_steps, " print_running_reward: ", print_running_reward, " avg_score: ", print_running_reward/print_running_ep)
                         wandb.log({'score': print_running_reward, 'steps': total_steps, 'avg_score': print_running_reward/print_running_ep})
-<<<<<<< HEAD
-                        wandb.log({'action_log_env': wandb.Histogram(action_log_env)})
-=======
                         wandb.log({'action_envs_log': wandb.Histogram(action_envs_log.cpu())})
->>>>>>> 22ce953c95f07f30781eccdfd4f4b54c967164a5
                         print_running_reward = 0
                         print_running_ep = 0
                     eval_steps -= opt.eval_interval 
