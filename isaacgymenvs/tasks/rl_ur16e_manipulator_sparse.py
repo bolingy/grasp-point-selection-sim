@@ -181,9 +181,9 @@ class RL_UR16eManipulation(VecTask):
         self.log_video = self.cfg["env"]["captureVideo"]
         if self.log_video:
             self.save_video = torch.zeros(self.num_envs).to(self.device)
-            self.rgb_frames = np.zeros((self.num_envs, 1000, 3, 180, 260))
-            self.log_rgb_frames = np.zeros((self.num_envs, 1000, 3, 180, 260))
-            self.eef_rgb_frames = np.zeros((self.num_envs, 1000, 3, 180, 260))
+            self.rgb_frames = np.zeros((self.num_envs, 1000, 3, 180, 260)).astype(np.uint8)
+            self.log_rgb_frames = np.zeros((self.num_envs, 1000, 3, 180, 260)).astype(np.uint8)
+            self.eef_rgb_frames = np.zeros((self.num_envs, 1000, 3, 180, 260)).astype(np.uint8)
             self.frame_count_video = torch.zeros(self.num_envs).type(torch.int).to(self.device)
         
         # Parameter storage and Trackers for each environments
@@ -2543,8 +2543,9 @@ class RL_UR16eManipulation(VecTask):
                         self.run.log({"failure log video": [wandb.Video(self.log_rgb_frames[env_count], fps=15, format="mp4")]})
                         self.run.log({"failure eef video": [wandb.Video(self.eef_rgb_frames[env_count], fps=15, format="mp4")]})
                     self.frame_count_video[env_count] = 0
-                    self.rgb_frames[env_count] = torch.zeros((1000, 3, 180, 260))
-                    self.eef_rgb_frames[env_count] = torch.zeros((1000, 3, 180, 260))
+                    self.rgb_frames[env_count] = np.zeros((1000, 3, 180, 260)).astype(np.uint8)
+                    self.log_rgb_frames[env_count] = np.zeros((1000, 3, 180, 260)).astype(np.uint8)
+                    self.eef_rgb_frames[env_count] = np.zeros((1000, 3, 180, 260)).astype(np.uint8)
 
             # Get action from policy
             self.actions = torch.cat([self.actions.to(self.device), self.action_env.to(self.device)])
