@@ -112,6 +112,7 @@ class RL_UR16eManipulation(VecTask):
         self.eef_rgb_camera_tensors = []
         self.eef_depth_camera_tensors = []
         self.eef_mask_camera_tensors = []
+        self.log_rgb_camera_tensors = []
 
         self.debug_viz = self.cfg["env"]["enableDebugVis"]
 
@@ -181,6 +182,7 @@ class RL_UR16eManipulation(VecTask):
         if self.log_video:
             self.save_video = torch.zeros(self.num_envs).to(self.device)
             self.rgb_frames = np.zeros((self.num_envs, 1000, 3, 180, 260))
+            self.log_rgb_frames = np.zeros((self.num_envs, 1000, 3, 180, 260))
             self.eef_rgb_frames = np.zeros((self.num_envs, 1000, 3, 180, 260))
             self.frame_count_video = torch.zeros(self.num_envs).type(torch.int).to(self.device)
         
@@ -547,6 +549,24 @@ class RL_UR16eManipulation(VecTask):
             self.gym.attach_camera_to_body(
                 camera_handle_gripper, env_ptr, ur16e_hand_link_handle, local_transform, gymapi.FOLLOW_TRANSFORM)
             self.camera_handles[i].append(camera_handle_gripper)
+            self.log_video = self.cfg["env"]["captureVideo"]
+            if self.log_video:
+                log_camera_handle = self.gym.create_camera_sensor(
+                    env_ptr, self.camera_properties_back_cam)
+                self.log_camera_base_link_translation = torch.tensor(
+                    [0.30, 0.05, 0.5]).to(self.device)
+                local_transform = gymapi.Transform()
+                local_transform.p = gymapi.Vec3(
+                    self.log_camera_base_link_translation[0], self.log_camera_base_link_translation[1], self.log_camera_base_link_translation[2])
+                # point camera down around z axis, focal pt at center of env
+                camera_rotation_x = gymapi.Quat.from_axis_angle(
+                    gymapi.Vec3(1, 0, 0), np.deg2rad(180))
+                camera_rotation_z = gymapi.Quat.from_axis_angle(
+                    gymapi.Vec3(0, 1, 0), np.deg2rad(20))
+                local_transform.r = camera_rotation_x * camera_rotation_z
+                self.gym.attach_camera_to_body(
+                    log_camera_handle, env_ptr, ur16e_base_link_handle, local_transform, gymapi.FOLLOW_TRANSFORM)
+                self.camera_handles[i].append(log_camera_handle)
             ############
             rgb_camera_tensor = self.gym.get_camera_image_gpu_tensor(
                         self.sim, self.envs[i], self.camera_handles[i][0], gymapi.IMAGE_COLOR)
@@ -577,6 +597,11 @@ class RL_UR16eManipulation(VecTask):
                             self.sim, self.envs[i], self.camera_handles[i][1], gymapi.IMAGE_DEPTH)
             eef_torch_depth_tensor = gymtorch.wrap_tensor(eef_depth_camera_tensor)
             self.eef_depth_camera_tensors.append(eef_torch_depth_tensor)
+            if self.log_video:
+                log_rgb_camera_tensor = self.gym.get_camera_image_gpu_tensor(
+                            self.sim, self.envs[i], self.camera_handles[i][2], gymapi.IMAGE_COLOR)
+                log_torch_rgb_cam_tensor = gymtorch.wrap_tensor(log_rgb_camera_tensor)
+                self.log_rgb_camera_tensors.append(log_torch_rgb_cam_tensor)
 
 
         # Setup data
@@ -818,11 +843,14 @@ class RL_UR16eManipulation(VecTask):
             if random.random() < 0.5:
                 offset_object1 = np.array([0.55, -0.17, 1.4, 0.0, 0.0, 0.0])
                 offset_object2 = np.array([0.51, 0.0, 1.4, 0.0, 0.0, 0.0])
-                offset_object3 = np.array([0.63, -0.05, 1.4, 0.0, 0.0, 0.0])
+                offset_object3 = np.array([0.63, -0.03, 1.4, 0.0, 0.0, 0.0])
             else:
                 offset_object1 = np.array([0.55, -0.1, 1.4, 0.0, 0.0, 0.0])
                 offset_object2 = np.array([0.6, 0., 1.4, 0.0, 0.0, 0.0])
                 offset_object3 = np.array([0.62, -0.1, 1.4, 0.0, 0.0, 0.0])
+
+            # random_ori = random.choice([[0.0, 0.0, math.pi/4], [0.0, 0.0, -math.pi/4], [0.0, 0.0, 0.0]])
+            # offset_object3[3:6] = random_ori
             
             offset_objects = [offset_object1, offset_object2, offset_object3]
             # add gaussian noise to the first 2 elements of the 3 offsets
@@ -2476,6 +2504,18 @@ class RL_UR16eManipulation(VecTask):
                 rgb_image_copy = rgb_image_copy.permute(2, 0, 1)
                 frame = rgb_image_copy[:, 280:460, 510:770].clone().detach().cpu().numpy()
 
+                torch_rgb_tensor = self.log_rgb_camera_tensors[env_count]
+                # print("torch uniq rgb", torch.unique(torch_rgb_tensor))
+                rgb_image = torch_rgb_tensor.to(self.device)
+                rgb_image_copy = torch.reshape(
+                    rgb_image, (rgb_image.shape[0], -1, 4))[..., :3]
+                rgb_image_copy = rgb_image_copy.permute(2, 0, 1)
+                log_frame = rgb_image_copy.clone().detach().cpu().numpy()
+                log_frame = cv2.resize(log_frame.transpose(1, 2, 0), (260, 180), interpolation=cv2.INTER_AREA)  
+                log_frame = log_frame.transpose(2, 0, 1)
+                # plt.imshow(frame.transpose(1, 2, 0))
+                # plt.show()
+
                 eef_torch_rgb_tensor = self.eef_rgb_camera_tensors[env_count]
                 eef_rgb_image = eef_torch_rgb_tensor.to(self.device)
                 eef_rgb_image_copy = torch.reshape(
@@ -2488,6 +2528,7 @@ class RL_UR16eManipulation(VecTask):
 
                 curr_frame_count = self.frame_count_video[env_count].item()
                 self.rgb_frames[env_count, curr_frame_count] = frame
+                self.log_rgb_frames[env_count, curr_frame_count] = log_frame
                 self.eef_rgb_frames[env_count, curr_frame_count] = eef_frame
                 self.frame_count_video[env_count] += 1
             if (self.log_video):
@@ -2495,9 +2536,11 @@ class RL_UR16eManipulation(VecTask):
                     print("LOG VID")
                     if self.success[env_count] == 1:
                         self.run.log({"success video": [wandb.Video(self.rgb_frames[env_count], fps=15, format="mp4")]})
+                        self.run.log({"success log video": [wandb.Video(self.log_rgb_frames[env_count], fps=15, format="mp4")]})
                         self.run.log({"success eef video": [wandb.Video(self.eef_rgb_frames[env_count], fps=15, format="mp4")]})
                     else:
                         self.run.log({"failure video": [wandb.Video(self.rgb_frames[env_count], fps=15, format="mp4")]})
+                        self.run.log({"failure log video": [wandb.Video(self.log_rgb_frames[env_count], fps=15, format="mp4")]})
                         self.run.log({"failure eef video": [wandb.Video(self.eef_rgb_frames[env_count], fps=15, format="mp4")]})
                     self.frame_count_video[env_count] = 0
                     self.rgb_frames[env_count] = torch.zeros((1000, 3, 180, 260))
