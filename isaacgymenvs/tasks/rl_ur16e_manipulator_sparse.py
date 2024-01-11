@@ -482,7 +482,7 @@ class RL_UR16eManipulation(VecTask):
             for counter in range(len(self.object_models)):
                 self._object_model_id.append(self.gym.create_actor(
                     env_ptr, object_model_asset[counter], object_model_start_pose[counter], self.object_models[counter], i, 0, counter+1))
-                self.gym.set_actor_scale(env_ptr, self._object_model_id[-1], np.random.uniform(0.75, 1.25, 1)[0])
+                # self.gym.set_actor_scale(env_ptr, self._object_model_id[-1], np.random.uniform(0.75, 1.25, 1)[0])
 
             if self.aggregate_mode > 0:
                 self.gym.end_aggregate(env_ptr)
@@ -2532,7 +2532,7 @@ class RL_UR16eManipulation(VecTask):
                 self.eef_rgb_frames[env_count, curr_frame_count] = eef_frame
                 self.frame_count_video[env_count] += 1
             if (self.log_video):
-                if (self.frame_count_video[env_count] >= 999 or self.finished_prim[env_count] == 1 or self.done[env_count] == 1) and self.frame_count_video[env_count] != 0:
+                if (self.frame_count_video[env_count] >= 999 or (self.finished_prim[env_count] == 1 and self.done[env_count] == 1)) and self.frame_count_video[env_count] != 0:
                     print("LOG VID")
                     if self.success[env_count] == 1:
                         self.run.log({"success video": [wandb.Video(self.rgb_frames[env_count], fps=15, format="mp4")]})
