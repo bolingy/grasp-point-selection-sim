@@ -5,6 +5,7 @@ import torch
 import torchvision.transforms as transforms
 import copy
 from rl.rl_utils import *
+import pickle
 
 def build_net(layer_shape, activation, output_activation):
 	'''build net with for loop'''
@@ -214,6 +215,7 @@ class ReplayBuffer(object):
 		self.max_size = max_size
 		self.buffer_device = dvc
 		self.train_device = train_dvc
+		self.buffer = []
 		self.ptr = 0
 		self.size = 0
 		if res_net:
@@ -249,6 +251,9 @@ class ReplayBuffer(object):
 
 	def add(self, s, a, r, s_next, dw):
 		for i in range(s.shape[0]):
+			if len(self.buffer) < self.max_size:
+				self.buffer.append(None)	
+			self.buffer[self.ptr] = (s[i], a[i], r[i], s_next[i], dw[i])
 			self.s[self.ptr] = s[i].to(self.buffer_device)
 			self.a[self.ptr] = a[i]
 			self.r[self.ptr] = r[i]
@@ -271,6 +276,25 @@ class ReplayBuffer(object):
 		dw = self.dw[ind].to(self.train_device)
 		return s, a, r, s_next, dw
 
+	def save_buffer(self, env_name, suffix="", save_path=None):
+		if save_path is None:
+			save_path = "checkpoints/dqn_buffer_{}_{}".format(env_name, suffix)
+		print('Saving buffer to {}'.format(save_path))
 
+		with open(save_path, 'wb') as f:
+			pickle.dump(self.buffer, f)
+	
+	def load_buffer(self, save_path):
+		print('Loading buffer from {}'.format(save_path))
 
+		with open(save_path, "rb") as f:
+			self.buffer = pickle.load(f)
+			self.ptr = len(self.buffer) % self.max_size
+			self.size = len(self.buffer)
+			for i in range(self.size):
+				self.s[i] = self.buffer[i][0].to(self.buffer_device)
+				self.a[i] = self.buffer[i][1]
+				self.r[i] = self.buffer[i][2]
+				self.s_next[i] = self.buffer[i][3].to(self.buffer_device)
+				self.dw[i] = self.buffer[i][4]
 
