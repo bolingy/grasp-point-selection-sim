@@ -261,7 +261,7 @@ def main():
                     name = algo_name + '_' + datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
                     print('Saving model {} at {} steps'.format(name, total_steps)) 
                     agent.save(name ,env_name[opt.EnvIdex],total_steps)
-                    agent.replay_buffer.save_buffer(env_name[opt.EnvIdex], suffix=name)
+                    # agent.replay_buffer.save_buffer(env_name[opt.EnvIdex], suffix=name)
                     save_steps -= opt.save_interval
     env.close()
     # eval_env.close()
