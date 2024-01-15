@@ -13,7 +13,7 @@ from isaacgym.torch_utils import *
 from isaacgymenvs.utils.torch_jit_utils import *
 from isaacgymenvs.tasks.base.vec_task import VecTask
 
-from matplotlib import pyplot as plt
+# from matplotlib import pyplot as plt
 
 import math
 
@@ -168,6 +168,7 @@ class RL_UR16eManipulation(VecTask):
         # when action contrib is 0, go to pregrasp pose 
         # when action contrib is 1, adjust angle to be same with grasp pose 
         # when action contrib is 2, go to grasp pose by moving in x,y,z direction
+        self.progress_buf = torch.zeros(self.num_envs).to(self.device)
         self.action_contrib = torch.ones(self.num_envs).to(self.device)*2
         self.frame_count_contact_object = torch.zeros(self.num_envs).to(self.device)
         self.force_encounter = torch.zeros(self.num_envs).to(self.device)
@@ -878,12 +879,12 @@ class RL_UR16eManipulation(VecTask):
                     domain_randomizer = random_number = random.choice(
                     [1])
                 #############################################
-                if idx == 0:
-                    offset_object = offset_objects[1]
-                elif idx == 1:
-                    offset_object = offset_objects[0]
-                elif idx == 2:
-                    offset_object = offset_objects[2]
+                # if idx == 0:
+                #     offset_object = offset_objects[1]
+                # elif idx == 1:
+                #     offset_object = offset_objects[0]
+                # elif idx == 2:
+                #     offset_object = offset_objects[2]
                 ##############################################
                 # set position and orientation
                 quat = euler_angles_to_quaternion(
@@ -1219,7 +1220,7 @@ class RL_UR16eManipulation(VecTask):
             
             if torch_indicies_tensor.shape[0] == 1:
                 self.obs_buf = self.obs_buf.unsqueeze(0)    
-            return self.obs_buf    
+            return self.obs_buf.clone().detach()
         else:
             return None
 

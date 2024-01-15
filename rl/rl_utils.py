@@ -70,7 +70,8 @@ def rearrange_state_timestep(state, b=2, h=180, w=260):
 
 def step_primitives(action, envs):
 	while True:
-		obs, reward, done, info = envs.step(action)
+		with torch.no_grad():
+			obs, reward, done, info = envs.step(action)
 		# if obs['obs'] is all zeros, then continue
 		if torch.sum(obs['obs']) == 0:
 			continue

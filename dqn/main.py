@@ -27,7 +27,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--set_visible_cuda_devices", type=str, default="0", help = "Select GPU DEVICES (CUDA) for training")
 parser.add_argument("--sim_device", type=str, default="cuda:0", help = "Select GPU DEVICE ID (CUDA) for simulation")
 parser.add_argument("--sim_device_id", type=int, default=0, help = "Select GPU DEVICE ID (CUDA) for simulation")
-parser.add_argument('--train_device', type=str, default='cuda', help='running device: cuda or cpu')
+parser.add_argument('--train_device', type=int, default='cuda', help='running device: cuda or cpu')
 parser.add_argument('--EnvIdex', type=int, default=0, help='Full_Nocam or Full')
 parser.add_argument('--num_envs', type=int, default=1, help='number of envs')
 parser.add_argument('--write', type=str2bool, default=False, help='Use wandb to record the training')
@@ -78,6 +78,10 @@ def main():
     head_less = not opt.render
     DEVICE = opt.sim_device
     DEVICE_ID = opt.sim_device_id
+    if opt.set_visible_cuda_devices[0] == '0':
+        graphics_id = 0
+    else:
+        graphics_id = 3
     env = isaacgymenvs.make(
         seed=0,
         task=env_name,
@@ -85,7 +89,7 @@ def main():
         sim_device=DEVICE, # cpu cuda:0
         rl_device=DEVICE, # cpu cuda:0
         multi_gpu=False,
-        graphics_device_id=DEVICE_ID,
+        graphics_device_id=graphics_id,
         headless=head_less
     )
     action_space = Discrete(6)
@@ -174,16 +178,16 @@ def main():
                         assert s.shape == (true_indicies.shape[0], 10)
 
                     if opt.eval:
-                        a = agent.select_action(s, deterministic=True)
+                        a = agent.select_action(s.to(opt.train_device), deterministic=True)
                     else:
-                        a = agent.select_action(s, deterministic=False)
+                        a = agent.select_action(s.to(opt.train_device), deterministic=False)
                     assert a.shape == (true_indicies.shape[0], 1), "Expected shape {}, got {}".format((true_indicies.shape[0], 1), a.shape)
-                    a = torch.concat((a, torch.ones(true_indicies.shape[0], 1).to(DEVICE)), dim = 1).to(DEVICE)
+                    a = torch.concat((a.to(DEVICE), torch.ones(true_indicies.shape[0], 1).to(DEVICE)), dim = 1).to(DEVICE)
                     assert a.shape == (true_indicies.shape[0], 2)
                 action_envs_log[true_indicies] = a[:, 0].unsqueeze(1).clone().detach()
                 for i, true_i in enumerate(true_indicies):
-                    buf_envs[true_i].states.append(s[i].unsqueeze(0).clone().detach())
-                    buf_envs[true_i].actions.append(a[i].clone().detach())
+                    buf_envs[true_i].states.append(s[i].unsqueeze(0).clone().detach().cpu())
+                    buf_envs[true_i].actions.append(a[i].clone().detach().cpu())
                     if true_i == 0:
                         print("action of env 0 updated", a[i])
                 env_action = convert_actions(a, real_ys, real_dxs, sim_device=DEVICE)
@@ -212,10 +216,9 @@ def main():
 
                 for i, true_i in enumerate(true_indicies):
                     if len(buf_envs[true_i].rewards) != len(buf_envs[true_i].states):
-                        buf_envs[true_i].rewards.append(r[i].clone().detach().unsqueeze(0))
-                        # buf_envs[true_i].scraps.append(scrap[i].clone().detach().unsqueeze(0))
-                        buf_envs[true_i].is_terminals.append(done[i].clone().detach().unsqueeze(0))
-                        buf_envs[true_i].new_states.append(s_next[i].unsqueeze(0).clone().detach())
+                        buf_envs[true_i].rewards.append(r[i].clone().detach().unsqueeze(0).cpu())
+                        buf_envs[true_i].is_terminals.append(done[i].clone().detach().unsqueeze(0).cpu())
+                        buf_envs[true_i].new_states.append(s_next[i].unsqueeze(0).clone().detach().cpu())
                     if(len(buf_envs[true_i].is_terminals) != 0 and buf_envs[true_i].is_terminals[-1] == True):
                         for i in range(len(buf_envs[true_i].states)):
                             agent.replay_buffer.add(buf_envs[true_i].states[i], buf_envs[true_i].actions[i], buf_envs[true_i].rewards[i], buf_envs[true_i].new_states[i], buf_envs[true_i].is_terminals[i])
