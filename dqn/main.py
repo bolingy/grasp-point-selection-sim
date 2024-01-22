@@ -54,7 +54,7 @@ parser.add_argument('--exp_noise', type=float, default=0.2, help='explore noise'
 parser.add_argument('--noise_decay', type=float, default=0.99, help='decay rate of explore noise')
 parser.add_argument('--DDQN', type=str2bool, default=True, help='True:DDQN; False:DQN')
 parser.add_argument('--eval', type=str2bool, default=False, help='True:deterministic; False:non-deterministic')
-parser.add_argument('--num_classes', type=int, default=6, help='Number of QNet output classes')
+parser.add_argument('--num_classes', type=int, default=144, help='Number of QNet output classes')
 
 opt = parser.parse_args()
 if opt.set_visible_cuda_devices:
