@@ -94,7 +94,7 @@ def main():
     )
     action_space = Discrete(6)
     opt.state_dim = 10
-    opt.action_dim = 6
+    opt.action_dim = 144
 
     #Use DDQN or DQN
     if opt.DDQN: algo_name = 'DDQN'
