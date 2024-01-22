@@ -868,13 +868,13 @@ class RL_UR16eManipulation(VecTask):
                     # pose
                     # offset_object = np.array([np.random.uniform(0.57, 0.7, 1).reshape(
                     #     1,)[0], np.random.uniform(-0.15, 0.10, 1).reshape(1,)[0], 1.55, 0, 0, 0])
-                    offset_object = np.array([np.random.uniform(0.57, 0.7, 1).reshape(
+                    offset_object = np.array([np.random.uniform(0.57, 0.6, 1).reshape(
                         1,)[0], np.random.uniform(-0.15, 0.04, 1).reshape(1,)[0], 1.55, 0, 0, 0])
                     domain_randomizer = random_number = random.choice(
                     [1, 2, 3, 4, 5])
                 else:
                     # apply fixed poses and weights
-                    offset_object = np.array([np.random.uniform(0.57, 0.7, 1).reshape(
+                    offset_object = np.array([np.random.uniform(0.57, 0.6, 1).reshape(
                         1,)[0], np.random.uniform(-0.15, 0.10, 1).reshape(1,)[0], 1.55, 0, 0, 0])
                     domain_randomizer = random_number = random.choice(
                     [1])
@@ -883,8 +883,9 @@ class RL_UR16eManipulation(VecTask):
                 #     offset_object = offset_objects[1]
                 # elif idx == 1:
                 #     offset_object = offset_objects[0]
-                # elif idx == 2:
-                #     offset_object = offset_objects[2]
+                if idx == 2:
+                    offset_object = np.array([np.random.uniform(0.6, 0.7, 1).reshape(
+                        1,)[0], np.random.uniform(-0.15, 0.10, 1).reshape(1,)[0], 1.55, 0, 0, 0])
                 ##############################################
                 # set position and orientation
                 quat = euler_angles_to_quaternion(

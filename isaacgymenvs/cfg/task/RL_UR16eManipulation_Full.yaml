@@ -18,7 +18,7 @@ env:
   clipObservations: 255.0
   clipActions: 1.0
   numActions: 2 # action dim
-  numPrimitiveActions: 1
+  numPrimitiveActions: 2
 
   startPositionNoise: 0.0
   startRotationNoise: 0.0
