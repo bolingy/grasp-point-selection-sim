@@ -1154,7 +1154,7 @@ class RL_UR16eManipulation(VecTask):
             scaled_diff_tensor = diff_target_area_tensor.to(self.device) * scaled_diff
             scaled_diff_tensor = torch.clamp(scaled_diff_tensor, -0.2, 0.2)
             torch_success_tensor = self.success[envs_finished_prim].clone().detach()
-            torch_success_tensor = torch_success_tensor + scaled_diff_tensor
+            torch_success_tensor = torch_success_tensor # + scaled_diff_tensor
 
             # reset if success
             self.success[envs_finished_prim] = torch.tensor(0).float().to(self.device)

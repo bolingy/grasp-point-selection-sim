@@ -273,6 +273,37 @@ def convert_actions(action, real_y, real_dx, sim_device='cuda:0'):
 	# print("result: ", result)
 	return result
 
+def convert_delta_actions(action, sim_device='cuda:0'):
+	# action is [action_idx, dy]
+	# action_idx has value (0-143)
+	# where action_idx defines the y, z, dx (1-6, 1-4, 1-6)
+	action_dim_y = 6
+	action_dim_z = 4
+	action_dim_dx = 6
+
+	# import pdb; pdb.set_trace()
+	action_idx = action[:, 0]
+	dy = action[:, 1]
+
+	result_y = torch.zeros((action.shape[0], 1)).to(sim_device)
+	result_z = torch.zeros((action.shape[0], 1)).to(sim_device)
+	result_dx = torch.zeros((action.shape[0], 1)).to(sim_device)
+
+	result_y = (action_idx // (action_dim_z * action_dim_dx)) + 1
+	result_z = ((action_idx % (action_dim_z * action_dim_dx)) // action_dim_dx) + 1
+	result_dx = ((action_idx % (action_dim_z * action_dim_dx)) % action_dim_dx) + 1
+
+	print("result_y: ", result_y)
+	print("result_z: ", result_z)
+	print("result_dx: ", result_dx)
+	result_y = 0.48/action_dim_y * result_y - 0.24
+	result_z = 0.2/action_dim_z * result_z - 0.1
+	result_dx = 0.4/action_dim_dx * result_dx
+	result = torch.stack((result_y, result_z, result_dx, dy), dim=1)
+
+	print("result: ", result)
+	return result
+
 def data_augmentation(state):
 	# separate into depth and seg mask
 	depth = state[:, 0]
