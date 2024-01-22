@@ -10,15 +10,15 @@ env:
   episodeLength: 1000
   enableDebugVis: False
 
-  objRandomization: False
-  numObstacles: 2
+  objRandomization: True
+  numObstacles: 5
   retract: True
   captureVideo: False
 
   clipObservations: 255.0
   clipActions: 1.0
   numActions: 2 # action dim
-  numPrimitiveActions: 1
+  numPrimitiveActions: 2
 
   startPositionNoise: 0.0
   startRotationNoise: 0.0
