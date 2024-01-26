@@ -172,7 +172,7 @@ class DQN_agent(object):
     def train(self):
         s, a, r, s_next, dw = self.replay_buffer.sample(self.batch_size)
         if self.res_net:
-            assert s.shape == s_next.shape == (self.batch_size, 3, 180, 260)
+            assert s.shape == s_next.shape == (self.batch_size, 5, 180, 260)
         else:
             assert s.shape == s_next.shape == (self.batch_size, self.state_dim)
         assert a.shape == r.shape == dw.shape == (self.batch_size, 1)
@@ -224,13 +224,13 @@ class ReplayBuffer(object):
         self.ptr = 0
         self.size = 0
         if res_net:
-            self.s = torch.zeros((max_size, 3, 180, 260),dtype=torch.float,device=self.buffer_device)
+            self.s = torch.zeros((max_size, 5, 180, 260),dtype=torch.float,device=self.buffer_device)
         else:
             self.s = torch.zeros((max_size, state_dim),dtype=torch.float,device=self.buffer_device)
         self.a = torch.zeros((max_size, 1),dtype=torch.long,device=self.buffer_device)
         self.r = torch.zeros((max_size, 1),dtype=torch.float,device=self.buffer_device)
         if res_net:
-            self.s_next = torch.zeros((max_size, 3, 180, 260),dtype=torch.float,device=self.buffer_device)
+            self.s_next = torch.zeros((max_size, 5, 180, 260),dtype=torch.float,device=self.buffer_device)
         else:
             self.s_next = torch.zeros((max_size, state_dim),dtype=torch.float,device=self.buffer_device)
         self.dw = torch.zeros((max_size, 1),dtype=torch.bool,device=self.buffer_device)
@@ -273,7 +273,7 @@ class ReplayBuffer(object):
         s_next = self.s_next[ind].to(self.train_device)
         if self.data_augmentation_prob > np.random.rand():
             s_s_next = torch.cat((s, s_next), axis=0)
-            assert s_s_next.shape == (s.shape[0]*2, 3, 180, 260)
+            assert s_s_next.shape == (s.shape[0]*2, 5, 180, 260)
             s_s_next = self.augmentation(s_s_next)
             s, s_next = s_s_next[:s.shape[0]], s_s_next[s.shape[0]:]
         a = self.a[ind].to(self.train_device)
