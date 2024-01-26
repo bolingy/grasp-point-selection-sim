@@ -173,7 +173,7 @@ def main():
                     assert a.shape == (true_indicies.shape[0], 2)
                 else: 
                     if opt.res_net:
-                        assert s.shape == (true_indicies.shape[0], 3, 180, 260), "Expected shape {}, got {}".format((true_indicies.shape[0], 3, 180, 260), s.shape)
+                        assert s.shape == (true_indicies.shape[0], 5, 180, 260), "Expected shape {}, got {}".format((true_indicies.shape[0], 3, 180, 260), s.shape)
                     else:
                         assert s.shape == (true_indicies.shape[0], 10)
 

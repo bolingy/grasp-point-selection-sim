@@ -22,7 +22,7 @@ def rearrange_state(state, b=2, h=180, w=260):
 	state = einops.rearrange(state, 'ne (b h w) -> ne b h w', b=b, h=h, w=w)
 	return state
 
-def rearrange_state_timestep(state, b=2, h=180, w=260):
+def rearrange_state_timestep(state, b=5, h=180, w=260):
     # state is a tensor of shape (batch_size, 307200 + 307200)
     # 307200 = 640 * 480
     # rearrange such that the depth image and seg mask are separate, and the batch dimension is first
@@ -33,6 +33,8 @@ def rearrange_state_timestep(state, b=2, h=180, w=260):
 	timestep = state[:, -1]
 	state = state[:, :-1]
 	state = einops.rearrange(state, 'ne (b h w) -> ne b h w', b=b, h=h, w=w)
+	# only take state[0,1,2,4]
+	state = state[:, [0, 1, 2, 4]]
 	# make timestep of shape (ne, 1, h, w)
 	timestep = timestep.unsqueeze(1).unsqueeze(2).unsqueeze(3).repeat(1, 1, h, w)
 	# print("timestep: ", timestep.shape)
@@ -41,7 +43,6 @@ def rearrange_state_timestep(state, b=2, h=180, w=260):
 	# normalize the depth image given max and min value of -1 and -1.56
 	state[:, 0] = (state[:, 0] + 1.56) / (1.56 - 1)
 	# print("state: ", state.shape
-
 	return state
 
 
@@ -171,9 +172,11 @@ def get_real_ys_dxs(imgs, sim_device='cuda:0'):
 	# get the seg mask and depth image
 	img_x = 260
 	img_y = 180
-	img = imgs[:, :img_x*img_y*2]
-	depth = img[:, :img_x*img_y]
-	seg = img[:, img_x*img_y:]
+	img = imgs[:, :img_x*img_y*5]
+	rgb = img[:, :img_x*img_y*3]
+	depth = img[:, img_x*img_y*3:img_x*img_y*4]
+	seg = img[:, img_x*img_y*4:]
+	rgb = rgb.reshape(-1, 3, img_y, img_x)
 	depth = depth.reshape(-1, img_y, img_x)
 	seg = seg.reshape(-1, img_y, img_x)
 
@@ -217,8 +220,6 @@ def get_real_ys_dxs(imgs, sim_device='cuda:0'):
 	# 		plt.plot(x_min.item(), y_mean.item(), 'ro')
 	# 		plt.text(x_min.item(), y_mean.item(), "depth for mask " + str(unique_ids_env[j]) + ": " + str(real_dx[i, j, 0].item()))
 
-	# print("real_y: ", real_y)
-	# print("real_dx: ", real_dx)
 	# sort by ascending left most point
 
 	# Extract the first column values

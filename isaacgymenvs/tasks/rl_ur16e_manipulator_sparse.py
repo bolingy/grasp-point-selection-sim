@@ -869,13 +869,13 @@ class RL_UR16eManipulation(VecTask):
                     # offset_object = np.array([np.random.uniform(0.57, 0.7, 1).reshape(
                     #     1,)[0], np.random.uniform(-0.15, 0.10, 1).reshape(1,)[0], 1.55, 0, 0, 0])
                     offset_object = np.array([np.random.uniform(0.57, 0.7, 1).reshape(
-                        1,)[0], np.random.uniform(-0.15, 0.04, 1).reshape(1,)[0], 1.55, np.random.uniform(-math.pi/2, math.pi/2, 1).reshape(1,)[0], np.random.uniform(-math.pi/2, math.pi/2, 1).reshape(1,)[0], np.random.uniform(-math.pi/2, math.pi/2, 1).reshape(1,)[0]])
+                        1,)[0], np.random.uniform(-0.15, 0.04, 1).reshape(1,)[0], 1.55, 0, 0, 0])
                     domain_randomizer = random_number = random.choice(
                     [1, 2, 3, 4, 5])
                 else:
                     # apply fixed poses and weights
                     offset_object = np.array([np.random.uniform(0.57, 0.7, 1).reshape(
-                        1,)[0], np.random.uniform(-0.15, 0.10, 1).reshape(1,)[0], 1.55, np.random.uniform(-math.pi/2, math.pi/2, 1).reshape(1,)[0], np.random.uniform(-math.pi/2, math.pi/2, 1).reshape(1,)[0], np.random.uniform(-math.pi/2, math.pi/2, 1).reshape(1,)[0]])
+                        1,)[0], np.random.uniform(-0.15, 0.10, 1).reshape(1,)[0], 1.55, 0, 0, 0])
                     domain_randomizer = random_number = random.choice(
                     [1])
                 #############################################
@@ -885,7 +885,7 @@ class RL_UR16eManipulation(VecTask):
                 #     offset_object = offset_objects[0]
                 if idx == 2:
                     offset_object = np.array([np.random.uniform(0.57, 0.7, 1).reshape(
-                        1,)[0], np.random.uniform(-0.15, 0.10, 1).reshape(1,)[0], 1.55, np.random.uniform(-math.pi/2, math.pi/2, 1).reshape(1,)[0], np.random.uniform(-math.pi/2, math.pi/2, 1).reshape(1,)[0], np.random.uniform(-math.pi/2, math.pi/2, 1).reshape(1,)[0]])
+                        1,)[0], np.random.uniform(-0.15, 0.10, 1).reshape(1,)[0], 1.55, 0, 0, 0])
                 ##############################################
                 # set position and orientation
                 quat = euler_angles_to_quaternion(
@@ -1108,10 +1108,10 @@ class RL_UR16eManipulation(VecTask):
                 torch_scrap_tensor = torch.cat((torch_scrap_tensor, torch.tensor([oscillation]).to(self.device)))
 
                 # print("oscillation", oscillation)
-                torch_rgb_tensor = self.rgb_camera_tensors[env_count]
-                rgb_image = torch_rgb_tensor.to(self.device)
-                rgb_image_copy = torch.reshape(
-                    rgb_image, (rgb_image.shape[0], -1, 4))[..., :3]
+                # torch_rgb_tensor = self.rgb_camera_tensors[env_count]
+                # rgb_image = torch_rgb_tensor.to(self.device)
+                # rgb_image_copy = torch.reshape(
+                #     rgb_image, (rgb_image.shape[0], -1, 4))[..., :3]
 
                 # self.rgb_save[env_count] = rgb_image_copy[180:660,
                 #                                             410:1050].clone().detach().cpu().numpy()
@@ -1129,6 +1129,8 @@ class RL_UR16eManipulation(VecTask):
                 #     np.save(save_dir_rgb_npy, self.rgb_save[env_count])
                     # print("saved rgb image")
                 
+            torch_rgb_cameras = torch.stack(self.rgb_camera_tensors).to(self.device)
+            torch_rgb_tensor = torch_rgb_cameras[envs_finished_prim]
 
             torch_depth_cameras = torch.stack(self.depth_camera_tensors).to(self.device)
             torch_depth_tensor = torch_depth_cameras[envs_finished_prim]
@@ -1166,8 +1168,10 @@ class RL_UR16eManipulation(VecTask):
 
             # crop depth image
             torch_depth_tensor = torch_depth_tensor[:, 280:460, 510:770]
-
             torch_depth_tensor = einops.rearrange(torch_depth_tensor, 'b h w -> b (h w)')
+
+            torch_rgb_tensor = torch_rgb_tensor[:, 280:460, 510:770]
+            torch_rgb_tensor = einops.rearrange(torch_rgb_tensor, 'b h w c -> b (h w c)')
 
             torch_segmask_tensor = torch.where(torch_segmask_tensor == label, torch.tensor(255).to(self.device), torch_segmask_tensor)
 
@@ -1204,7 +1208,7 @@ class RL_UR16eManipulation(VecTask):
             torch_primcount_tensor = self.primitive_count[envs_finished_prim].clone().detach()
 
             
-            self.obs_buf = torch.cat((torch_depth_tensor, torch_segmask_tensor), dim=1).squeeze(0)
+            self.obs_buf = torch.cat((torch_rgb_tensor, torch_segmask_tensor), dim=1).squeeze(0)
 
             if torch_indicies_tensor.shape[0] > 1:
                 self.obs_buf = torch.cat((self.obs_buf,  torch_primcount_tensor.unsqueeze(0).T.to(self.device)), dim=1)

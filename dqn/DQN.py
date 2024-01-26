@@ -39,7 +39,7 @@ class ActorTimestepNet(nn.Module):
         super(ActorTimestepNet, self).__init__()
         self.inplanes = 64
         self.conv1 = nn.Sequential(
-                        nn.Conv2d(2, 64, kernel_size = 7, stride = 2, padding = 3),
+                        nn.Conv2d(4, 64, kernel_size = 7, stride = 2, padding = 3),
                         nn.BatchNorm2d(64),
                         nn.ReLU())
         self.maxpool = nn.MaxPool2d(kernel_size = 3, stride = 2, padding = 1)
@@ -75,7 +75,6 @@ class ActorTimestepNet(nn.Module):
         timestep = x[:, -1]
         # x only first 2 channels
         x = x[:, :-1]
-        # print("x: ", x.shape)
 
         # flatten timestep and make it 500 x 1
         timestep = timestep.view(timestep.shape[0], -1)
@@ -152,7 +151,7 @@ class DQN_agent(object):
             # state = torch.FloatTensor(state.reshape(1, -1).cpu()).to(self.train_device)
             N = state.shape[0]
             if self.res_net:
-                assert state.shape == (N, 3, 180, 260)
+                assert state.shape == (N, 5, 180, 260)
             else:
                 assert state.shape == (N, self.state_dim)
             if deterministic:
