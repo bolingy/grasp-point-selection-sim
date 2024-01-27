@@ -283,23 +283,30 @@ def convert_delta_actions(action, sim_device='cuda:0'):
 
 	# import pdb; pdb.set_trace()
 	action_idx = action[:, 0]
-	dy = action[:, 1]
+	# dy = action[:, 1]
 
 	result_y = torch.zeros((action.shape[0], 1)).to(sim_device)
 	result_z = torch.zeros((action.shape[0], 1)).to(sim_device)
 	result_dx = torch.zeros((action.shape[0], 1)).to(sim_device)
+	
+	if action_idx < 128:
+		result_dy = -0.15
+	else:
+		result_dy = 0.15
 
-	result_y = (action_idx // (action_dim_z * action_dim_dx)) + 1
-	result_z = ((action_idx % (action_dim_z * action_dim_dx)) // action_dim_dx) + 1
-	result_dx = ((action_idx % (action_dim_z * action_dim_dx)) % action_dim_dx) + 1
+	action_idx = action_idx % 128
+	result_y = ((action_idx) // (action_dim_z * action_dim_dx)) + 1
+	result_z = (((action_idx) % (action_dim_z * action_dim_dx)) // action_dim_dx) + 1
+	result_dx = (((action_idx) % (action_dim_z * action_dim_dx)) % action_dim_dx) + 1
 
 	print("result_y: ", result_y)
 	print("result_z: ", result_z)
 	print("result_dx: ", result_dx)
+	print("result dy: ", result_dy)
 	result_y = 0.48/action_dim_y * result_y - 0.24
 	result_z = 0.2/action_dim_z * result_z - 0.1
 	result_dx = 0.4/action_dim_dx * result_dx
-	result = torch.stack((result_y, result_z, result_dx, dy), dim=1)
+	result = torch.stack((result_y, result_z, result_dx, result_dy), dim=1)
 
 	print("result: ", result)
 	return result
