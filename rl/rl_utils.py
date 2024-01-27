@@ -289,20 +289,13 @@ def convert_delta_actions(action, sim_device='cuda:0'):
 	result_z = torch.zeros((action.shape[0], 1)).to(sim_device)
 	result_dx = torch.zeros((action.shape[0], 1)).to(sim_device)
 	
-	if action_idx < 128:
-		result_dy = -0.15
-	else:
-		result_dy = 0.15
+	result_dy = (action_idx // 128) * 0.3 - 0.15 # -0.15 or 0.15
 
 	action_idx = action_idx % 128
 	result_y = ((action_idx) // (action_dim_z * action_dim_dx)) + 1
 	result_z = (((action_idx) % (action_dim_z * action_dim_dx)) // action_dim_dx) + 1
 	result_dx = (((action_idx) % (action_dim_z * action_dim_dx)) % action_dim_dx) + 1
 
-	print("result_y: ", result_y)
-	print("result_z: ", result_z)
-	print("result_dx: ", result_dx)
-	print("result dy: ", result_dy)
 	result_y = 0.48/action_dim_y * result_y - 0.24
 	result_z = 0.2/action_dim_z * result_z - 0.1
 	result_dx = 0.4/action_dim_dx * result_dx
