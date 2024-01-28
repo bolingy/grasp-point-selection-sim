@@ -356,6 +356,10 @@ class RL_UR16eManipulation(VecTask):
         object_model_asset_file = []
         object_model_asset = []
         for counter, model in enumerate(self.object_models):
+            if not os.path.exists("urdf_models/models/"+model+"/model.urdf"):
+                model = model.split("_")
+                model[-1] = "1"
+                model = "_".join(model)
             object_model_asset_file.append(
                 "urdf_models/models/"+model+"/model.urdf")
             object_model_asset.append(self.gym.load_asset(
@@ -869,13 +873,13 @@ class RL_UR16eManipulation(VecTask):
                     # offset_object = np.array([np.random.uniform(0.57, 0.7, 1).reshape(
                     #     1,)[0], np.random.uniform(-0.15, 0.10, 1).reshape(1,)[0], 1.55, 0, 0, 0])
                     offset_object = np.array([np.random.uniform(0.57, 0.7, 1).reshape(
-                        1,)[0], np.random.uniform(-0.15, 0.04, 1).reshape(1,)[0], 1.55, np.random.uniform(-math.pi/2, math.pi/2, 1).reshape(1,)[0], np.random.uniform(-math.pi/2, math.pi/2, 1).reshape(1,)[0], np.random.uniform(-math.pi/2, math.pi/2, 1).reshape(1,)[0]])
+                        1,)[0], np.random.uniform(-0.15, 0.04, 1).reshape(1,)[0], 1.55, 0, 0, 0])
                     domain_randomizer = random_number = random.choice(
                     [1, 2, 3, 4, 5])
                 else:
                     # apply fixed poses and weights
                     offset_object = np.array([np.random.uniform(0.57, 0.7, 1).reshape(
-                        1,)[0], np.random.uniform(-0.15, 0.10, 1).reshape(1,)[0], 1.55, np.random.uniform(-math.pi/2, math.pi/2, 1).reshape(1,)[0], np.random.uniform(-math.pi/2, math.pi/2, 1).reshape(1,)[0], np.random.uniform(-math.pi/2, math.pi/2, 1).reshape(1,)[0]])
+                        1,)[0], np.random.uniform(-0.15, 0.10, 1).reshape(1,)[0], 1.55, 0, 0, 0])
                     domain_randomizer = random_number = random.choice(
                     [1])
                 #############################################
@@ -885,7 +889,7 @@ class RL_UR16eManipulation(VecTask):
                 #     offset_object = offset_objects[0]
                 if idx == 2:
                     offset_object = np.array([np.random.uniform(0.57, 0.7, 1).reshape(
-                        1,)[0], np.random.uniform(-0.15, 0.10, 1).reshape(1,)[0], 1.55, np.random.uniform(-math.pi/2, math.pi/2, 1).reshape(1,)[0], np.random.uniform(-math.pi/2, math.pi/2, 1).reshape(1,)[0], np.random.uniform(-math.pi/2, math.pi/2, 1).reshape(1,)[0]])
+                        1,)[0], np.random.uniform(-0.15, 0.10, 1).reshape(1,)[0], 1.55, 0, 0, 0])
                 ##############################################
                 # set position and orientation
                 quat = euler_angles_to_quaternion(

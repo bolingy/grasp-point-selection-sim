@@ -3,5 +3,15 @@ green_cylinder
 centrum_box
 calcium_bottle
 kyolic_bottle
+honey_box
+blue_cup
+cleanser
+blue_tea_box
+conditioner
+repellent
+shampoo
+sugar_box
+pink_tea_box
+yellow_cup
 pizza_cutter
 small_health_bottle

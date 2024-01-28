@@ -20,11 +20,13 @@
       <material name="white">
         <color rgba="1. 1. 1. 1."/>
       </material>
+      <origin rpy="-1.7 0 0" xyz="0 0 0"/>
     </visual>
     <collision>
       <geometry>
     	 	<mesh filename="collision.obj" scale="1 1 1"/>
       </geometry>
+        <origin rpy="0 0 0" xyz="0 0 0"/>
     </collision>
   </link>
 </robot>
