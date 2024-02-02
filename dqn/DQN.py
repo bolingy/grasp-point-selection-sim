@@ -46,7 +46,7 @@ class ActorTimestepNet(nn.Module):
         self.layer0 = self._make_layer(block, 64, layers[0], stride = 3)
         self.avgpool = nn.AvgPool2d(8, stride=2)
         #TODO: removed timestep conditioning for now, add back later
-        self.fc = nn.Linear(2048, 256) #nn.Linear(2548, 256)
+        self.fc = nn.Linear(2548, 256)
         self.relu = nn.ReLU()
         self.fc2 = nn.Linear(256, num_classes)
         # self.sigmoid = nn.Sigmoid()
@@ -86,9 +86,7 @@ class ActorTimestepNet(nn.Module):
         x = self.layer0(x)
         x = self.avgpool(x)
         x = x.view(x.size(0), -1)
-        # concatenate timestep to x
-        #TODO: removed timestep conditioning for now, add back later
-        # x = torch.cat((x, timestep), dim = 1)
+        x = torch.cat((x, timestep), dim = 1)
         x = self.fc(x)
         x = self.relu(x)
         x = self.fc2(x)
