@@ -86,9 +86,7 @@ class ActorTimestepNet(nn.Module):
         x = self.layer0(x)
         x = self.avgpool(x)
         x = x.view(x.size(0), -1)
-        # concatenate timestep to x
-        #TODO: removed timestep conditioning for now, add back later
-        # x = torch.cat((x, timestep), dim = 1)
+        x = torch.cat((x, timestep), dim = 1)
         x = self.fc(x)
         x = self.relu(x)
         x = self.fc2(x)
