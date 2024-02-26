@@ -819,7 +819,7 @@ class RL_UR16eManipulation(VecTask):
             # self.RL_flag[env_count] = 0
             # How many objects should we spawn 2 or 3
             if self.obj_randomization:
-                probabilities = [0.0, 0.0, 1.0]
+                probabilities = [0.0, 0.3, 0.3, 0.3]
             else:
                 probabilities = [0.0, 0.0, 1.0]
             # randomly select number of objs
@@ -1181,7 +1181,7 @@ class RL_UR16eManipulation(VecTask):
                 row = row[row != 0]
                 row = row[row != 255]
                 vals = torch.unique(row, sorted=True)
-                result = torch.ones(2).to(self.device) * -1
+                result = torch.ones(vals.shape[0]).to(self.device) * -1
                 result[:vals.shape[0]] = vals
                 unique_values_trimmed = torch.cat((unique_values_trimmed, result.unsqueeze(0)))
 
@@ -1946,7 +1946,7 @@ class RL_UR16eManipulation(VecTask):
                     rotation_matrix_pre_grasp_pose = euler_angles_to_matrix(
                         torch.tensor([0, 0, 0]).to(self.device), "XYZ", degrees=True)
                     translation_pre_grasp_pose = torch.tensor(
-                        [-0.28, 0, 0]).to(self.device)
+                        [-0.35, 0, 0]).to(self.device)
                     T_pre_grasp_pose = transformation_matrix(
                         rotation_matrix_pre_grasp_pose, translation_pre_grasp_pose)
                     # Transformation of object with base link to pre grasp pose
