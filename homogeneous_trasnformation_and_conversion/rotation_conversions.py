@@ -13,6 +13,17 @@ def transformation_matrix(rotation_matrix: torch.Tensor, translation_vector: tor
     T[3, :] = torch.tensor([0, 0, 0, 1])
     return T.to(device)
 
+def transformation_matrices(rotation_matrix: torch.Tensor, translation_vector: torch.Tensor) -> torch.Tensor:
+    # device is gpu if at least one is on gpu
+    device = rotation_matrix.device
+    if translation_vector.device.type != 'cpu':
+        device = translation_vector.device
+    T = torch.empty((rotation_matrix.shape[0], 4, 4))
+    T[:, :3, :3] = rotation_matrix
+    T[:, :3, 3] = translation_vector
+    T[:, 3, :] = torch.tensor([0, 0, 0, 1])
+    return T.to(device)
+
 def axisangle2quat(vec: torch.Tensor, eps=1e-6) -> torch.Tensor:
     """
     Converts scaled axis-angle to quat.

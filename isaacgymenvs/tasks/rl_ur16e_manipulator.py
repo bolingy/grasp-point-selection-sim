@@ -262,7 +262,7 @@ class RL_UR16eManipulation(VecTask):
         # Refresh tensors
         self._refresh()
         # Primitives
-        primitives = Primitives(self.num_envs, self.states['eef_pos'], device=self.device)
+        primitives = Primitives(self.states['eef_pos'], device=self.device)
         # make an array of deep copies of Primitives for each env
         self.primitives = np.array([deepcopy(primitives) for _ in range(self.num_envs)])
         
