@@ -146,7 +146,7 @@ class RL_UR16eManipulation(VecTask):
             [1.57, 0, -1.57, 0, 1.57, 0, 0], device=self.device
         )
 
-        self.cooldown_frames = 150
+        self.cooldown_frames = 50
 
         # System Identification data results
         self.cur_path = str(Path(__file__).parent.absolute())
@@ -510,13 +510,13 @@ class RL_UR16eManipulation(VecTask):
             self.body_states = []
             self.camera_properties_back_cam = gymapi.CameraProperties()
             self.camera_properties_back_cam.enable_tensors = True
-            self.camera_properties_back_cam.horizontal_fov = 70.0
-            self.camera_properties_back_cam.width = 1280
-            self.camera_properties_back_cam.height = 786
+            self.camera_properties_back_cam.horizontal_fov = 20.0
+            self.camera_properties_back_cam.width = 260
+            self.camera_properties_back_cam.height = 180
             camera_handle = self.gym.create_camera_sensor(
                 env_ptr, self.camera_properties_back_cam)
             self.camera_base_link_translation = torch.tensor(
-                [-0.48, 0.05, 0.6]).to(self.device)
+                [-0.48, 0.05, 0.57]).to(self.device)
             local_transform = gymapi.Transform()
             local_transform.p = gymapi.Vec3(
                 self.camera_base_link_translation[0], self.camera_base_link_translation[1], self.camera_base_link_translation[2])
@@ -537,8 +537,8 @@ class RL_UR16eManipulation(VecTask):
             self.camera_properties_gripper = gymapi.CameraProperties()
             self.camera_properties_gripper.enable_tensors = True
             self.camera_properties_gripper.horizontal_fov = 150.0
-            self.camera_properties_gripper.width = 1920
-            self.camera_properties_gripper.height = 1080
+            self.camera_properties_gripper.width = 320
+            self.camera_properties_gripper.height = 180
             camera_handle_gripper = self.gym.create_camera_sensor(
                 env_ptr, self.camera_properties_gripper)
             self.camera_gripper_link_translation.append(
@@ -819,7 +819,7 @@ class RL_UR16eManipulation(VecTask):
             # self.RL_flag[env_count] = 0
             # How many objects should we spawn 2 or 3
             if self.obj_randomization:
-                probabilities = [0.0, 0.3, 0.3, 0.3]
+                probabilities = [0.0, 0.0, 1.0]
             else:
                 probabilities = [0.0, 0.0, 1.0]
             # randomly select number of objs
@@ -919,7 +919,7 @@ class RL_UR16eManipulation(VecTask):
             self.frame_count_contact_object[env_id] = 0
             self.frame_count[env_id] = 0
             self.free_envs_list[env_id] = torch.tensor(1)
-            self.object_pose_check_list[env_id] = torch.tensor(3)
+            self.object_pose_check_list[env_id] = torch.tensor(1)
             self.speed[env_id] = torch.tensor(0.1)
             self.run_dexnet[env_id] = torch.tensor(1)
             self.RL_flag[env_id] = torch.tensor(1)
@@ -1138,7 +1138,6 @@ class RL_UR16eManipulation(VecTask):
             torch_segmask_cameras = torch.stack(self.mask_camera_tensors).to(self.device)
             prev_target_area_tensor = self.torch_target_area_tensor
             torch_segmask_tensor = torch_segmask_cameras[envs_finished_prim]
-            torch_segmask_tensor = torch_segmask_tensor[:, 280:460, 510:770]
             torch_segmask_tensor = einops.rearrange(torch_segmask_tensor, 'b h w -> b (h w)')
             label = self.object_target_id[envs_finished_prim]
             label = label.unsqueeze(1).expand(torch_segmask_tensor.shape)
@@ -1167,7 +1166,6 @@ class RL_UR16eManipulation(VecTask):
             torch_indicies_tensor = envs_finished_prim
 
             # crop depth image
-            torch_depth_tensor = torch_depth_tensor[:, 280:460, 510:770]
 
             torch_depth_tensor = einops.rearrange(torch_depth_tensor, 'b h w -> b (h w)')
 
@@ -1181,7 +1179,7 @@ class RL_UR16eManipulation(VecTask):
                 row = row[row != 0]
                 row = row[row != 255]
                 vals = torch.unique(row, sorted=True)
-                result = torch.ones(vals.shape[0]).to(self.device) * -1
+                result = torch.ones(2).to(self.device) * -1
                 result[:vals.shape[0]] = vals
                 unique_values_trimmed = torch.cat((unique_values_trimmed, result.unsqueeze(0)))
 
@@ -1205,7 +1203,6 @@ class RL_UR16eManipulation(VecTask):
 
             torch_primcount_tensor = self.primitive_count[envs_finished_prim].clone().detach()
 
-            
             self.obs_buf = torch.cat((torch_depth_tensor, torch_segmask_tensor), dim=1).squeeze(0)
 
             if torch_indicies_tensor.shape[0] > 1:
@@ -1489,7 +1486,7 @@ class RL_UR16eManipulation(VecTask):
                             segmask_numpy[segmask_dexnet.cpu().numpy().astype(
                                 np.uint8) == self.object_target_id[env_count].cpu().numpy()] = 255
                             segmask_dexnet = BinaryImage(
-                                segmask_numpy[180:660, 410:1050], frame=self.camera_intrinsics_back_cam.frame)
+                                segmask_numpy, frame=self.camera_intrinsics_back_cam.frame)
 
 
 
@@ -1499,7 +1496,7 @@ class RL_UR16eManipulation(VecTask):
                             depth_image_dexnet = depth_image_dexnet + noise_image
 
                             depth_image_save_temp = depth_image_dexnet.clone().detach().cpu().numpy()
-                            self.depth_image_save[env_count] = depth_image_save_temp[180:660, 410:1050]
+                            self.depth_image_save[env_count] = depth_image_save_temp
 
                             # saving depth image, rgb image and segmentation mask
                             # self.config_env_count[env_count] += torch.tensor(
@@ -1527,10 +1524,8 @@ class RL_UR16eManipulation(VecTask):
                             depth_numpy_temp = depth_numpy*segmask_numpy_temp
                             depth_numpy_temp[depth_numpy_temp == 0] = 0.75
 
-                            depth_img_dexnet = DepthImage(
-                                depth_numpy_temp[180:660, 410:1050], frame=self.camera_intrinsics_back_cam.frame)
                             max_num_grasps = 0
-                            y, x = np.where(segmask_numpy[180:660, 410:1050] == 255)
+                            y, x = np.where(segmask_numpy == 255)
                             center_x, center_y = int(np.mean(x)), int(np.mean(y))
                             self.suction_deformation_score_temp = torch.Tensor()
                             self.xyz_point_temp = torch.empty((0, 3))

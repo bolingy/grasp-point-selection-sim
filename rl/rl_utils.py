@@ -179,7 +179,7 @@ def get_real_ys_dxs(imgs, sim_device='cuda:0'):
 
 	# print("batch size: ", depth.shape[0])
 	# get the real ys
-	unique_ids = 4
+	unique_ids = 3
 	# print("unique_ids: ", unique_ids)
 	# pick the left and right most points of each seg mask
 	real_y = torch.zeros((depth.shape[0], unique_ids, 2))	

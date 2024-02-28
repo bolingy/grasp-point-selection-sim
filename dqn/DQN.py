@@ -86,7 +86,7 @@ class ActorTimestepNet(nn.Module):
         x = self.layer0(x)
         x = self.avgpool(x)
         x = x.view(x.size(0), -1)
-        x = torch.cat((x, timestep), dim = 1)
+        # x = torch.cat((x, timestep), dim = 1)
         x = self.fc(x)
         x = self.relu(x)
         x = self.fc2(x)
@@ -181,7 +181,7 @@ class DQN_agent(object):
             if self.DDQN:
                 argmax_a = self.q_net(s_next).argmax(dim=1).unsqueeze(-1)
                 assert argmax_a.shape == (self.batch_size, 1)
-                assert self.q_target(s_next).shape == (self.batch_size, self.action_dim)
+                assert self.q_target(s_next).shape == (self.batch_size, self.action_dim), "Expected shape {}, got {}".format((self.batch_size, self.action_dim), self.q_target(s_next).shape)
                 max_q_prime = self.q_target(s_next).gather(1,argmax_a)
                 assert max_q_prime.shape == (self.batch_size, 1)
             else:

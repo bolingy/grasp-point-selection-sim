@@ -15,7 +15,7 @@ env:
   retract: True
   captureVideo: False
 
-  clipObservations: 255.0
+  clipObservations: 5000.0
   clipActions: 1.0
   numActions: 2 # action dim
   numPrimitiveActions: 2
