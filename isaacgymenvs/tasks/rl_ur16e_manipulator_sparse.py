@@ -819,7 +819,7 @@ class RL_UR16eManipulation(VecTask):
             # self.RL_flag[env_count] = 0
             # How many objects should we spawn 2 or 3
             if self.obj_randomization:
-                probabilities = [0.0, 0.0, 1.0]
+                probabilities = [0.0, 0.0, 0.5, 0.5]
             else:
                 probabilities = [0.0, 0.0, 1.0]
             # randomly select number of objs
@@ -885,7 +885,7 @@ class RL_UR16eManipulation(VecTask):
                 #     offset_object = offset_objects[0]
                 # elif idx == 2:
                 #     offset_object = offset_objects[2]
-                if idx == 2:
+                if idx == 3:
                     offset_object = np.array([np.random.uniform(0.6, 0.7, 1).reshape(
                         1,)[0], np.random.uniform(-0.15, 0.10, 1).reshape(1,)[0], 1.55, 0, 0, 0])
                 ##############################################
@@ -1171,35 +1171,35 @@ class RL_UR16eManipulation(VecTask):
 
             torch_segmask_tensor = torch.where(torch_segmask_tensor == label, torch.tensor(255).to(self.device), torch_segmask_tensor)
 
-            # find the 2 unique values  excluding 0, 255 in segmask tensor which represents the non-target objects in each env
-            unique_values = torch.unique(torch_segmask_tensor, dim=-1)
-            # unique_values = torch.stack([torch.unique(row, sorted=False)[1:-1] for row in unique_values])
-            unique_values_trimmed = torch.tensor([]).to(self.device)
-            for row in unique_values:
-                row = row[row != 0]
-                row = row[row != 255]
-                vals = torch.unique(row, sorted=True)
-                result = torch.ones(2).to(self.device) * -1
-                result[:vals.shape[0]] = vals
-                unique_values_trimmed = torch.cat((unique_values_trimmed, result.unsqueeze(0)))
+            # # find the 2 unique values  excluding 0, 255 in segmask tensor which represents the non-target objects in each env
+            # unique_values = torch.unique(torch_segmask_tensor, dim=-1)
+            # # unique_values = torch.stack([torch.unique(row, sorted=False)[1:-1] for row in unique_values])
+            # unique_values_trimmed = torch.tensor([]).to(self.device)
+            # for row in unique_values:
+            #     row = row[row != 0]
+            #     row = row[row != 255]
+            #     vals = torch.unique(row, sorted=True)
+            #     result = torch.ones(2).to(self.device) * -1
+            #     result[:vals.shape[0]] = vals
+            #     unique_values_trimmed = torch.cat((unique_values_trimmed, result.unsqueeze(0)))
 
-            # scramble such that values in each row are different, perhaps make it left to right later
-            for i in range(unique_values.shape[0]):
-                unique_values_trimmed[i] = unique_values_trimmed[i]
+            # # scramble such that values in each row are different, perhaps make it left to right later
+            # for i in range(unique_values.shape[0]):
+            #     unique_values_trimmed[i] = unique_values_trimmed[i]
 
-            label_mapping = torch.arange(1, unique_values_trimmed.shape[1]+1).to(self.device)
-            label_perm_idx = torch.randperm(unique_values_trimmed.shape[1])
-            label_mapping = label_mapping[label_perm_idx]
-            # replace the unique values with the label mapping in segmask tensor
-            torch_segmask_tensor_result = torch.zeros_like(torch_segmask_tensor).to(self.device)
-            for j in range(unique_values_trimmed.shape[1]):
-                expanded_unique_values = unique_values_trimmed[:, j, None].expand_as(torch_segmask_tensor)
-                mask = (torch_segmask_tensor == expanded_unique_values).to(self.device)
-                torch_segmask_tensor_result = torch.where(mask, label_mapping[j], torch_segmask_tensor_result)
+            # label_mapping = torch.arange(1, unique_values_trimmed.shape[1]+1).to(self.device)
+            # label_perm_idx = torch.randperm(unique_values_trimmed.shape[1])
+            # label_mapping = label_mapping[label_perm_idx]
+            # # replace the unique values with the label mapping in segmask tensor
+            # torch_segmask_tensor_result = torch.zeros_like(torch_segmask_tensor).to(self.device)
+            # for j in range(unique_values_trimmed.shape[1]):
+            #     expanded_unique_values = unique_values_trimmed[:, j, None].expand_as(torch_segmask_tensor)
+            #     mask = (torch_segmask_tensor == expanded_unique_values).to(self.device)
+            #     torch_segmask_tensor_result = torch.where(mask, label_mapping[j], torch_segmask_tensor_result)
 
-            # copy 255 values from original segmask tensor
-            torch_segmask_tensor_result = torch.where(torch_segmask_tensor == 255, torch.tensor(255).to(self.device), torch_segmask_tensor_result)
-            torch_segmask_tensor = torch_segmask_tensor_result
+            # # copy 255 values from original segmask tensor
+            # torch_segmask_tensor_result = torch.where(torch_segmask_tensor == 255, torch.tensor(255).to(self.device), torch_segmask_tensor_result)
+            # torch_segmask_tensor = torch_segmask_tensor_result
 
             torch_primcount_tensor = self.primitive_count[envs_finished_prim].clone().detach()
 
@@ -1427,26 +1427,26 @@ class RL_UR16eManipulation(VecTask):
                     # print("!!!!!!!!!!!!!!!Running Dexnet 3.0")
                     if (self.RL_flag[env_count] == torch.tensor(1)):
                         # Random object select
-                        random_object_select = random.sample(
-                            self.selected_object_env[env_count][self.selected_object_env[env_count] > self.num_obstacles * 5].tolist(), 1)
+                        # random_object_select = random.sample(
+                        #     self.selected_object_env[env_count][self.selected_object_env[env_count] > self.num_obstacles * 5].tolist(), 1)
                         # print("self.selected_object_env[env_count]", self.selected_object_env[env_count])
                         # print("random_object_select", random_object_select)
-                        self.object_target_id[env_count] = torch.tensor(
-                            random_object_select).to(self.device).type(torch.int)
+                        # self.object_target_id[env_count] = torch.tensor(
+                        #     random_object_select).to(self.device).type(torch.int)
 
                         # Select the first object in the list of selected objects
                         # self.object_target_id[env_count] = torch.tensor( 
                         #    19).to(self.device).type(torch.int)
                         
                         # Select the object with the largest x-coordinate
-                        # max_x = 0.0
-                        # for i in range(len(self.selected_object_env[env_count])):
-                        #     object_id = self.selected_object_env[env_count][i]
-                        #     object_pose_x = self._root_state[env_count, self._object_model_id[int(object_id.item())-1], :][0]
-                        #     if object_pose_x > max_x:
-                        #         max_x = object_pose_x
-                        #         self.object_target_id[env_count] = torch.tensor( 
-                        #             self.selected_object_env[env_count][i]).to(self.device).type(torch.int)
+                        max_x = 0.0
+                        for i in range(len(self.selected_object_env[env_count])):
+                            object_id = self.selected_object_env[env_count][i]
+                            object_pose_x = self._root_state[env_count, self._object_model_id[int(object_id.item())-1], :][0]
+                            if object_pose_x > max_x:
+                                max_x = object_pose_x
+                                self.object_target_id[env_count] = torch.tensor( 
+                                    self.selected_object_env[env_count][i]).to(self.device).type(torch.int)
                     
 
                     # Storing all the sampled grasp point and its properties

@@ -179,7 +179,7 @@ def get_real_ys_dxs(imgs, sim_device='cuda:0'):
 
 	# print("batch size: ", depth.shape[0])
 	# get the real ys
-	unique_ids = 3
+	unique_ids = 4
 	# print("unique_ids: ", unique_ids)
 	# pick the left and right most points of each seg mask
 	real_y = torch.zeros((depth.shape[0], unique_ids, 2))	
@@ -213,10 +213,15 @@ def get_real_ys_dxs(imgs, sim_device='cuda:0'):
 			# print("y_mean: ", y_mean)
 			real_dx[i, j, 0] = depth[i, int(y_mean), x_min]
 			real_dx[i, j, 1] = depth[i, int(y_mean), x_max]
-
-	# 		plt.plot(x_min.item(), y_mean.item(), 'ro')
-	# 		plt.text(x_min.item(), y_mean.item(), "depth for mask " + str(unique_ids_env[j]) + ": " + str(real_dx[i, j, 0].item()))
-
+			# if i == 0:
+			# 	print("unique_ids_env[j]: ", unique_ids_env[j])
+			# 	plt.plot(x_min.item(), y_mean.item(), 'ro')
+			# 	plt.plot(x_max.item(), y_mean.item(), 'ro')
+			# 	plt.text(x_min.item(), y_mean.item(), "left " + str(unique_ids_env[j].item()))
+			# 	plt.text(x_max.item(), y_mean.item(), "right " + str(unique_ids_env[j].item()))
+	     
+			# plt.text(x_min.item(), y_mean.item(), "depth for mask " + str(unique_ids_env[j]) + ": " + str(real_dx[i, j, 0].item()))
+	# plt.show()
 	# print("real_y: ", real_y)
 	# print("real_dx: ", real_dx)
 	# sort by ascending left most point
@@ -239,7 +244,7 @@ def get_real_ys_dxs(imgs, sim_device='cuda:0'):
 	# print("real_y: ", real_y)
 	# print("Real dx: ", real_dx)
 	# # plot real ys and label their indicies and dxs
-	# for i in range(0, 6):
+	# for i in range(0, 8):
 	# 	plt.plot(real_y[0, i], 0, 'ro')
 	# 	plt.text(real_y[0, i], 0, str(i))
 	# plt.show()
