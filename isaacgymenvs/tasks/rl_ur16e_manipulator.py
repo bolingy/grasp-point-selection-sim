@@ -776,7 +776,7 @@ class RL_UR16eManipulation(VecTask):
             # self.RL_flag[env_count] = 0
             # How many objects should we spawn 2 or 3
             if self.obj_randomization:
-                probabilities = [0.0, 0.0, 1.0]
+                probabilities = [0.0, 0.3, 0.3, 0.3]
             else:
                 probabilities = [0.0, 0.0, 1.0]
             # randomly select number of objs

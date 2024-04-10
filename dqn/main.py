@@ -132,12 +132,12 @@ def main():
     state, scrap, reward, done, true_indicies = step_primitives(actions, env) #env.reset() by kickstarting w random action
     state, _, r, dw, true_indicies = returns_to_device(state, scrap, reward, done, true_indicies, DEVICE)
     if opt.res_net:
-        real_ys, real_dxs = get_real_ys_dxs(state)
+        real_ys, real_xs, real_dxs = get_real_ys_dxs(state)
         s = rearrange_state_timestep(state)
     else:
         s = state[:, -10:]
         state = state[:, :-10]
-        real_ys, real_dxs = get_real_ys_dxs(state)
+        real_ys, real_xs, real_dxs = get_real_ys_dxs(state)
         state = rearrange_state(state)
         s = normalize_state(s).to(DEVICE)
 
@@ -190,7 +190,7 @@ def main():
                     buf_envs[true_i].actions.append(a[i].clone().detach().cpu())
                     if true_i == 0:
                         print("action of env 0 updated", a[i])
-                env_action = convert_actions(a, real_ys, real_dxs, sim_device=DEVICE)
+                env_action = convert_actions(a, real_ys, real_xs, real_dxs, sim_device=DEVICE)
                 # s_next, r, dw, tr, info = env.step(a) # dw: dead&win; tr: truncated
                 assert env_action.shape == (true_indicies.shape[0], 4)
                 assert actions.shape == (ne, 4)
@@ -200,13 +200,13 @@ def main():
                 for i in range(true_indicies.shape[0]):
                     print_running_reward += r[i]
                 if opt.res_net:
-                    real_ys, real_dxs = get_real_ys_dxs(next_state)
+                    real_ys, real_xs, real_dxs = get_real_ys_dxs(next_state)
                     next_state = rearrange_state_timestep(next_state)
                     s_next = next_state
                 else:
                     s_next = next_state[:, -10:]
                     next_state = next_state[:, :-10]
-                    real_ys, real_dxs = get_real_ys_dxs(next_state)
+                    real_ys, real_xs, real_dxs = get_real_ys_dxs(next_state)
                     next_state = rearrange_state(next_state)
                     s_next = normalize_state(s_next)  
 
