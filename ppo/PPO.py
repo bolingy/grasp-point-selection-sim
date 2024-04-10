@@ -90,7 +90,7 @@ class PPO_discrete():
                 adv.append(advantage)
             adv.reverse()
             adv = copy.deepcopy(adv[0:-1])
-            adv = torch.tensor(adv).unsqueeze(1).float().to(self.dvc)
+            adv = torch.tensor(adv).unsqueeze(1).float().to(self.train_device)
             td_target = adv + vs
             if self.adv_normalization:
                 adv = (adv - adv.mean()) / ((adv.std() + 1e-4))  #sometimes helps
@@ -103,7 +103,7 @@ class PPO_discrete():
             #Shuffle the trajectory, Good for training
             perm = np.arange(s.shape[0])
             np.random.shuffle(perm)
-            perm = torch.LongTensor(perm).to(self.dvc)
+            perm = torch.LongTensor(perm).to(self.train_device)
             s, a, td_target, adv, old_prob_a = \
                 s[perm].clone(), a[perm].clone(), td_target[perm].clone(), adv[perm].clone(), old_prob_a[perm].clone()
 
