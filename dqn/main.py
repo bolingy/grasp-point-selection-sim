@@ -54,7 +54,7 @@ parser.add_argument('--exp_noise', type=float, default=0.2, help='explore noise'
 parser.add_argument('--noise_decay', type=float, default=0.99, help='decay rate of explore noise')
 parser.add_argument('--DDQN', type=str2bool, default=True, help='True:DDQN; False:DQN')
 parser.add_argument('--eval', type=str2bool, default=False, help='True:deterministic; False:non-deterministic')
-parser.add_argument('--num_classes', type=int, default=8, help='Number of QNet output classes')
+parser.add_argument('--num_classes', type=int, default=18, help='Number of QNet output classes')
 
 opt = parser.parse_args()
 if opt.set_visible_cuda_devices:
@@ -166,7 +166,7 @@ def main():
                 #e-greedy exploration
                 if total_steps < opt.random_steps and not opt.eval: 
                     # a = action_space.sample()
-                    a = torch.randint(0, 8, (true_indicies.shape[0], 1)).to(DEVICE)
+                    a = torch.randint(0, 18, (true_indicies.shape[0], 1)).to(DEVICE)
                     # a = torch.ones(true_indicies.shape[0], 1).to(DEVICE) * 1.0
                     assert a.shape == (true_indicies.shape[0], 1)
                     a = torch.concat((a, torch.ones(true_indicies.shape[0], 1).to(DEVICE)), dim = 1).to(DEVICE)
