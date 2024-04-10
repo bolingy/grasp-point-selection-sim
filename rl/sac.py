@@ -12,6 +12,7 @@ class RolloutBuffer:
         self.states = []
         self.new_states = []
         self.logprobs = []
+        self.traj_lengths = []
         self.scraps = []
         self.rewards = []
         self.state_values = []
@@ -30,6 +31,7 @@ class RolloutBuffer:
         self.states.extend(buf_to_append.states)
         self.new_states.extend(buf_to_append.new_states)
         self.logprobs.extend(buf_to_append.logprobs)
+        self.traj_lengths.extend(buf_to_append.traj_lengths)
         self.scraps.extend(buf_to_append.scraps)
         self.rewards.extend(buf_to_append.rewards)
         self.state_values.extend(buf_to_append.state_values)
@@ -43,6 +45,7 @@ class RolloutBuffer:
         del self.states[:]
         del self.new_states[:]
         del self.logprobs[:]
+        del self.traj_lengths[:]
         del self.scraps[:]
         del self.rewards[:]
         del self.state_values[:]
