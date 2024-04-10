@@ -141,6 +141,7 @@ def main():
             print(f'Env:{env_name}, Episode Reward:{ep_r}')
     else:
         traj_length, total_steps = 0, 0
+        update_steps, eval_steps = 0, 0
         print_running_reward, print_running_ep = 0, 0
         action_envs_log = torch.zeros(ne, 1).to(DEVICE)
         while total_steps < opt.Max_train_steps:
@@ -201,24 +202,29 @@ def main():
                         traj_length += 1
                         total_steps += 1
                         print_running_ep += 1
+                        update_steps += 1
+                        eval_steps += 1
+                        buf_envs[true_i].clear()
                 s = s_next
                 state = next_state
 
                 
 
                 '''Update if its time'''
-                if traj_length % opt.T_horizon == 0 and traj_length != 0:
+                if update_steps >= opt.T_horizon:
                     agent.train()
                     traj_length = 0
+                    update_steps -= opt.T_horizon
 
                 '''Record & log'''
-                if total_steps % opt.eval_interval == 0 and total_steps != 0:
+                if eval_steps >= opt.eval_interval:
                     if opt.write:
-                        print("total_steps: ", total_steps, " print_running_reward: ", print_running_reward, " avg_score: ", print_running_reward/print_running_ep)
+                        print("total_steps: ", total_steps, " print_running_reward: ", print_running_reward, " avg_score: ", print_running_reward/print_running_ep, "print_running_ep: ", print_running_ep)
                         wandb.log({'score': print_running_reward, 'steps': total_steps, 'avg_score': print_running_reward/print_running_ep})
                         wandb.log({'action_envs_log': wandb.Histogram(action_envs_log.cpu())})
                         print_running_reward = 0
                         print_running_ep = 0
+                    eval_steps -= opt.eval_interval
 
                 '''Save model'''
                 if total_steps % opt.save_interval==0:
