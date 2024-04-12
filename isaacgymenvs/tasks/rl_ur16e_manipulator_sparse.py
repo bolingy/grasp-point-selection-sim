@@ -1764,12 +1764,18 @@ class RL_UR16eManipulation(VecTask):
                         translation_ee_pose = self.curr_poses[env_count][self.multi_body_idx['wrist_3_link']][:3]
                         T_world_to_ee_pose = transformation_matrix(
                             rotation_matrix_ee_pose, translation_ee_pose)
-                        T_ee_pose_to_pre_grasp_pose = torch.matmul(
-                            torch.inverse(T_world_to_ee_pose), T_world_to_pre_grasp_pose)
+                        try:
+                            T_ee_pose_to_pre_grasp_pose = torch.matmul(
+                                torch.inverse(T_world_to_ee_pose), T_world_to_pre_grasp_pose)
+                        except torch.linalg.LinAlgError:
+                            print("T_world_to_ee_pose is singular ", T_world_to_ee_pose)
+                            env_complete_reset = torch.cat(
+                                (env_complete_reset, torch.tensor([env_count])), axis=0)
+                            continue
+
                         # Orientation error
                         action_orientation = matrix_to_euler_angles(
                             T_ee_pose_to_pre_grasp_pose[:3, :3], "XYZ")
-
 
                         pose_factor, ori_factor = 1., 0.3
                         self.action_env = torch.tensor([[pose_factor*T_ee_pose_to_pre_grasp_pose[0][3], pose_factor*T_ee_pose_to_pre_grasp_pose[1][3],
@@ -1953,8 +1959,15 @@ class RL_UR16eManipulation(VecTask):
                     translation_ee_pose = self.curr_poses[env_count][self.multi_body_idx['wrist_3_link']][:3]
                     T_world_to_ee_pose = transformation_matrix(
                         rotation_matrix_ee_pose, translation_ee_pose)
-                    T_ee_pose_to_pre_grasp_pose = torch.matmul(
-                        torch.inverse(T_world_to_ee_pose), T_world_to_pre_grasp_pose)
+                    try:
+                        T_ee_pose_to_pre_grasp_pose = torch.matmul(
+                            torch.inverse(T_world_to_ee_pose), T_world_to_pre_grasp_pose)
+                    except torch.linalg.LinAlgError:
+                        print("T_world_to_ee_pose is singular", T_world_to_ee_pose)
+                        env_complete_reset = torch.cat(
+                            (env_complete_reset, torch.tensor([env_count])), axis=0)
+                        continue
+
                     # Orientation error
                     action_orientation = matrix_to_euler_angles(
                         T_ee_pose_to_pre_grasp_pose[:3, :3], "XYZ")
