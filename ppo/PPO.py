@@ -71,7 +71,7 @@ class PPO_discrete():
         # done = torch.from_numpy(self.done_hoder).to(self.dvc)
         # dw = torch.from_numpy(self.dw_hoder).to(self.dvc)
 
-        s, a, old_prob_a, r, s_next, dw = self.replay_buffer.sample(len(self.replay_buffer.buffer))
+        s, a, old_prob_a, r, s_next, dw = self.replay_buffer.sample(self.batch_size)
         done = dw.clone().detach()
 
         ''' Use TD+GAE+LongTrajectory to compute Advantage and TD target'''
@@ -212,7 +212,7 @@ class ReplayBuffer(object):
         logprob_a = self.logprob_a[ind].to(self.train_device)
         r = self.r[ind].to(self.train_device)
         dw = self.dw[ind].to(self.train_device)
-        return s, a, logprob_a, r, s_next, dw
+        return s.clone().detach(), a.clone().detach(), logprob_a.clone().detach(), r.clone().detach(), s_next.clone().detach(), dw.clone().detach()
 
     def save_buffer(self, env_name, suffix="", save_path=None):
         if save_path is None:
