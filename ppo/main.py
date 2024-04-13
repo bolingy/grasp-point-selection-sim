@@ -144,6 +144,7 @@ def main():
         update_steps, eval_steps = 0, 0
         print_running_reward, print_running_ep = 0, 0
         action_envs_log = torch.zeros(ne, 1).to(DEVICE)
+        torch.cuda.memory._record_memory_history(max_entries=100000)
         while total_steps < opt.Max_train_steps:
             # s, info = env.reset(seed=env_seed)  # Do not use opt.seed directly, or it can overfit to opt.seed
             # env_seed += 1
@@ -224,6 +225,10 @@ def main():
                         wandb.log({'action_envs_log': wandb.Histogram(action_envs_log.cpu())})
                         print_running_reward = 0
                         print_running_ep = 0
+                        # try:
+                        #     torch.cuda.memory._dump_snapshot('snapshot.pickle')
+                        # except:
+                        #     print("Failed to dump snapshot")
                     eval_steps -= opt.eval_interval
 
                 '''Save model'''
