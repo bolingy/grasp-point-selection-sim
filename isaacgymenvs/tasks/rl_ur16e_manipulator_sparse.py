@@ -2514,7 +2514,7 @@ class RL_UR16eManipulation(VecTask):
                 rgb_image_copy = torch.reshape(
                     rgb_image, (rgb_image.shape[0], -1, 4))[..., :3]
                 rgb_image_copy = rgb_image_copy.permute(2, 0, 1)
-                frame = rgb_image_copy[:, 280:460, 510:770].clone().detach().cpu().numpy()
+                frame = rgb_image_copy.clone().detach().cpu().numpy()
 
                 torch_rgb_tensor = self.log_rgb_camera_tensors[env_count]
                 # print("torch uniq rgb", torch.unique(torch_rgb_tensor))
