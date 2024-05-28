@@ -72,7 +72,7 @@ def main():
     elif opt.EnvIdex == 1 and not opt.res_net:
         print("RL_UR16eManipulation_Full (EnvIdex 1) only supports resnet")
         return
-    env_name_lst = ['RL_UR16eManipulation_Full_Nocam', 'RL_UR16eManipulation_Full']
+    env_name_lst = ['RL_UR16eManipulation_Full_Nocam', 'RL_UR16eManipulation_Full'] # RL_FetchManipulation_Fetch RL_UR16eManipulation_Full
     env_name = env_name_lst[opt.EnvIdex]
     ne = opt.num_envs
     head_less = not opt.render
@@ -196,6 +196,7 @@ def main():
                 assert actions.shape == (ne, 4)
                 create_env_action_via_true_indicies(true_indicies, env_action, actions, ne, DEVICE)
                 assert actions.shape == (ne, 4)
+                print("actions: ", actions)
                 next_state, _, r, dw, true_indicies = step_primitives(actions, env)
                 for i in range(true_indicies.shape[0]):
                     print_running_reward += r[i]
