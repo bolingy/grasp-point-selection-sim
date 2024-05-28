@@ -31,6 +31,7 @@ from .rl_ur16e_manipulator import RL_UR16eManipulation
 from .rl_ur16e_manipulator_nocam import RL_UR16eManipulation_Nocam
 from .rl_ur16e_manipulator_sparse import RL_UR16eManipulation as RL_UR16eManipulation_Full
 from .rl_ur16e_manipulator_sparse_Nocam import RL_UR16eManipulation as RL_UR16eManipulation_Full_Nocam
+from .rl_fetch_manipulator_sparse import RL_FetchManipulation as RL_FetchManipulation_Fetch
 #from .rl_ur16e_manipulator_sparse_Retract import RL_UR16eManipulation as RL_UR16eManipulation_Full_Retract
 
 # Mappings from strings to environments
@@ -40,5 +41,6 @@ isaacgym_task_map = {
     "RL_UR16eManipulation_Nocam": RL_UR16eManipulation_Nocam,
     "RL_UR16eManipulation_Full": RL_UR16eManipulation_Full,
     "RL_UR16eManipulation_Full_Nocam": RL_UR16eManipulation_Full_Nocam,
+    "RL_FetchManipulation_Fetch": RL_FetchManipulation_Fetch,
     #"RL_UR16eManipulation_Full_Retract": RL_UR16eManipulation_Full_Retract,
 }

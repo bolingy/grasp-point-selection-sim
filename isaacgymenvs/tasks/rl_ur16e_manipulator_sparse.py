@@ -1280,15 +1280,16 @@ class RL_UR16eManipulation(VecTask):
     def _compute_osc_torques(self, dpose):
         # Solve for Operational Space Control # Paper: khatib.stanford.edu/publications/pdfs/Khatib_1987_RA.pdf
         # Helpful resource: studywolf.wordpress.com/2013/09/17/robot-control-4-operation-space-control/
+
         q, qd = self._q[:, :6], self._qd[:, :6]
         mm_inv = torch.inverse(self._mm)
         m_eef_inv = self._j_eef @ mm_inv @ torch.transpose(self._j_eef, 1, 2)
         m_eef = torch.inverse(m_eef_inv)
 
-        # Transform our cartesian action `dpose` into joint torques `u`
+        # Transform our cartesian action `dpose`f into joint torques `u`
         u = torch.transpose(self._j_eef, 1, 2) @ m_eef @ (
             self.kp * dpose[:, :6] - self.kd * self.states["wrist_3_link_vel"]).unsqueeze(-1)
-
+        print("u ", u)
         # Nullspace control torques `u_null` prevents large changes in joint configuration
         # They are added into the nullspace of OSC so that the end effector orientation remains constant
         # roboticsproceedings.org/rss07/p31.pdf
@@ -1297,6 +1298,7 @@ class RL_UR16eManipulation(VecTask):
             (self.ur16e_default_dof_pos[:6] - q + np.pi) % (2 * np.pi) - np.pi)
         u_null[:, self.num_ur16e_dofs:] *= 0
         u_null = self._mm @ u_null.unsqueeze(-1)
+        print("u_null", (torch.eye((6), device=self.device).unsqueeze(0) - torch.transpose(self._j_eef, 1, 2) @ j_eef_inv) @ u_null)
         u += (torch.eye((6), device=self.device).unsqueeze(0) -
               torch.transpose(self._j_eef, 1, 2) @ j_eef_inv) @ u_null
 
