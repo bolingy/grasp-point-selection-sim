@@ -20,6 +20,8 @@
       <material name="white">
         <color rgba="1. 1. 1. 1."/>
       </material>
+      <origin rpy="-1.7 0 0" xyz="0 0 0"/>
+
     </visual>
     <collision>
       <geometry>
