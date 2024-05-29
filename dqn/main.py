@@ -129,7 +129,7 @@ def main():
     
     # env.reset()
     actions = torch.tensor(ne * [[0.11, 0., 0.28, 0.22]]).to(DEVICE)
-    state, scrap, reward, done, true_indicies = step_primitives(actions, env) #env.reset() by kickstarting w random action
+    state, scrap, reward, done, true_indicies, unswipe_indicies = step_primitives(actions, env) #env.reset() by kickstarting w random action
     state, _, r, dw, true_indicies = returns_to_device(state, scrap, reward, done, true_indicies, DEVICE)
     if opt.res_net:
         real_ys, real_xs, real_dxs = get_real_ys_dxs(state)
@@ -196,7 +196,7 @@ def main():
                 assert actions.shape == (ne, 4)
                 create_env_action_via_true_indicies(true_indicies, env_action, actions, ne, DEVICE)
                 assert actions.shape == (ne, 4)
-                next_state, _, r, dw, true_indicies = step_primitives(actions, env)
+                next_state, _, r, dw, true_indicies, unswipe_indicies = step_primitives(actions, env)
                 for i in range(true_indicies.shape[0]):
                     print_running_reward += r[i]
                 if opt.res_net:

@@ -69,12 +69,10 @@ def rearrange_state_timestep(state, b=2, h=180, w=260):
 # 			return imgs, reward_temp, done_temp, indicies
 
 def step_primitives(action, envs):
-	print("action", action)
 	action[:, 0] = torch.clamp(action[:, 0], -0.11, 0.11)
 	action[:, 1] = torch.clamp(action[:, 1], -0.08, 0.1)
 	action[:, 2] = torch.clamp(action[:, 2], 0.0, 0.28)
 	action[:, 3] = torch.clamp(action[:, 3], -0.22, 0.22)
-	print("action", action)
 	while True:
 		with torch.no_grad():
 			obs, reward, done, info = envs.step(action)
@@ -82,11 +80,15 @@ def step_primitives(action, envs):
 		if torch.sum(obs['obs']) == 0:
 			continue
 		# print("obs", obs['obs'])
-		imgs = obs['obs'][:, :-4]
-		info = obs['obs'][:, -4:]
+		imgs = obs['obs'][:, :-5]
+		info = obs['obs'][:, -5:]
 		# return all imgs that has info[env, 0] == 1
 		# if all info[env, 0] == 0, then don't return anything
-		indicies = info[:, 3].to(torch.int64)
+		indicies = info[:, -2].to(torch.int64)
+		unswipe_indicies = info[:, -1].to(torch.int64)
+		
+		unswipe_indicies = unswipe_indicies[unswipe_indicies >= 0]
+		print("unswipe_indicies: ", unswipe_indicies)
 		# select and return imgs with the selected indicies
 		if imgs.shape[0] > 0:
 			# print("info indicies", info[indicies])
@@ -96,7 +98,7 @@ def step_primitives(action, envs):
 			# convert done to uint8
 			done_temp = done_temp.to(torch.uint8)
 			# print("imgs, reward, done", imgs.shape, reward_temp.shape, done_temp.shape)
-			return imgs, scrap_temp, reward_temp, done_temp, indicies
+			return imgs, scrap_temp, reward_temp, done_temp, indicies, unswipe_indicies
 		
 def step_primitives_env_0(action, envs):
 	while True:
@@ -274,11 +276,11 @@ def get_real_ys_dxs(imgs, sim_device='cuda:0'):
 	# print("result_y: ", result_y)
 	# print("result_x: ", result_x)
 
-	plt.imshow(seg[0].cpu())
-	for i in range(0, 18):
-		plt.plot(result_y[0, i], result_x[0, i], 'ro')
-		plt.text(result_y[0, i], result_x[0, i], str(i))
-	plt.show()
+	# plt.imshow(seg[0].cpu())
+	# for i in range(0, 18):
+	# 	plt.plot(result_y[0, i], result_x[0, i], 'ro')
+	# 	plt.text(result_y[0, i], result_x[0, i], str(i))
+	# plt.show()
 	# plt.imshow(seg[1].cpu())
 	# plt.show()
 	# plt.imshow(depth[0].cpu())
@@ -300,7 +302,7 @@ def convert_actions(action, real_y, real_x, real_dx, sim_device='cuda:0'):
 	real_x = real_x.to(sim_device)
 	real_dx = real_dx.to(sim_device)
 
-	z = real_x.gather(1, action[:, 0].long().unsqueeze(1)) / 160 * -0.12 + 0.05
+	z = real_x.gather(1, action[:, 0].long().unsqueeze(1)) / 160 * -0.08
 
 	# z = torch.ones((action.shape[0], 1)).to(sim_device) * -0.05
 	# select the real y in each batch using the indicies specified in action[:, 0]
