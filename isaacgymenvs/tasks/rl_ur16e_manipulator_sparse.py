@@ -1155,7 +1155,7 @@ class RL_UR16eManipulation(VecTask):
             scaled_diff_tensor = diff_target_area_tensor.to(self.device) * scaled_diff
             scaled_diff_tensor = torch.clamp(scaled_diff_tensor, -0.2, 0.2)
             torch_success_tensor = self.success[envs_finished_prim].clone().detach()
-            torch_success_tensor = torch_success_tensor + scaled_diff_tensor
+            torch_success_tensor = torch_success_tensor # + scaled_diff_tensor
 
             # reset if success
             self.success[envs_finished_prim] = torch.tensor(0).float().to(self.device)
@@ -2508,7 +2508,7 @@ class RL_UR16eManipulation(VecTask):
                 rgb_image_copy = torch.reshape(
                     rgb_image, (rgb_image.shape[0], -1, 4))[..., :3]
                 rgb_image_copy = rgb_image_copy.permute(2, 0, 1)
-                frame = rgb_image_copy[:, 280:460, 510:770].clone().detach().cpu().numpy()
+                frame = rgb_image_copy.clone().detach().cpu().numpy()
 
                 torch_rgb_tensor = self.log_rgb_camera_tensors[env_count]
                 # print("torch uniq rgb", torch.unique(torch_rgb_tensor))
