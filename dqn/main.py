@@ -54,7 +54,7 @@ parser.add_argument('--exp_noise', type=float, default=0.2, help='explore noise'
 parser.add_argument('--noise_decay', type=float, default=0.99, help='decay rate of explore noise')
 parser.add_argument('--DDQN', type=str2bool, default=True, help='True:DDQN; False:DQN')
 parser.add_argument('--eval', type=str2bool, default=False, help='True:deterministic; False:non-deterministic')
-parser.add_argument('--num_classes', type=int, default=6, help='Number of QNet output classes')
+parser.add_argument('--num_classes', type=int, default=18, help='Number of QNet output classes')
 
 opt = parser.parse_args()
 if opt.set_visible_cuda_devices:
@@ -94,7 +94,7 @@ def main():
     )
     action_space = Discrete(6)
     opt.state_dim = 10
-    opt.action_dim = 6
+    opt.action_dim = 18
 
     #Use DDQN or DQN
     if opt.DDQN: algo_name = 'DDQN'
@@ -132,12 +132,12 @@ def main():
     state, scrap, reward, done, true_indicies = step_primitives(actions, env) #env.reset() by kickstarting w random action
     state, _, r, dw, true_indicies = returns_to_device(state, scrap, reward, done, true_indicies, DEVICE)
     if opt.res_net:
-        real_ys, real_dxs = get_real_ys_dxs(state)
+        real_ys, real_xs, real_dxs = get_real_ys_dxs(state)
         s = rearrange_state_timestep(state)
     else:
         s = state[:, -10:]
         state = state[:, :-10]
-        real_ys, real_dxs = get_real_ys_dxs(state)
+        real_ys, real_xs, real_dxs = get_real_ys_dxs(state)
         state = rearrange_state(state)
         s = normalize_state(s).to(DEVICE)
 
@@ -166,7 +166,7 @@ def main():
                 #e-greedy exploration
                 if total_steps < opt.random_steps and not opt.eval: 
                     # a = action_space.sample()
-                    a = torch.randint(0, 6, (true_indicies.shape[0], 1)).to(DEVICE)
+                    a = torch.randint(0, 18, (true_indicies.shape[0], 1)).to(DEVICE)
                     # a = torch.ones(true_indicies.shape[0], 1).to(DEVICE) * 1.0
                     assert a.shape == (true_indicies.shape[0], 1)
                     a = torch.concat((a, torch.ones(true_indicies.shape[0], 1).to(DEVICE)), dim = 1).to(DEVICE)
@@ -190,7 +190,7 @@ def main():
                     buf_envs[true_i].actions.append(a[i].clone().detach().cpu())
                     if true_i == 0:
                         print("action of env 0 updated", a[i])
-                env_action = convert_actions(a, real_ys, real_dxs, sim_device=DEVICE)
+                env_action = convert_actions(a, real_ys, real_xs, real_dxs, sim_device=DEVICE)
                 # s_next, r, dw, tr, info = env.step(a) # dw: dead&win; tr: truncated
                 assert env_action.shape == (true_indicies.shape[0], 4)
                 assert actions.shape == (ne, 4)
@@ -200,13 +200,13 @@ def main():
                 for i in range(true_indicies.shape[0]):
                     print_running_reward += r[i]
                 if opt.res_net:
-                    real_ys, real_dxs = get_real_ys_dxs(next_state)
+                    real_ys, real_xs, real_dxs = get_real_ys_dxs(next_state)
                     next_state = rearrange_state_timestep(next_state)
                     s_next = next_state
                 else:
                     s_next = next_state[:, -10:]
                     next_state = next_state[:, :-10]
-                    real_ys, real_dxs = get_real_ys_dxs(next_state)
+                    real_ys, real_xs, real_dxs = get_real_ys_dxs(next_state)
                     next_state = rearrange_state(next_state)
                     s_next = normalize_state(s_next)  
 

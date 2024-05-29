@@ -146,7 +146,7 @@ class RL_UR16eManipulation(VecTask):
             [1.57, 0, -1.57, 0, 1.57, 0, 0], device=self.device
         )
 
-        self.cooldown_frames = 150
+        self.cooldown_frames = 50
 
         # System Identification data results
         self.cur_path = str(Path(__file__).parent.absolute())
@@ -514,13 +514,13 @@ class RL_UR16eManipulation(VecTask):
             self.body_states = []
             self.camera_properties_back_cam = gymapi.CameraProperties()
             self.camera_properties_back_cam.enable_tensors = True
-            self.camera_properties_back_cam.horizontal_fov = 70.0
-            self.camera_properties_back_cam.width = 1280
-            self.camera_properties_back_cam.height = 786
+            self.camera_properties_back_cam.horizontal_fov = 20.0
+            self.camera_properties_back_cam.width = 260
+            self.camera_properties_back_cam.height = 180
             camera_handle = self.gym.create_camera_sensor(
                 env_ptr, self.camera_properties_back_cam)
             self.camera_base_link_translation = torch.tensor(
-                [-0.48, 0.05, 0.6]).to(self.device)
+                [-0.48, 0.05, 0.57]).to(self.device)
             local_transform = gymapi.Transform()
             local_transform.p = gymapi.Vec3(
                 self.camera_base_link_translation[0], self.camera_base_link_translation[1], self.camera_base_link_translation[2])
@@ -541,8 +541,8 @@ class RL_UR16eManipulation(VecTask):
             self.camera_properties_gripper = gymapi.CameraProperties()
             self.camera_properties_gripper.enable_tensors = True
             self.camera_properties_gripper.horizontal_fov = 150.0
-            self.camera_properties_gripper.width = 1920
-            self.camera_properties_gripper.height = 1080
+            self.camera_properties_gripper.width = 320
+            self.camera_properties_gripper.height = 180
             camera_handle_gripper = self.gym.create_camera_sensor(
                 env_ptr, self.camera_properties_gripper)
             self.camera_gripper_link_translation.append(
@@ -872,7 +872,7 @@ class RL_UR16eManipulation(VecTask):
                     # pose
                     # offset_object = np.array([np.random.uniform(0.57, 0.7, 1).reshape(
                     #     1,)[0], np.random.uniform(-0.15, 0.10, 1).reshape(1,)[0], 1.55, 0, 0, 0])
-                    offset_object = np.array([np.random.uniform(0.57, 0.7, 1).reshape(
+                    offset_object = np.array([np.random.uniform(0.57, 0.6, 1).reshape(
                         1,)[0], np.random.uniform(-0.15, 0.04, 1).reshape(1,)[0], 1.55, 0, 0, 0])
                     domain_randomizer = random_number = random.choice(
                     [1, 2, 3, 4, 5])
@@ -887,8 +887,10 @@ class RL_UR16eManipulation(VecTask):
                 #     offset_object = offset_objects[1]
                 # elif idx == 1:
                 #     offset_object = offset_objects[0]
+                # elif idx == 2:
+                #     offset_object = offset_objects[2]
                 if idx == 2:
-                    offset_object = np.array([np.random.uniform(0.57, 0.7, 1).reshape(
+                    offset_object = np.array([np.random.uniform(0.6, 0.7, 1).reshape(
                         1,)[0], np.random.uniform(-0.15, 0.10, 1).reshape(1,)[0], 1.55, 0, 0, 0])
                 ##############################################
                 # set position and orientation
@@ -921,7 +923,7 @@ class RL_UR16eManipulation(VecTask):
             self.frame_count_contact_object[env_id] = 0
             self.frame_count[env_id] = 0
             self.free_envs_list[env_id] = torch.tensor(1)
-            self.object_pose_check_list[env_id] = torch.tensor(3)
+            self.object_pose_check_list[env_id] = torch.tensor(1)
             self.speed[env_id] = torch.tensor(0.1)
             self.run_dexnet[env_id] = torch.tensor(1)
             self.RL_flag[env_id] = torch.tensor(1)
@@ -1140,7 +1142,6 @@ class RL_UR16eManipulation(VecTask):
             torch_segmask_cameras = torch.stack(self.mask_camera_tensors).to(self.device)
             prev_target_area_tensor = self.torch_target_area_tensor
             torch_segmask_tensor = torch_segmask_cameras[envs_finished_prim]
-            torch_segmask_tensor = torch_segmask_tensor[:, 280:460, 510:770]
             torch_segmask_tensor = einops.rearrange(torch_segmask_tensor, 'b h w -> b (h w)')
             label = self.object_target_id[envs_finished_prim]
             label = label.unsqueeze(1).expand(torch_segmask_tensor.shape)
@@ -1169,45 +1170,43 @@ class RL_UR16eManipulation(VecTask):
             torch_indicies_tensor = envs_finished_prim
 
             # crop depth image
-            torch_depth_tensor = torch_depth_tensor[:, 280:460, 510:770]
 
             torch_depth_tensor = einops.rearrange(torch_depth_tensor, 'b h w -> b (h w)')
 
             torch_segmask_tensor = torch.where(torch_segmask_tensor == label, torch.tensor(255).to(self.device), torch_segmask_tensor)
 
-            # find the 2 unique values  excluding 0, 255 in segmask tensor which represents the non-target objects in each env
-            unique_values = torch.unique(torch_segmask_tensor, dim=-1)
-            # unique_values = torch.stack([torch.unique(row, sorted=False)[1:-1] for row in unique_values])
-            unique_values_trimmed = torch.tensor([]).to(self.device)
-            for row in unique_values:
-                row = row[row != 0]
-                row = row[row != 255]
-                vals = torch.unique(row, sorted=True)
-                result = torch.ones(2).to(self.device) * -1
-                result[:vals.shape[0]] = vals
-                unique_values_trimmed = torch.cat((unique_values_trimmed, result.unsqueeze(0)))
+            # # find the 2 unique values  excluding 0, 255 in segmask tensor which represents the non-target objects in each env
+            # unique_values = torch.unique(torch_segmask_tensor, dim=-1)
+            # # unique_values = torch.stack([torch.unique(row, sorted=False)[1:-1] for row in unique_values])
+            # unique_values_trimmed = torch.tensor([]).to(self.device)
+            # for row in unique_values:
+            #     row = row[row != 0]
+            #     row = row[row != 255]
+            #     vals = torch.unique(row, sorted=True)
+            #     result = torch.ones(2).to(self.device) * -1
+            #     result[:vals.shape[0]] = vals
+            #     unique_values_trimmed = torch.cat((unique_values_trimmed, result.unsqueeze(0)))
 
-            # scramble such that values in each row are different, perhaps make it left to right later
-            for i in range(unique_values.shape[0]):
-                unique_values_trimmed[i] = unique_values_trimmed[i]
+            # # scramble such that values in each row are different, perhaps make it left to right later
+            # for i in range(unique_values.shape[0]):
+            #     unique_values_trimmed[i] = unique_values_trimmed[i]
 
-            label_mapping = torch.arange(1, unique_values_trimmed.shape[1]+1).to(self.device)
-            label_perm_idx = torch.randperm(unique_values_trimmed.shape[1])
-            label_mapping = label_mapping[label_perm_idx]
-            # replace the unique values with the label mapping in segmask tensor
-            torch_segmask_tensor_result = torch.zeros_like(torch_segmask_tensor).to(self.device)
-            for j in range(unique_values_trimmed.shape[1]):
-                expanded_unique_values = unique_values_trimmed[:, j, None].expand_as(torch_segmask_tensor)
-                mask = (torch_segmask_tensor == expanded_unique_values).to(self.device)
-                torch_segmask_tensor_result = torch.where(mask, label_mapping[j], torch_segmask_tensor_result)
+            # label_mapping = torch.arange(1, unique_values_trimmed.shape[1]+1).to(self.device)
+            # label_perm_idx = torch.randperm(unique_values_trimmed.shape[1])
+            # label_mapping = label_mapping[label_perm_idx]
+            # # replace the unique values with the label mapping in segmask tensor
+            # torch_segmask_tensor_result = torch.zeros_like(torch_segmask_tensor).to(self.device)
+            # for j in range(unique_values_trimmed.shape[1]):
+            #     expanded_unique_values = unique_values_trimmed[:, j, None].expand_as(torch_segmask_tensor)
+            #     mask = (torch_segmask_tensor == expanded_unique_values).to(self.device)
+            #     torch_segmask_tensor_result = torch.where(mask, label_mapping[j], torch_segmask_tensor_result)
 
-            # copy 255 values from original segmask tensor
-            torch_segmask_tensor_result = torch.where(torch_segmask_tensor == 255, torch.tensor(255).to(self.device), torch_segmask_tensor_result)
-            torch_segmask_tensor = torch_segmask_tensor_result
+            # # copy 255 values from original segmask tensor
+            # torch_segmask_tensor_result = torch.where(torch_segmask_tensor == 255, torch.tensor(255).to(self.device), torch_segmask_tensor_result)
+            # torch_segmask_tensor = torch_segmask_tensor_result
 
             torch_primcount_tensor = self.primitive_count[envs_finished_prim].clone().detach()
 
-            
             self.obs_buf = torch.cat((torch_depth_tensor, torch_segmask_tensor), dim=1).squeeze(0)
 
             if torch_indicies_tensor.shape[0] > 1:
@@ -1491,7 +1490,7 @@ class RL_UR16eManipulation(VecTask):
                             segmask_numpy[segmask_dexnet.cpu().numpy().astype(
                                 np.uint8) == self.object_target_id[env_count].cpu().numpy()] = 255
                             segmask_dexnet = BinaryImage(
-                                segmask_numpy[180:660, 410:1050], frame=self.camera_intrinsics_back_cam.frame)
+                                segmask_numpy, frame=self.camera_intrinsics_back_cam.frame)
 
 
 
@@ -1501,7 +1500,7 @@ class RL_UR16eManipulation(VecTask):
                             depth_image_dexnet = depth_image_dexnet + noise_image
 
                             depth_image_save_temp = depth_image_dexnet.clone().detach().cpu().numpy()
-                            self.depth_image_save[env_count] = depth_image_save_temp[180:660, 410:1050]
+                            self.depth_image_save[env_count] = depth_image_save_temp
 
                             # saving depth image, rgb image and segmentation mask
                             # self.config_env_count[env_count] += torch.tensor(
@@ -1529,10 +1528,8 @@ class RL_UR16eManipulation(VecTask):
                             depth_numpy_temp = depth_numpy*segmask_numpy_temp
                             depth_numpy_temp[depth_numpy_temp == 0] = 0.75
 
-                            depth_img_dexnet = DepthImage(
-                                depth_numpy_temp[180:660, 410:1050], frame=self.camera_intrinsics_back_cam.frame)
                             max_num_grasps = 0
-                            y, x = np.where(segmask_numpy[180:660, 410:1050] == 255)
+                            y, x = np.where(segmask_numpy == 255)
                             center_x, center_y = int(np.mean(x)), int(np.mean(y))
                             self.suction_deformation_score_temp = torch.Tensor()
                             self.xyz_point_temp = torch.empty((0, 3))
@@ -1771,12 +1768,18 @@ class RL_UR16eManipulation(VecTask):
                         translation_ee_pose = self.curr_poses[env_count][self.multi_body_idx['wrist_3_link']][:3]
                         T_world_to_ee_pose = transformation_matrix(
                             rotation_matrix_ee_pose, translation_ee_pose)
-                        T_ee_pose_to_pre_grasp_pose = torch.matmul(
-                            torch.inverse(T_world_to_ee_pose), T_world_to_pre_grasp_pose)
+                        try:
+                            T_ee_pose_to_pre_grasp_pose = torch.matmul(
+                                torch.inverse(T_world_to_ee_pose), T_world_to_pre_grasp_pose)
+                        except torch.linalg.LinAlgError:
+                            print("T_world_to_ee_pose is singular ", T_world_to_ee_pose)
+                            env_complete_reset = torch.cat(
+                                (env_complete_reset, torch.tensor([env_count])), axis=0)
+                            continue
+
                         # Orientation error
                         action_orientation = matrix_to_euler_angles(
                             T_ee_pose_to_pre_grasp_pose[:3, :3], "XYZ")
-
 
                         pose_factor, ori_factor = 1., 0.3
                         self.action_env = torch.tensor([[pose_factor*T_ee_pose_to_pre_grasp_pose[0][3], pose_factor*T_ee_pose_to_pre_grasp_pose[1][3],
@@ -1948,7 +1951,7 @@ class RL_UR16eManipulation(VecTask):
                     rotation_matrix_pre_grasp_pose = euler_angles_to_matrix(
                         torch.tensor([0, 0, 0]).to(self.device), "XYZ", degrees=True)
                     translation_pre_grasp_pose = torch.tensor(
-                        [-0.28, 0, 0]).to(self.device)
+                        [-0.35, 0, 0]).to(self.device)
                     T_pre_grasp_pose = transformation_matrix(
                         rotation_matrix_pre_grasp_pose, translation_pre_grasp_pose)
                     # Transformation of object with base link to pre grasp pose
@@ -1960,8 +1963,15 @@ class RL_UR16eManipulation(VecTask):
                     translation_ee_pose = self.curr_poses[env_count][self.multi_body_idx['wrist_3_link']][:3]
                     T_world_to_ee_pose = transformation_matrix(
                         rotation_matrix_ee_pose, translation_ee_pose)
-                    T_ee_pose_to_pre_grasp_pose = torch.matmul(
-                        torch.inverse(T_world_to_ee_pose), T_world_to_pre_grasp_pose)
+                    try:
+                        T_ee_pose_to_pre_grasp_pose = torch.matmul(
+                            torch.inverse(T_world_to_ee_pose), T_world_to_pre_grasp_pose)
+                    except torch.linalg.LinAlgError:
+                        print("T_world_to_ee_pose is singular", T_world_to_ee_pose)
+                        env_complete_reset = torch.cat(
+                            (env_complete_reset, torch.tensor([env_count])), axis=0)
+                        continue
+
                     # Orientation error
                     action_orientation = matrix_to_euler_angles(
                         T_ee_pose_to_pre_grasp_pose[:3, :3], "XYZ")

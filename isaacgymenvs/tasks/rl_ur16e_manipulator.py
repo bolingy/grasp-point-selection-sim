@@ -262,7 +262,7 @@ class RL_UR16eManipulation(VecTask):
         # Refresh tensors
         self._refresh()
         # Primitives
-        primitives = Primitives(self.num_envs, self.states['eef_pos'], device=self.device)
+        primitives = Primitives(self.states['eef_pos'], device=self.device)
         # make an array of deep copies of Primitives for each env
         self.primitives = np.array([deepcopy(primitives) for _ in range(self.num_envs)])
         
@@ -776,7 +776,7 @@ class RL_UR16eManipulation(VecTask):
             # self.RL_flag[env_count] = 0
             # How many objects should we spawn 2 or 3
             if self.obj_randomization:
-                probabilities = [0.0, 0.0, 1.0]
+                probabilities = [0.0, 0.3, 0.3, 0.3]
             else:
                 probabilities = [0.0, 0.0, 1.0]
             # randomly select number of objs

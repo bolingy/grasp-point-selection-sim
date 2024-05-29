@@ -8,13 +8,13 @@ ne = 10
 res_net = True
 envs = isaacgymenvs.make(
 	seed=0,
-	task="RL_UR16eManipulation_Full",
+	task="RL_UR16eManipulation",
 	num_envs=ne,
 	sim_device="cuda:0",
 	rl_device="cuda:0",
 	multi_gpu=False,
 	graphics_device_id=0, 
-	headless=True
+	headless=False
 )
 # Observation space is eef_pos, eef_quat, q_gripper/q
 print("Observation space is", envs.observation_space)
