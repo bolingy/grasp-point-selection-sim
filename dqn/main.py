@@ -42,7 +42,7 @@ parser.add_argument('--data_augmentation_prob', type=float, default=0., help='da
 parser.add_argument('--Max_train_steps', type=int, default=int(1e6), help='Max training steps')
 parser.add_argument('--save_interval', type=int, default=int(10), help='Model saving interval, in steps.')
 parser.add_argument('--eval_interval', type=int, default=int(10), help='Model evaluating interval, in steps.')
-parser.add_argument('--random_steps', type=int, default=int(40), help='steps for random policy to explore')
+parser.add_argument('--random_steps', type=int, default=int(0), help='steps for random policy to explore')
 parser.add_argument('--update_every', type=int, default=10, help='training frequency')
 
 parser.add_argument('--gamma', type=float, default=0.99, help='Discounted Factor')
@@ -124,7 +124,7 @@ def main():
     if not os.path.exists('model'): os.mkdir('model')
     agent = DQN_agent(**vars(opt))
     if opt.LoadModel: 
-        agent.load(opt.ModelName, "L", opt.ModelIdx)
+        agent.load(opt.ModelName)
     buf_envs = [RolloutBuffer() for _ in range(ne)]
     
     # env.reset()
