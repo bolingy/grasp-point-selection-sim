@@ -10,8 +10,8 @@ env:
   episodeLength: 1000
   enableDebugVis: False
 
-  objRandomization: True
-  numObstacles: 15
+  objRandomization: False
+  numObstacles: 2 # 11
   retract: True
   captureVideo: False
 

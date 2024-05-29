@@ -69,6 +69,12 @@ def rearrange_state_timestep(state, b=2, h=180, w=260):
 # 			return imgs, reward_temp, done_temp, indicies
 
 def step_primitives(action, envs):
+	print("action", action)
+	action[:, 0] = torch.clamp(action[:, 0], -0.11, 0.11)
+	action[:, 1] = torch.clamp(action[:, 1], -0.08, 0.1)
+	action[:, 2] = torch.clamp(action[:, 2], 0.0, 0.28)
+	action[:, 3] = torch.clamp(action[:, 3], -0.22, 0.22)
+	print("action", action)
 	while True:
 		with torch.no_grad():
 			obs, reward, done, info = envs.step(action)
@@ -268,11 +274,11 @@ def get_real_ys_dxs(imgs, sim_device='cuda:0'):
 	# print("result_y: ", result_y)
 	# print("result_x: ", result_x)
 
-	# plt.imshow(seg[0].cpu())
-	# for i in range(0, 18):
-	# 	plt.plot(result_y[0, i], result_x[0, i], 'ro')
-	# 	plt.text(result_y[0, i], result_x[0, i], str(i))
-	# plt.show()
+	plt.imshow(seg[0].cpu())
+	for i in range(0, 18):
+		plt.plot(result_y[0, i], result_x[0, i], 'ro')
+		plt.text(result_y[0, i], result_x[0, i], str(i))
+	plt.show()
 	# plt.imshow(seg[1].cpu())
 	# plt.show()
 	# plt.imshow(depth[0].cpu())
@@ -294,7 +300,7 @@ def convert_actions(action, real_y, real_x, real_dx, sim_device='cuda:0'):
 	real_x = real_x.to(sim_device)
 	real_dx = real_dx.to(sim_device)
 
-	z = real_x.gather(1, action[:, 0].long().unsqueeze(1)) / 160 * -0.15
+	z = real_x.gather(1, action[:, 0].long().unsqueeze(1)) / 160 * -0.12 + 0.05
 
 	# z = torch.ones((action.shape[0], 1)).to(sim_device) * -0.05
 	# select the real y in each batch using the indicies specified in action[:, 0]
