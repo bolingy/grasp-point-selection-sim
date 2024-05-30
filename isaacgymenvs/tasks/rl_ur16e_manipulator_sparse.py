@@ -559,7 +559,7 @@ class RL_UR16eManipulation(VecTask):
                 log_camera_handle = self.gym.create_camera_sensor(
                     env_ptr, self.camera_properties_back_cam)
                 self.log_camera_base_link_translation = torch.tensor(
-                    [0.30, 0.05, 0.5]).to(self.device)
+                    [0.0, 0.05, 0.35]).to(self.device)
                 local_transform = gymapi.Transform()
                 local_transform.p = gymapi.Vec3(
                     self.log_camera_base_link_translation[0], self.log_camera_base_link_translation[1], self.log_camera_base_link_translation[2])
