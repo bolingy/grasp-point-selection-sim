@@ -556,10 +556,15 @@ class RL_UR16eManipulation(VecTask):
             self.camera_handles[i].append(camera_handle_gripper)
             self.log_video = self.cfg["env"]["captureVideo"]
             if self.log_video:
+                self.camera_properties_log_cam = gymapi.CameraProperties()
+                self.camera_properties_log_cam.enable_tensors = True
+                self.camera_properties_log_cam.horizontal_fov = 30.0
+                self.camera_properties_log_cam.width = 260
+                self.camera_properties_log_cam.height = 180
                 log_camera_handle = self.gym.create_camera_sensor(
-                    env_ptr, self.camera_properties_back_cam)
+                    env_ptr, self.camera_properties_log_cam)
                 self.log_camera_base_link_translation = torch.tensor(
-                    [0.30, 0.05, 0.5]).to(self.device)
+                    [0.0, 0.05, 0.35]).to(self.device)
                 local_transform = gymapi.Transform()
                 local_transform.p = gymapi.Vec3(
                     self.log_camera_base_link_translation[0], self.log_camera_base_link_translation[1], self.log_camera_base_link_translation[2])
@@ -876,23 +881,18 @@ class RL_UR16eManipulation(VecTask):
                         1,)[0], np.random.uniform(-0.15, 0.04, 1).reshape(1,)[0], 1.55, 0, 0, 0])
                     domain_randomizer = random_number = random.choice(
                     [1, 2, 3, 4, 5])
+                    if idx == 2:
+                        offset_object = np.array([np.random.uniform(0.6, 0.7, 1).reshape(
+                            1,)[0], np.random.uniform(-0.15, 0.10, 1).reshape(1,)[0], 1.55, 0, 0, 0])
                 else:
-                    # apply fixed poses and weights
-                    offset_object = np.array([np.random.uniform(0.57, 0.7, 1).reshape(
-                        1,)[0], np.random.uniform(-0.15, 0.10, 1).reshape(1,)[0], 1.55, 0, 0, 0])
-                    domain_randomizer = random_number = random.choice(
-                    [1])
-                #############################################
-                # if idx == 0:
-                #     offset_object = offset_objects[1]
-                # elif idx == 1:
-                #     offset_object = offset_objects[0]
-                # elif idx == 2:
-                #     offset_object = offset_objects[2]
-                if idx == 2:
-                    offset_object = np.array([np.random.uniform(0.6, 0.7, 1).reshape(
-                        1,)[0], np.random.uniform(-0.15, 0.10, 1).reshape(1,)[0], 1.55, 0, 0, 0])
-                ##############################################
+                    #############################################
+                    if idx == 0:
+                        offset_object = offset_objects[1]
+                    elif idx == 1:
+                        offset_object = offset_objects[0]
+                    elif idx == 2:
+                        offset_object = offset_objects[2]
+                    ##############################################
                 # set position and orientation
                 quat = euler_angles_to_quaternion(
                     torch.tensor(offset_object[3:6]), "XYZ", degrees=False)
@@ -1160,7 +1160,7 @@ class RL_UR16eManipulation(VecTask):
             scaled_diff_tensor = diff_target_area_tensor.to(self.device) * scaled_diff
             scaled_diff_tensor = torch.clamp(scaled_diff_tensor, -0.2, 0.2)
             torch_success_tensor = self.success[envs_finished_prim].clone().detach()
-            torch_success_tensor = torch_success_tensor + scaled_diff_tensor
+            torch_success_tensor = torch_success_tensor # + scaled_diff_tensor
 
             # reset if success
             self.success[envs_finished_prim] = torch.tensor(0).float().to(self.device)
@@ -1342,11 +1342,6 @@ class RL_UR16eManipulation(VecTask):
         self.gym.end_access_image_tensors(self.sim)
 
     def pre_physics_step(self, actions):
-        actions[:, 0] = torch.clamp(actions[:, 0], -0.11, 0.11)
-        actions[:, 1] = torch.clamp(actions[:, 1], -0.03, 0.1)
-        actions[:, 2] = torch.clamp(actions[:, 2], 0.0, 0.28)
-        actions[:, 3] = torch.clamp(actions[:, 3], -0.22, 0.22)
-
         '''
         Camera access in the pre physics step to compute the force using suction cup deformation score
         '''
@@ -2518,7 +2513,7 @@ class RL_UR16eManipulation(VecTask):
                 rgb_image_copy = torch.reshape(
                     rgb_image, (rgb_image.shape[0], -1, 4))[..., :3]
                 rgb_image_copy = rgb_image_copy.permute(2, 0, 1)
-                frame = rgb_image_copy[:, 280:460, 510:770].clone().detach().cpu().numpy()
+                frame = rgb_image_copy.clone().detach().cpu().numpy()
 
                 torch_rgb_tensor = self.log_rgb_camera_tensors[env_count]
                 # print("torch uniq rgb", torch.unique(torch_rgb_tensor))
@@ -2548,16 +2543,16 @@ class RL_UR16eManipulation(VecTask):
                 self.eef_rgb_frames[env_count, curr_frame_count] = eef_frame
                 self.frame_count_video[env_count] += 1
             if (self.log_video):
-                if (self.frame_count_video[env_count] >= 999 or (self.finished_prim[env_count] == 1 and self.done[env_count] == 1)) and self.frame_count_video[env_count] != 0:
+                if (self.frame_count_video[env_count] >= 999 or (self.finished_prim[env_count] == 1 and self.done[env_count] == 1)) and self.frame_count_video[env_count] > 1:
                     print("LOG VID")
-                    if self.success[env_count] == 1:
-                        self.run.log({"success video": [wandb.Video(self.rgb_frames[env_count], fps=15, format="mp4")]})
-                        self.run.log({"success log video": [wandb.Video(self.log_rgb_frames[env_count], fps=15, format="mp4")]})
-                        self.run.log({"success eef video": [wandb.Video(self.eef_rgb_frames[env_count], fps=15, format="mp4")]})
+                    if self.success[env_count] == 0:
+                        self.run.log({"success video": [wandb.Video(self.rgb_frames[env_count][:self.frame_count_video[env_count]-1], fps=15, format="mp4")]})
+                        self.run.log({"success log video": [wandb.Video(self.log_rgb_frames[env_count][:self.frame_count_video[env_count]-1], fps=15, format="mp4")]})
+                        self.run.log({"success eef video": [wandb.Video(self.eef_rgb_frames[env_count][:self.frame_count_video[env_count]-1], fps=15, format="mp4")]})
                     else:
-                        self.run.log({"failure video": [wandb.Video(self.rgb_frames[env_count], fps=15, format="mp4")]})
-                        self.run.log({"failure log video": [wandb.Video(self.log_rgb_frames[env_count], fps=15, format="mp4")]})
-                        self.run.log({"failure eef video": [wandb.Video(self.eef_rgb_frames[env_count], fps=15, format="mp4")]})
+                        self.run.log({"failure video": [wandb.Video(self.rgb_frames[env_count][:self.frame_count_video[env_count]-1], fps=15, format="mp4")]})
+                        self.run.log({"failure log video": [wandb.Video(self.log_rgb_frames[env_count][:self.frame_count_video[env_count]-1], fps=15, format="mp4")]})
+                        self.run.log({"failure eef video": [wandb.Video(self.eef_rgb_frames[env_count][:self.frame_count_video[env_count]-1], fps=15, format="mp4")]})
                     self.frame_count_video[env_count] = 0
                     self.rgb_frames[env_count] = np.zeros((1000, 3, 180, 260)).astype(np.uint8)
                     self.log_rgb_frames[env_count] = np.zeros((1000, 3, 180, 260)).astype(np.uint8)

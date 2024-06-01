@@ -209,9 +209,11 @@ class DQN_agent(object):
     def save(self,algo,EnvName,steps):
         torch.save(self.q_net.state_dict(), "./model/{}_{}_{}.pth".format(algo,EnvName,steps))
 
-    def load(self,algo,EnvName,steps):
-        self.q_net.load_state_dict(torch.load("./model/{}_{}_{}.pth".format(algo,EnvName,steps), map_location=self.train_device))
-        self.q_target.load_state_dict(torch.load("./model/{}_{}_{}.pth".format(algo,EnvName,steps), map_location=self.train_device))
+    def load(self,algo):
+        self.q_net.load_state_dict(torch.load("./model/{}.pth".format(algo), map_location=self.train_device))
+        self.q_target.load_state_dict(torch.load("./model/{}.pth".format(algo), map_location=self.train_device))
+        print("Model loaded")
+
 
 
 class ReplayBuffer(object):

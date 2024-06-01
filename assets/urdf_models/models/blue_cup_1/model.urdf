@@ -23,7 +23,7 @@
       <geometry>
         <mesh filename="textured.obj" scale="1 1 1"/>
       </geometry>
-      
+      <origin rpy="-1.57 0 0" xyz="0 0 0"/>
     </visual>
     <collision>
       <geometry>

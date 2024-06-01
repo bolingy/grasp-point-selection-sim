@@ -15,16 +15,16 @@
     </inertial>
     <visual>
       <geometry>
-        <mesh filename="textured.obj" scale="1 1 1"/>
+        <mesh filename="textured.obj" scale="1.2 1.2 1.2"/>
       </geometry>
       <material name="white">
         <color rgba="1. 1. 1. 1."/>
       </material>
-      <origin rpy="-1.7 0 0" xyz="0 0 0"/>
+      <origin rpy="-1.57 0 0" xyz="0 0 0"/>
     </visual>
     <collision>
       <geometry>
-    	 	<mesh filename="collision.obj" scale="1 1 1"/>
+    	 	<mesh filename="collision.obj" scale="1.4 1.4 1.4"/>
       </geometry>
     </collision>
   </link>

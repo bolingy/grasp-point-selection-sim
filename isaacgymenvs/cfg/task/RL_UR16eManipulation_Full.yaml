@@ -11,7 +11,7 @@ env:
   enableDebugVis: False
 
   objRandomization: True
-  numObstacles: 15
+  numObstacles: 12
   retract: True
   captureVideo: False
 
