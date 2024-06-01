@@ -556,8 +556,13 @@ class RL_UR16eManipulation(VecTask):
             self.camera_handles[i].append(camera_handle_gripper)
             self.log_video = self.cfg["env"]["captureVideo"]
             if self.log_video:
+                self.camera_properties_log_cam = gymapi.CameraProperties()
+                self.camera_properties_log_cam.enable_tensors = True
+                self.camera_properties_log_cam.horizontal_fov = 30.0
+                self.camera_properties_log_cam.width = 260
+                self.camera_properties_log_cam.height = 180
                 log_camera_handle = self.gym.create_camera_sensor(
-                    env_ptr, self.camera_properties_back_cam)
+                    env_ptr, self.camera_properties_log_cam)
                 self.log_camera_base_link_translation = torch.tensor(
                     [0.0, 0.05, 0.35]).to(self.device)
                 local_transform = gymapi.Transform()
@@ -2538,16 +2543,16 @@ class RL_UR16eManipulation(VecTask):
                 self.eef_rgb_frames[env_count, curr_frame_count] = eef_frame
                 self.frame_count_video[env_count] += 1
             if (self.log_video):
-                if (self.frame_count_video[env_count] >= 999 or (self.finished_prim[env_count] == 1 and self.done[env_count] == 1)) and self.frame_count_video[env_count] != 0:
+                if (self.frame_count_video[env_count] >= 999 or (self.finished_prim[env_count] == 1 and self.done[env_count] == 1)) and self.frame_count_video[env_count] > 1:
                     print("LOG VID")
-                    if self.success[env_count] == 1:
-                        self.run.log({"success video": [wandb.Video(self.rgb_frames[env_count], fps=15, format="mp4")]})
-                        self.run.log({"success log video": [wandb.Video(self.log_rgb_frames[env_count], fps=15, format="mp4")]})
-                        self.run.log({"success eef video": [wandb.Video(self.eef_rgb_frames[env_count], fps=15, format="mp4")]})
+                    if self.success[env_count] == 0:
+                        self.run.log({"success video": [wandb.Video(self.rgb_frames[env_count][:self.frame_count_video[env_count]-1], fps=15, format="mp4")]})
+                        self.run.log({"success log video": [wandb.Video(self.log_rgb_frames[env_count][:self.frame_count_video[env_count]-1], fps=15, format="mp4")]})
+                        self.run.log({"success eef video": [wandb.Video(self.eef_rgb_frames[env_count][:self.frame_count_video[env_count]-1], fps=15, format="mp4")]})
                     else:
-                        self.run.log({"failure video": [wandb.Video(self.rgb_frames[env_count], fps=15, format="mp4")]})
-                        self.run.log({"failure log video": [wandb.Video(self.log_rgb_frames[env_count], fps=15, format="mp4")]})
-                        self.run.log({"failure eef video": [wandb.Video(self.eef_rgb_frames[env_count], fps=15, format="mp4")]})
+                        self.run.log({"failure video": [wandb.Video(self.rgb_frames[env_count][:self.frame_count_video[env_count]-1], fps=15, format="mp4")]})
+                        self.run.log({"failure log video": [wandb.Video(self.log_rgb_frames[env_count][:self.frame_count_video[env_count]-1], fps=15, format="mp4")]})
+                        self.run.log({"failure eef video": [wandb.Video(self.eef_rgb_frames[env_count][:self.frame_count_video[env_count]-1], fps=15, format="mp4")]})
                     self.frame_count_video[env_count] = 0
                     self.rgb_frames[env_count] = np.zeros((1000, 3, 180, 260)).astype(np.uint8)
                     self.log_rgb_frames[env_count] = np.zeros((1000, 3, 180, 260)).astype(np.uint8)
