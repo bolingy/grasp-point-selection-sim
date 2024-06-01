@@ -210,6 +210,7 @@ class RL_UR16eManipulation(VecTask):
         self.last_object_pose = {}
         self.all_objects_last_pose = {}
         self.object_pose_store = {}
+        self.object_pose_track = {}
         self.target_object_disp_save = {}
         self.object_disp_save = {}
         self.offset_object_pose_retract = {}
@@ -244,6 +245,9 @@ class RL_UR16eManipulation(VecTask):
         self.primitive_count = torch.ones(self.num_envs).to(self.device)
         self.done = torch.zeros(self.num_envs).to(self.device)
         self.finished_prim = torch.zeros(self.num_envs).to(self.device)
+        self.toppled = torch.zeros(self.num_envs).to(self.device)
+        self.T_world_to_ee_pose_list = torch.zeros(10, self.num_envs, 4, 4).to(self.device)
+        self.pose_counter = torch.zeros(self.num_envs).to(self.device).long()
         self.torch_target_area_tensor = torch.zeros(self.num_envs).to(self.device)
 
 
@@ -341,7 +345,7 @@ class RL_UR16eManipulation(VecTask):
 
         self.object_models = []
         if self.obj_randomization:
-            objects_file = open('../misc/object_list_domain_randomization.txt', 'r')
+            objects_file = open('../misc/object_list_domain_reset.txt', 'r')
         else:
             objects_file = open('../misc/object_list_domain_fixed.txt', 'r')
         objects = objects_file.readlines()
@@ -877,8 +881,8 @@ class RL_UR16eManipulation(VecTask):
                     # pose
                     # offset_object = np.array([np.random.uniform(0.57, 0.7, 1).reshape(
                     #     1,)[0], np.random.uniform(-0.15, 0.10, 1).reshape(1,)[0], 1.55, 0, 0, 0])
-                    offset_object = np.array([np.random.uniform(0.57, 0.6, 1).reshape(
-                        1,)[0], np.random.uniform(-0.15, 0.04, 1).reshape(1,)[0], 1.55, 0, 0, 0])
+                    offset_object = np.array([np.random.uniform(0.57, 0.7, 1).reshape(
+                        1,)[0], np.random.uniform(-0.15, 0.10, 1).reshape(1,)[0], 1.55, 0, 0, 0])
                     domain_randomizer = random_number = random.choice(
                     [1, 2, 3, 4, 5])
                     if idx == 2:
@@ -907,6 +911,7 @@ class RL_UR16eManipulation(VecTask):
             # signify env for selected objs and poses
             self.selected_object_env[env_count] = list_objects_domain_randomizer
             self.object_pose_store[env_count] = object_list_env
+            self.object_pose_track[env_count] = object_list_env
 
         # print(env_count, "objects spawned in each environment",
             #   self.selected_object_env)
@@ -1102,6 +1107,9 @@ class RL_UR16eManipulation(VecTask):
             torch_scrap_tensor = torch.tensor([]).to(self.device)
             torch_prim_tensor = self.finished_prim.clone().detach()
             envs_finished_prim = torch.nonzero(torch_prim_tensor).long().squeeze(1)
+            # print("toppled envs", torch.where(self.toppled[envs_finished_prim] == 1))
+            torch_success_tensor = self.success[envs_finished_prim].clone().detach() - self.toppled[envs_finished_prim].clone().detach() * 5
+            self.toppled[envs_finished_prim] = torch.tensor(0.0).to(self.device)
             for env_count in envs_finished_prim:
                 # print("self.force_list_save", self.force_list_save.keys())
                 # print("env_count", env_count)
@@ -1159,8 +1167,6 @@ class RL_UR16eManipulation(VecTask):
             scaled_diff = torch.tensor(1e-4).to(self.device)
             scaled_diff_tensor = diff_target_area_tensor.to(self.device) * scaled_diff
             scaled_diff_tensor = torch.clamp(scaled_diff_tensor, -0.2, 0.2)
-            torch_success_tensor = self.success[envs_finished_prim].clone().detach()
-            torch_success_tensor = torch_success_tensor # + scaled_diff_tensor
 
             # reset if success
             self.success[envs_finished_prim] = torch.tensor(0).float().to(self.device)
@@ -1170,7 +1176,6 @@ class RL_UR16eManipulation(VecTask):
             torch_indicies_tensor = envs_finished_prim
 
             # crop depth image
-
             torch_depth_tensor = einops.rearrange(torch_depth_tensor, 'b h w -> b (h w)')
 
             torch_segmask_tensor = torch.where(torch_segmask_tensor == label, torch.tensor(255).to(self.device), torch_segmask_tensor)
@@ -1321,7 +1326,7 @@ class RL_UR16eManipulation(VecTask):
 
     def reset_pre_grasp_pose(self, env_ids):
         pos = torch.zeros(0, self.num_ur16e_dofs).to(self.device)
-        for _ in env_ids:
+        for env_count in env_ids:
             joint_poses_list = torch.load(
                 f"{cur_path}/../../misc/joint_poses.pt")
             temp_pos = joint_poses_list[torch.randint(
@@ -1331,6 +1336,16 @@ class RL_UR16eManipulation(VecTask):
             temp_pos = torch.cat(
                 (temp_pos, torch.tensor([[0]]).to(self.device)), dim=1)
             pos = torch.cat([pos, temp_pos])
+            # check if any objects toppled over
+            for object_id in self.selected_object_env[env_count.item()]:
+                obj_curr_quat = self._root_state[env_count.item(), self._object_model_id[int(object_id.item())-1], :][3:7].type(torch.float).detach().clone()
+                obj_stored_quat = self.object_pose_track[env_count.item()][int(object_id.item())][3:7].type(torch.float).detach().clone()
+                obj_curr_rpy = quaternion_to_euler_angles(obj_curr_quat, "XYZ", degrees=False)
+                obj_stored_rpy = quaternion_to_euler_angles(obj_stored_quat, "XYZ", degrees=False)
+                _all_object_rot_error = torch.abs(obj_curr_rpy - obj_stored_rpy)
+                # print("object rot error", _all_object_rot_error)
+                if torch.abs(_all_object_rot_error[0]) > 0.785398 or torch.abs(_all_object_rot_error[1]) > 0.785398:
+                    self.toppled[env_count] = torch.tensor(1).to(self.device)
         return pos   
         
     # render the camera sensors
@@ -1381,6 +1396,7 @@ class RL_UR16eManipulation(VecTask):
                     bin_objects_current_pose[int(object_id.item())] = self._root_state[env_count, self._object_model_id[int(object_id.item())-1], :][:7].type(
                         torch.float).clone().detach()
                 self.object_pose_store[env_count] = bin_objects_current_pose
+                self.object_pose_track[env_count] = bin_objects_current_pose
                 env_list_reset_objects = torch.cat(
                     (env_list_reset_objects, torch.tensor([env_count])), axis=0)
                 self.object_pose_check_list[env_count] -= torch.tensor(1)
@@ -1966,6 +1982,16 @@ class RL_UR16eManipulation(VecTask):
                         env_complete_reset = torch.cat(
                             (env_complete_reset, torch.tensor([env_count])), axis=0)
                         continue
+                    
+                    if self.action_contrib[env_count] == 0:
+                        self.T_world_to_ee_pose_list[self.pose_counter, env_count] = T_world_to_ee_pose
+                        self.pose_counter += 1 
+                        self.pose_counter = self.pose_counter % self.T_world_to_ee_pose_list.shape[0]
+                        # if all poses in list are similar, reset
+                        if self.T_world_to_ee_pose_list[:, env_count].std(dim=0).std(dim=0).mean(dim=0) < 0.0004 and torch.sum(self.T_world_to_ee_pose_list[:, env_count]) != 0:
+                            env_complete_reset = torch.cat(
+                                (env_complete_reset, torch.tensor([env_count])), axis=0)
+                            print("Arm is stuck")
 
                     # Orientation error
                     action_orientation = matrix_to_euler_angles(

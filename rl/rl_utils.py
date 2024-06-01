@@ -222,8 +222,8 @@ def get_real_ys_dxs(imgs, sim_device='cuda:0'):
 			real_dx[i, j, 2] = depth[i, int(y_mean), x_max]
 
 			height = torch.max(y) - torch.min(y)
-			real_x[i, j, 0] = torch.min(y) + 1/3 * height
-			real_x[i, j, 1] = torch.min(y) + 2/3 * height
+			real_x[i, j, 0] = torch.min(y) + 3/4 * height
+			real_x[i, j, 1] = torch.min(y) + 2/4 * height
 			# if i == 0:
 			# 	print("unique_ids_env[j]: ", unique_ids_env[j])
 			# 	plt.plot(x_min.item(), y_mean.item(), 'ro')

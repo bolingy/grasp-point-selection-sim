@@ -7,11 +7,11 @@ physics_engine: ${..physics_engine}
 env:
   numEnvs: ${resolve_default:8192,${...num_envs}}
   envSpacing: 1.5
-  episodeLength: 1000
+  episodeLength: 500
   enableDebugVis: False
 
   objRandomization: True
-  numObstacles: 12
+  numObstacles: 2
   retract: True
   captureVideo: False
 
