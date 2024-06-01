@@ -8,10 +8,10 @@ blue_cup
 cleanser
 repellent
 shampoo
+conditioner
 yellow_cup
 pizza_cutter
 small_health_bottle
-blue_tea_box
-conditioner
 sugar_box
+blue_tea_box
 pink_tea_box
