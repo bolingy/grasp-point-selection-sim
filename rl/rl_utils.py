@@ -189,8 +189,8 @@ def get_real_ys_dxs(imgs, sim_device='cuda:0'):
 	real_y = torch.zeros((depth.shape[0], unique_ids, 3))	
 	real_dx = torch.zeros((depth.shape[0], unique_ids, 3))
 	real_x = torch.zeros((depth.shape[0], unique_ids, 2))
+	push_target = torch.zeros((depth.shape[0], 2))
 	# plt.imshow(seg[0].cpu().numpy())
-
 	for i in range(depth.shape[0]):
 		unique_ids_env = torch.unique(seg[i])
 		unique_ids_env = unique_ids_env[unique_ids_env != 0]
@@ -224,6 +224,9 @@ def get_real_ys_dxs(imgs, sim_device='cuda:0'):
 			height = torch.max(y) - torch.min(y)
 			real_x[i, j, 0] = torch.min(y) + 3/4 * height
 			real_x[i, j, 1] = torch.min(y) + 2/4 * height
+			if unique_ids_env[j] == 255:
+				push_target[i, 0] = torch.min(y) + 2/4 * height
+				push_target[i, 1] = (left_most + right_most) / 2
 			# if i == 0:
 			# 	print("unique_ids_env[j]: ", unique_ids_env[j])
 			# 	plt.plot(x_min.item(), y_mean.item(), 'ro')
@@ -269,8 +272,7 @@ def get_real_ys_dxs(imgs, sim_device='cuda:0'):
 	result_y = torch.cat((real_y, real_y), dim=1)
 	result_dx = torch.cat((real_dx, real_dx), dim=1)
 
-	# print("result_y: ", result_y)
-	# print("result_x: ", result_x)
+	push_target_idx = torch.where((result_y == push_target[:, 1].unsqueeze(1)) * (result_x == push_target[:,0].unsqueeze(1)))[1]
 
 	# plt.imshow(seg[0].cpu())
 	# for i in range(0, 18):
@@ -284,7 +286,7 @@ def get_real_ys_dxs(imgs, sim_device='cuda:0'):
 	# plt.imshow(depth[1].cpu())
 	# plt.show()
 
-	return result_y.to(sim_device), result_x.to(sim_device), result_dx.to(sim_device)
+	return result_y.to(sim_device), result_x.to(sim_device), result_dx.to(sim_device) # , push_target_idx
 
 def convert_actions(action, real_y, real_x, real_dx, sim_device='cuda:0'):
 	# action will be in the format of [batchsize, y (1-6), dy]

@@ -12,6 +12,7 @@ from isaacgym import gymapi
 from isaacgym.torch_utils import *
 from isaacgymenvs.utils.torch_jit_utils import *
 from isaacgymenvs.tasks.base.vec_task import VecTask
+from scipy.spatial.transform import Rotation as R
 
 # from matplotlib import pyplot as plt
 
@@ -1108,7 +1109,7 @@ class RL_UR16eManipulation(VecTask):
             torch_prim_tensor = self.finished_prim.clone().detach()
             envs_finished_prim = torch.nonzero(torch_prim_tensor).long().squeeze(1)
             # print("toppled envs", torch.where(self.toppled[envs_finished_prim] == 1))
-            torch_success_tensor = self.success[envs_finished_prim].clone().detach() - self.toppled[envs_finished_prim].clone().detach() * 5
+            torch_success_tensor = self.success[envs_finished_prim].clone().detach() # - self.toppled[envs_finished_prim].clone().detach() * 5
             self.toppled[envs_finished_prim] = torch.tensor(0.0).to(self.device)
             for env_count in envs_finished_prim:
                 # print("self.force_list_save", self.force_list_save.keys())
@@ -1340,9 +1341,11 @@ class RL_UR16eManipulation(VecTask):
             for object_id in self.selected_object_env[env_count.item()]:
                 obj_curr_quat = self._root_state[env_count.item(), self._object_model_id[int(object_id.item())-1], :][3:7].type(torch.float).detach().clone()
                 obj_stored_quat = self.object_pose_track[env_count.item()][int(object_id.item())][3:7].type(torch.float).detach().clone()
-                obj_curr_rpy = quaternion_to_euler_angles(obj_curr_quat, "XYZ", degrees=False)
-                obj_stored_rpy = quaternion_to_euler_angles(obj_stored_quat, "XYZ", degrees=False)
-                _all_object_rot_error = torch.abs(obj_curr_rpy - obj_stored_rpy)
+                # obj_curr_rpy = quaternion_to_euler_angles(obj_curr_quat, "XYZ", degrees=False)
+                obj_curr_rpy = R.from_quat(obj_curr_quat.cpu()).as_euler("XYZ", degrees=False)
+                # obj_stored_rpy = quaternion_to_euler_angles(obj_stored_quat, "XYZ", degrees=False)
+                obj_stored_rpy = R.from_quat(obj_stored_quat.cpu()).as_euler("XYZ", degrees=False)
+                _all_object_rot_error = torch.abs(torch.tesnor(obj_curr_rpy) - torch.tensor(obj_stored_rpy)).to(self.device)
                 # print("object rot error", _all_object_rot_error)
                 if torch.abs(_all_object_rot_error[0]) > 0.785398 or torch.abs(_all_object_rot_error[1]) > 0.785398:
                     self.toppled[env_count] = torch.tensor(1).to(self.device)
@@ -2008,11 +2011,13 @@ class RL_UR16eManipulation(VecTask):
                         ))][:3] - self._root_state[env_count, self._object_model_id[int(object_id.item())-1], :][:3])
                         q1 = self.object_pose_store[env_count][int(
                             object_id.item())][3:7]
-                        e1 = quaternion_to_euler_angles(
-                            q1, "XYZ", False)
+                        # e1 = quaternion_to_euler_angles(
+                        #     q1, "XYZ", False)
+                        e1 = R.from_quat(q1.cpu()).as_euler("XYZ", degrees=False)
                         q2 = self._root_state[env_count, self._object_model_id[int(object_id.item())-1], :][3:7].type(
                             torch.float).detach().clone()
-                        e2 = quaternion_to_euler_angles(q2, "XYZ", False)
+                        # e2 = quaternion_to_euler_angles(q2, "XYZ", False)
+                        e2 = R.from_quat(q2.cpu()).as_euler("XYZ", degrees=False)
                         _all_object_rotation_error += torch.sum(e1-e2).to(self.device)
 
                         if (_all_objects_current_pose[int(object_id.item())][2] < torch.tensor(1.25) or _all_objects_current_pose[int(object_id.item())][2] > torch.tensor(1.7)
@@ -2140,7 +2145,9 @@ class RL_UR16eManipulation(VecTask):
                         except:
                             contact_exist = torch.tensor(0)
                         if (contact_exist == torch.tensor(1) and self.action_contrib[env_count] == 0):
-                            angle_error = quaternion_to_euler_angles(self._eef_state[env_count][3:7], "XYZ", degrees=False) - torch.tensor(
+                            # angle_error = quaternion_to_euler_angles(self._eef_state[env_count][3:7], "XYZ", degrees=False) - torch.tensor(
+                            #     [0, -self.grasp_angle[env_count][1], self.grasp_angle[env_count][0]]).to(self.device)
+                            angle_error = R.from_quat(self._eef_state[env_count][3:7].cpu().numpy()).as_euler("XYZ", degrees=False) - torch.tensor(
                                 [0, -self.grasp_angle[env_count][1], self.grasp_angle[env_count][0]]).to(self.device)
                             # print("angle error: ", angle_error)
                             if (torch.max(torch.abs(angle_error)) > torch.deg2rad(torch.tensor(10))):
@@ -2357,10 +2364,14 @@ class RL_UR16eManipulation(VecTask):
                                 ).detach()
                                 end_point[2] += 0.03
                                 # end_point[0] -= 0.02
-                            else:
+                            elif (self.retract_up[env_count] == 0):
                                 end_point = self.retract_start_pose[env_count].clone(
                                 ).detach()
-                                end_point[2] += 0.03
+                                end_point[2] += 0.02
+                            else:
+                                end_point = T_world_to_pre_grasp_pose[:3, 3].clone(
+                                ).detach()
+                                end_point[2] += 0.02
 
                             start_point = self.retract_start_pose[env_count]
                             current_point = T_world_to_ee_pose[:3, 3]
@@ -2397,6 +2408,21 @@ class RL_UR16eManipulation(VecTask):
                                                                 self.distance[1] *
                                                                 50 *
                                                                 self.speed[env_count],
+                                                                translation_grasp_pose[2] -
+                                                                self.distance[2] *
+                                                                50 *
+                                                                self.speed[env_count],
+                                                                self.speed[env_count]*50 *
+                                                                action_orientation[0],
+                                                                self.speed[env_count]*50 *
+                                                                action_orientation[1],
+                                                                self.speed[env_count]*50*action_orientation[2], 1, 0, 0, 0, 0]], dtype=torch.float)
+                            if (self.retract_up[env_count] == 2):
+                                self.action_env = torch.tensor([[self.speed[env_count],
+                                                                translation_grasp_pose[1] -
+                                                                self.distance[1] *
+                                                                50 *
+                                                                -self.speed[env_count],
                                                                 translation_grasp_pose[2] -
                                                                 self.distance[2] *
                                                                 50 *
@@ -2482,8 +2508,7 @@ class RL_UR16eManipulation(VecTask):
                                 self.retract_up[env_count] = 1
                                 self.retract_start_pose[env_count] = T_world_to_ee_pose[:3, 3]
                             ### HOW MUCH TO RETRACT
-                            if (self.retract_up[env_count] == 1 and current_point[0] <= 0.1):
-                                self.frame_count_contact_object[env_count] = 1
+                            if (self.retract_up[env_count] == 1 and current_point[0] <= 0.15):
 
                                 success = False
                                 if (self.suction_score_store_env[env_count] > torch.tensor(0.1)):
@@ -2492,36 +2517,26 @@ class RL_UR16eManipulation(VecTask):
                                 if (self.suction_score_store_env[env_count] == torch.tensor(0)):
                                     penetration = True
 
-                                object_disp_json_save = self.object_disp_save[env_count].copy(
-                                )
-                                for object_id in self.selected_object_env[env_count]:
-                                    object_disp_json_save[int(object_id.item(
-                                    ))] = object_disp_json_save[int(object_id.item())].tolist()
-
-                                # saving the grasp point ad its properties if it was a successfull grasp
-                                json_save = {
-                                    "force_array": self.force_list_save[env_count].tolist(),
-                                    "object_disp": object_disp_json_save,
-                                    "grasp point": self.grasp_point[env_count].tolist(),
-                                    "grasp_angle": self.grasp_angle[env_count].tolist(),
-                                    "suction_deformation_score": self.suction_deformation_score[env_count].item(),
-                                    "gripper_score": self.suction_score_store_env[env_count].item(),
-                                    "success": success,
-                                    "object_id": self.object_target_id[env_count].item(),
-                                    "penetration": penetration,
-                                    "unreachable": False,
-                                    "retract": True
-                                }
-                                new_dir_name = str(
-                                    env_count)+"_"+str(self.track_save[env_count].type(torch.int).item())
-
                                 print("final_pose after retract for env ",
                                     T_world_to_ee_pose[:3, 3], env_count)
+                                self._object_model_state[self.object_target_id[env_count] -
+                                                    1][env_count] = self._root_state[env_count, self._object_model_id[self.object_target_id[env_count]-1], :].clone().detach()
+                                self.retract_up[env_count] = 2
+                            if (self.retract_up[env_count] == 2 and current_point[0] >= 0.25):
+                                self.frame_count_contact_object[env_count] = 1
+
                     elif (self.frame_count_contact_object[env_count] == torch.tensor(1) and self.frame_count[env_count] > torch.tensor(self.cooldown_frames)):
-                        env_list_reset_arm_pose = torch.cat(
-                            (env_list_reset_arm_pose, torch.tensor([env_count])), axis=0)
-                        env_list_reset_objects = torch.cat(
-                            (env_list_reset_objects, torch.tensor([env_count])), axis=0)
+                        # env_list_reset_arm_pose = torch.cat(
+                        #     (env_list_reset_arm_pose, torch.tensor([env_count])), axis=0)
+                        # env_list_reset_objects = torch.cat(
+                        #     (env_list_reset_objects, torch.tensor([env_count])), axis=0)
+                        # pick a non-target object and place in middle of bin
+                        move_obj = self.selected_object_env[env_count][0]
+                        move_obj_pose = self._root_state[env_count, self._object_model_id[int(move_obj.item())], :].clone().detach()
+                        move_obj_pose[:3] = torch.tensor([0.5, 0.5, 0.5]).to(self.device)
+                        self._object_model_state[int(move_obj.item() - 1)][env_count] = move_obj_pose
+                        print("push back")
+                        
 
             if (self.frame_count[env_count] <= torch.tensor(self.cooldown_frames)):
                 self.action_env = torch.tensor(
@@ -2571,7 +2586,7 @@ class RL_UR16eManipulation(VecTask):
             if (self.log_video):
                 if (self.frame_count_video[env_count] >= 999 or (self.finished_prim[env_count] == 1 and self.done[env_count] == 1)) and self.frame_count_video[env_count] > 1:
                     print("LOG VID")
-                    if self.success[env_count] == 0:
+                    if self.success[env_count] == 1:
                         self.run.log({"success video": [wandb.Video(self.rgb_frames[env_count][:self.frame_count_video[env_count]-1], fps=15, format="mp4")]})
                         self.run.log({"success log video": [wandb.Video(self.log_rgb_frames[env_count][:self.frame_count_video[env_count]-1], fps=15, format="mp4")]})
                         self.run.log({"success eef video": [wandb.Video(self.eef_rgb_frames[env_count][:self.frame_count_video[env_count]-1], fps=15, format="mp4")]})
