@@ -314,32 +314,38 @@ class RL_UR16eManipulation(VecTask, Utils, EnvReset, SampleGrasp, Swipe, SaveDat
             self.num_envs, self.cfg["env"]['envSpacing'], int(np.sqrt(self.num_envs)))
 
         tensor_args = TensorDeviceType()
-        # world_file = "collision_table.yml"
         robot_file = "ur16e.yml"
+        trajopt_dt = None
+        optimize_dt = True
+        trajopt_tsteps = 32
+        trim_steps = None
+        interpolation_dt = 0.05
         motion_gen_config = MotionGenConfig.load_from_robot_config(
             robot_file,
             None,
             tensor_args,
-            interpolation_dt=0.01,
-            # trajopt_dt=0.15,
-            # velocity_scale=0.1,
             use_cuda_graph=True,
-            # finetune_dt_scale=2.5,
-            interpolation_steps=10000,
+            num_trajopt_seeds=12,
+            num_graph_seeds=1,
+            num_ik_seeds=30,
+            trajopt_dt=trajopt_dt,
+            optimize_dt=optimize_dt,
+            trajopt_tsteps=trajopt_tsteps,
+            trim_steps=trim_steps,
+            interpolation_dt=interpolation_dt,
         )
-
         motion_gen = MotionGen(motion_gen_config)
-        motion_gen.warmup()
-
+        robot_cfg = load_yaml(join_path(get_robot_configs_path(), robot_file))["robot_cfg"]
+        robot_cfg = RobotConfig.from_dict(robot_cfg, tensor_args)
         retract_cfg = motion_gen.get_retract_config()
-
         state = motion_gen.rollout_fn.compute_kinematics(
             JointState.from_position(retract_cfg.view(1, -1))
         )
 
-        goal_pose = Pose.from_list([0.3, 0.0, 0.7, 1.0, 0.0, 0.0, 0.0])  # x, y, z, qw, qx, qy, qz
+        goal_pose = Pose.from_batch_list([[0.3, 0.0, 1.0, 1.0, 0.0, 0.0, 0.0], [0.3, 0.0, 0.4, 1.0, 0.0, 0.0, 0.0]], tensor_args)  # x, y, z, qw, qx, qy, qz
+
         start_state = JointState.from_position(
-            torch.tensor([[1.57, 0, -1.57, 0, 1.57, 0]]).type(torch.float).cuda(),
+            torch.tensor([[1.57, 0, -1.57, 0, 1.57, 0], [1.57, 0, -1.57, 0, 1.57, 0]]).type(torch.float).cuda(),
             joint_names=[
                 "shoulder_pan_joint",
                 "shoulder_lift_joint",
@@ -350,8 +356,15 @@ class RL_UR16eManipulation(VecTask, Utils, EnvReset, SampleGrasp, Swipe, SaveDat
             ],
         )
 
-        result = motion_gen.plan_single(start_state, goal_pose, MotionGenPlanConfig(max_attempts=1))
-        self.traj = result.get_interpolated_plan()  # result.interpolation_dt has the dt between timesteps
+        result = motion_gen.plan_batch(
+            start_state,
+            goal_pose,
+            MotionGenPlanConfig(
+                max_attempts=5, enable_graph=False, enable_graph_attempt=1, enable_opt=True
+            ),
+        )
+        
+        self.traj = result.optimized_plan.position.view(2, -1, 6)
         self.traj_idx = 0
         print("Trajectory Generated: ", result.success)
         
@@ -1438,10 +1451,10 @@ class RL_UR16eManipulation(VecTask, Utils, EnvReset, SampleGrasp, Swipe, SaveDat
         self.actions = torch.zeros(1, 11).to(self.device)
         self.actions = self.actions.clone().detach().to(self.device)
         if self.traj is not None:
-            print("traj_idx", self.traj_idx)
-            self.deploy_actions(0, torch.cat([self.traj[self.traj_idx].position.clone().detach().to(self.device), torch.tensor([0]).to(self.device)]))
+            self.deploy_actions([0,1], torch.cat([self.traj[:, self.traj_idx].clone().detach().to(self.device), torch.tensor([[0], [0]]).to(self.device)], axis=1))
+
             self.traj_idx += 1
-            if self.traj_idx >= len(self.traj.position):
+            if self.traj_idx >= self.traj.shape[1]:
                 self.traj_idx = 0
         
 
