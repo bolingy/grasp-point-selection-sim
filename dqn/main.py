@@ -14,7 +14,6 @@ os.environ["PYOPENGL_PLATFORM"] = "egl"
 os.environ["IMAGEIO_FFMPEG_EXE"] = "/usr/bin/ffmpeg"
 import argparse
 import torch
-from gym.spaces import Discrete
 from rl.sac import *
 from rl.rl_utils import *
 from rl.sac_replay_memory import *
@@ -92,7 +91,6 @@ def main():
         graphics_device_id=graphics_id,
         headless=head_less
     )
-    action_space = Discrete(6)
     opt.state_dim = 10
     opt.action_dim = 8
 

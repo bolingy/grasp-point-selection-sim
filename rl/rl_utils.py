@@ -11,7 +11,6 @@ from torch.distributions import Categorical
 import numpy as np
 
 import einops
-import gym
 # import roboschool
 #import pybullet_envs
 import matplotlib.pyplot as plt
